@@ -117,6 +117,72 @@
 
   #sidebar .empty { padding: 30px 16px; text-align: center; color: #94a3b8; font-size: 13px; }
 
+  /* ============ SECTORES (lista lateral) ============ */
+  #sidebar .sect-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 12px;
+  }
+  #sidebar .sect-head h2 { margin: 0; }
+  #sidebar .sect-head button {
+    padding: 4px 9px; font-size: 11px; font-weight: 600;
+    border: 1px solid #3b82f6; background: #eff6ff; color: #1d4ed8;
+    border-radius: 6px; cursor: pointer;
+  }
+  #sidebar .sect-head button:hover { background: #dbeafe; }
+  #sidebar .sect-head button.active { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+  #sectorList { max-height: 160px; overflow-y: auto; margin-top: 6px; }
+  #sectorList .empty { font-size: 12px; color: #94a3b8; padding: 6px 2px; }
+  .sector-card {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 6px 8px; margin-bottom: 6px; cursor: pointer; background: #fff;
+  }
+  .sector-card:hover { border-color: #3b82f6; }
+  .sector-card .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .sector-card .s-body { flex: 1; min-width: 0; }
+  .sector-card .s-body b {
+    font-size: 12px; display: block;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .sector-card .s-body small { font-size: 10px; color: #64748b; }
+  .sector-card .s-actions { display: flex; gap: 2px; }
+  .sector-card .s-actions button {
+    border: none; background: none; cursor: pointer; font-size: 12px;
+    padding: 2px 4px; border-radius: 4px; color: #64748b;
+  }
+  .sector-card .s-actions button:hover { background: #f1f5f9; }
+  .sector-card .palette-row { display: none; width: 100%; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
+  .sector-card.editing .palette-row { display: flex; }
+  .chip {
+    width: 18px; height: 18px; padding: 0; border-radius: 50%;
+    border: 2px solid #fff; box-shadow: 0 0 0 1px #cbd5e1; cursor: pointer;
+  }
+  .chip.selected { box-shadow: 0 0 0 2px #0f172a; }
+
+  /* ============ TOOLBAR DE DIBUJO ============ */
+  #drawToolbar {
+    position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+    padding: 8px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); z-index: 16;
+    max-width: calc(100% - 40px);
+  }
+  #drawToolbar.visible { display: flex; }
+  #drawToolbar .t-label { font-size: 12px; font-weight: 700; color: #334155; }
+  #drawPalette { display: flex; gap: 5px; }
+  #drawCount {
+    font-size: 12px; font-weight: 700; color: #065f46;
+    background: #d1fae5; border-radius: 999px; padding: 3px 10px; white-space: nowrap;
+  }
+  #drawToolbar button {
+    font-size: 12px; font-weight: 600; padding: 6px 10px;
+    border: 1px solid #cbd5e1; background: #f8fafc; border-radius: 7px; cursor: pointer;
+    white-space: nowrap;
+  }
+  #drawToolbar button:hover { background: #e2e8f0; }
+  #drawToolbar button.primary { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+  #drawToolbar button.primary:hover { background: #2563eb; }
+
   /* ============ MAP ============ */
   #map { flex: 1; position: relative; }
 
@@ -147,6 +213,43 @@
   }
   #refResults .item:hover { background: #eff6ff; border-color: #3b82f6; }
   #refResults .empty { text-align: center; color: #94a3b8; font-size: 12px; padding: 10px; }
+
+  /* ============ MODAL NUEVO SECTOR ============ */
+  #sectorModal {
+    position: fixed; inset: 0; z-index: 520; background: rgba(15,23,42,.6);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  #sectorModal.visible { display: flex; }
+  #sectorModal .box {
+    background: #fff; border-radius: 14px; padding: 24px;
+    width: 100%; max-width: 360px;
+  }
+  #sectorModal h2 { font-size: 16px; margin-bottom: 12px; }
+  #sectorModal .count-badge {
+    display: flex; align-items: center; gap: 8px;
+    background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+    font-size: 13px; font-weight: 700; padding: 10px 12px; border-radius: 8px;
+  }
+  #sectorModal .swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  #sectorModal label {
+    display: block; font-size: 12px; font-weight: 600; color: #475569;
+    margin: 12px 0 4px; text-transform: uppercase;
+  }
+  #sectorModal input {
+    width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1;
+    border-radius: 8px; font-size: 14px; font-family: inherit;
+  }
+  #sectorModal input:focus { outline: 2px solid #3b82f6; }
+  #sectorModal .err { color: #dc2626; font-size: 13px; min-height: 18px; margin-top: 8px; }
+  #sectorModal .buttons { display: flex; gap: 10px; margin-top: 16px; }
+  #sectorModal button {
+    flex: 1; padding: 11px; border-radius: 8px; font-size: 14px;
+    font-weight: 600; cursor: pointer; border: none;
+  }
+  #sectorModal button.primary { background: #3b82f6; color: #fff; }
+  #sectorModal button.primary:hover { background: #2563eb; }
+  #sectorModal button.secondary { background: #f1f5f9; color: #1e293b; }
+  #sectorModal button.secondary:hover { background: #e2e8f0; }
 
   /* ============ MODAL ============ */
   #modal {
@@ -244,7 +347,12 @@
         <select id="comunaSel" aria-label="Elegir comuna">
           <option value="">Todas las comunas</option>
         </select>
-        <h2>Sectores</h2>
+        <div class="sect-head">
+          <h2>Sectores</h2>
+          <button id="drawBtn" title="Dibujar un sector a mano">✏️ Dibujar</button>
+        </div>
+        <div id="sectorList"><div class="empty">Aún no hay sectores</div></div>
+        <h2>Puntos</h2>
         <input id="filterText" type="text" placeholder="Filtrar por nombre, dirección…" />
         <div class="filters">
           <select id="filterCat"><option value="">Todas las categorías</option></select>
@@ -262,6 +370,15 @@
       <label>Radio: <span class="radius-val" id="refRadiusVal">500 m</span></label>
       <input id="refRadius" type="range" min="100" max="5000" step="100" value="500" />
       <div id="refResults"></div>
+    </div>
+
+    <div id="drawToolbar">
+      <span class="t-label">✏️ Sector</span>
+      <span id="drawPalette"></span>
+      <span id="drawCount">—</span>
+      <button id="drawUndo">Deshacer</button>
+      <button id="drawCancel">Cancelar</button>
+      <button id="drawClose" class="primary">Cerrar sector</button>
     </div>
   </div>
 </div>
@@ -292,6 +409,21 @@
     <div class="buttons">
       <button class="secondary" id="modalCancel">Cancelar</button>
       <button class="primary" id="modalSave">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL NUEVO SECTOR ================= -->
+<div id="sectorModal">
+  <div class="box">
+    <h2>Nuevo sector</h2>
+    <div class="count-badge" id="sectorCount"></div>
+    <label>Nombre</label>
+    <input id="sectorNombre" type="text" />
+    <div class="err" id="sectorErr"></div>
+    <div class="buttons">
+      <button class="secondary" id="sectorCancelBtn">Cancelar</button>
+      <button class="primary" id="sectorSaveBtn">Guardar</button>
     </div>
   </div>
 </div>
@@ -334,6 +466,21 @@ let refRadiusTimer = null;   // debounce al cambiar el radio
 let refMode = false;         // modo referencia activo
 let editingId = null;        // id del punto que se edita
 let refResultsIds = new Set();
+
+// --- Sectores (dibujo manual) ---
+let allSectores = [];        // sectores cargados de la DB
+let drawActive = false;      // ¿modo dibujo activo?
+let drawColor = '#3b82f6';   // color del sector en curso
+let drawVerts = [];          // vértices [[lng,lat], ...]
+let drawHover = null;        // última posición del cursor (goma elástica)
+let pendingSector = null;    // polígono cerrado esperando guardado
+let sectorHoverId = null;    // sector bajo el cursor
+let sectorListError = null;  // mensaje de error al cargar (tabla ausente, etc.)
+
+const SECTOR_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+  '#8b5cf6', '#ec4899', '#14b8a6', '#64748b',
+];
 
 // ============================================================
 // TOAST
@@ -412,7 +559,11 @@ function initMap() {
   map.on('load', async () => {
     await ensureComunasLoaded();
     await loadPoints();
+    initSectorLayers();
+    await loadSectores();
     map.on('click', onMapClick);
+    map.on('mousemove', onMapMove);
+    map.on('dblclick', onMapDblClick);
   });
 }
 
@@ -535,6 +686,11 @@ function onComunaChange() {
   renderList();
   renderMarkers();
 
+  // Un sector dibujado queda huérfano si cambias de comuna a mitad de trazo
+  if (drawActive) stopDraw();
+  updateSectorsSource();
+  renderSectorList();
+
   if (comuna) {
     const b = boundsFromGeometry(comuna.geom);
     if (b && !b.isEmpty()) {
@@ -623,6 +779,7 @@ async function loadPoints() {
   populateCategoryFilter();
   renderList();
   renderMarkers();
+  renderSectorList(); // los contadores "N puntos" cambian con cada alta/baja
 }
 
 function populateCategoryFilter() {
@@ -646,7 +803,7 @@ function renderList() {
   const list = document.getElementById('list');
 
   if (!comunaSel.value) {
-    list.innerHTML = '<div class="empty">Elige una comuna para ver sus sectores</div>';
+    list.innerHTML = '<div class="empty">Elige una comuna para ver sus puntos</div>';
     return;
   }
 
@@ -663,7 +820,7 @@ function renderList() {
   });
 
   if (!filtered.length) {
-    list.innerHTML = '<div class="empty">No hay sectores en esta comuna</div>';
+    list.innerHTML = '<div class="empty">No hay puntos en esta comuna</div>';
     return;
   }
 
@@ -792,6 +949,9 @@ function focusPoint(id) {
 // CLIC EN MAPA
 // ============================================================
 function onMapClick(e) {
+  // Modo dibujo: cada clic agrega un vértice del sector
+  if (drawActive) { handleDrawClick(e); return; }
+
   const { lng, lat } = e.lngLat;
 
   if (refMode) {
@@ -912,6 +1072,510 @@ async function deletePoint(id) {
   toast('Punto eliminado');
   await loadPoints();
 }
+
+// ============================================================
+// SECTORES: CAPAS, CARGA Y LISTA
+// ============================================================
+function emptyFC() { return { type: 'FeatureCollection', features: [] }; }
+
+function initSectorLayers() {
+  if (!map.getSource('sectores')) {
+    map.addSource('sectores', { type: 'geojson', data: emptyFC(), promoteId: 'id' });
+  }
+  if (!map.getLayer('sectores-fill')) {
+    map.addLayer({
+      id: 'sectores-fill',
+      type: 'fill',
+      source: 'sectores',
+      paint: {
+        'fill-color': ['get', 'color'],
+        'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.32, 0.14],
+      },
+    });
+  }
+  if (!map.getLayer('sectores-outline')) {
+    map.addLayer({
+      id: 'sectores-outline',
+      type: 'line',
+      source: 'sectores',
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': ['case', ['boolean', ['feature-state', 'hover'], false], 4, 2],
+      },
+    });
+  }
+  if (!map.getLayer('sectores-labels')) {
+    map.addLayer({
+      id: 'sectores-labels',
+      type: 'symbol',
+      source: 'sectores',
+      layout: {
+        'text-field': ['get', 'nombre'],
+        // text-font obligatorio: Open Sans da 404 en OpenFreeMap y deja la
+        // fuente entera en "errored" (nada de esa fuente se dibuja)
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 12,
+      },
+      paint: {
+        'text-color': ['get', 'color'],
+        'text-halo-color': '#ffffff',
+        'text-halo-width': 1.5,
+      },
+    });
+  }
+
+  // Trazo en curso (polígono + línea de goma elástica)
+  if (!map.getSource('draw-preview')) {
+    map.addSource('draw-preview', { type: 'geojson', data: emptyFC() });
+  }
+  if (!map.getLayer('draw-fill')) {
+    map.addLayer({
+      id: 'draw-fill',
+      type: 'fill',
+      source: 'draw-preview',
+      paint: { 'fill-color': drawColor, 'fill-opacity': 0.18 },
+    });
+  }
+  if (!map.getLayer('draw-line')) {
+    map.addLayer({
+      id: 'draw-line',
+      type: 'line',
+      source: 'draw-preview',
+      paint: { 'line-color': drawColor, 'line-width': 3, 'line-dasharray': [2, 1.5] },
+    });
+  }
+
+  // Vértices
+  if (!map.getSource('draw-verts')) {
+    map.addSource('draw-verts', { type: 'geojson', data: emptyFC() });
+  }
+  if (!map.getLayer('draw-vert-dots')) {
+    map.addLayer({
+      id: 'draw-vert-dots',
+      type: 'circle',
+      source: 'draw-verts',
+      paint: {
+        'circle-radius': ['case', ['==', ['get', 'first'], true], 8, 6],
+        'circle-color': drawColor,
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 2,
+      },
+    });
+  }
+}
+
+function setDrawColor(c) {
+  if (!map) return;
+  if (map.getLayer('draw-fill')) map.setPaintProperty('draw-fill', 'fill-color', c);
+  if (map.getLayer('draw-line')) map.setPaintProperty('draw-line', 'line-color', c);
+  if (map.getLayer('draw-vert-dots')) map.setPaintProperty('draw-vert-dots', 'circle-color', c);
+}
+
+function ringArea(ring) {
+  let sum = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    sum += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
+  }
+  return sum / 2;
+}
+
+function countPointsInRing(ring) {
+  let n = 0;
+  for (const p of allPoints) {
+    if (p.lat != null && p.lng != null && inRing(p.lng, p.lat, ring)) n++;
+  }
+  return n;
+}
+
+function countPointsInSector(s) {
+  const ring = s.geom && s.geom.coordinates && s.geom.coordinates[0];
+  return ring ? countPointsInRing(ring) : 0;
+}
+
+async function loadSectores() {
+  const { data, error } = await db.from('sectores').select('*');
+  if (error) {
+    console.error('sectores:', error);
+    const missing =
+      error.code === '42P01' ||
+      error.code === 'PGRST205' ||
+      /does not exist|could not find the table/i.test(error.message || '');
+    sectorListError = missing
+      ? 'Falta la tabla: ejecuta la sección 6 de schema.sql en Supabase'
+      : 'Error cargando sectores';
+    renderSectorList();
+    return;
+  }
+  sectorListError = null;
+  allSectores = data || [];
+  updateSectorsSource();
+  renderSectorList();
+}
+
+function sectorsVisible(s) {
+  const sel = comunaSel.value;
+  return !sel || !s.comuna || s.comuna === sel;
+}
+
+function updateSectorsSource() {
+  if (!map || !map.getSource('sectores')) return;
+  const features = allSectores.filter(sectorsVisible).map((s) => ({
+    type: 'Feature',
+    properties: {
+      id: s.id,
+      nombre: s.nombre,
+      color: s.color,
+      ...(s.comuna ? { comuna: s.comuna } : {}),
+    },
+    geometry: s.geom,
+  }));
+  map.getSource('sectores').setData({ type: 'FeatureCollection', features });
+}
+
+function renderSectorList() {
+  const box = document.getElementById('sectorList');
+  if (!box) return;
+  const visible = allSectores.filter(sectorsVisible);
+
+  if (!visible.length) {
+    box.innerHTML = sectorListError
+      ? `<div class="empty">${escapeHtml(sectorListError)}</div>`
+      : '<div class="empty">Aún no hay sectores · dibuja uno con ✏️</div>';
+    return;
+  }
+
+  box.innerHTML = visible.map((s) => {
+    const n = countPointsInSector(s);
+    const meta = `${n} punto${n === 1 ? '' : 's'}${s.comuna ? ' · ' + escapeHtml(s.comuna) : ''}`;
+    return `
+      <div class="sector-card" data-id="${s.id}">
+        <span class="dot" style="background:${escapeHtml(s.color || '#3b82f6')}"></span>
+        <div class="s-body">
+          <b>${escapeHtml(s.nombre)}</b>
+          <small>${meta}</small>
+        </div>
+        ${isAdmin ? `
+          <div class="s-actions">
+            <button class="rename" title="Renombrar">✎</button>
+            <button class="color" title="Cambiar color">🎨</button>
+            <button class="del" title="Eliminar">🗑</button>
+          </div>` : ''}
+        <div class="palette-row">
+          ${SECTOR_COLORS.map((c) => `
+            <button class="chip${c === s.color ? ' selected' : ''}" data-color="${c}"
+                    style="background:${c}" title="Color"></button>`).join('')}
+        </div>
+      </div>`;
+  }).join('');
+
+  box.querySelectorAll('.sector-card').forEach((el) => {
+    const id = el.dataset.id;
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      focusSector(id);
+    });
+    el.addEventListener('mouseenter', () => setSectorHover(id, true));
+    el.addEventListener('mouseleave', () => {
+      setSectorHover(id, false);
+      el.classList.remove('editing');
+    });
+
+    const ren = el.querySelector('.rename');
+    const col = el.querySelector('.color');
+    const del = el.querySelector('.del');
+    if (ren) ren.addEventListener('click', (e) => { e.stopPropagation(); renameSector(id); });
+    if (col) col.addEventListener('click', (e) => { e.stopPropagation(); el.classList.toggle('editing'); });
+    if (del) del.addEventListener('click', (e) => { e.stopPropagation(); deleteSector(id); });
+
+    el.querySelectorAll('.palette-row .chip').forEach((chip) => {
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        changeSectorColor(id, chip.dataset.color);
+      });
+    });
+  });
+}
+
+function setSectorHover(id, on) {
+  if (!map || !map.getSource('sectores') || !id) return;
+  map.setFeatureState({ source: 'sectores', id }, { hover: on });
+}
+
+function focusSector(id) {
+  const s = allSectores.find((x) => x.id === id);
+  if (!s || !s.geom) return;
+  const b = boundsFromGeometry(s.geom);
+  if (b && !b.isEmpty()) map.fitBounds(b, { padding: 60, duration: 800 });
+}
+
+async function renameSector(id) {
+  if (!isAdmin) return toast('Solo administradores pueden editar sectores', true);
+  const s = allSectores.find((x) => x.id === id);
+  if (!s) return;
+  const nombre = prompt('Nombre del sector:', s.nombre);
+  if (nombre === null) return;
+  const trimmed = nombre.trim();
+  if (!trimmed || trimmed === s.nombre) return;
+  const { error } = await db.from('sectores').update({ nombre: trimmed }).eq('id', id);
+  if (error) return toast(error.message, true);
+  await loadSectores();
+}
+
+async function changeSectorColor(id, color) {
+  if (!isAdmin) return toast('Solo administradores pueden editar sectores', true);
+  const { error } = await db.from('sectores').update({ color }).eq('id', id);
+  if (error) return toast(error.message, true);
+  await loadSectores();
+}
+
+async function deleteSector(id) {
+  if (!isAdmin) return toast('Solo administradores pueden eliminar sectores', true);
+  const s = allSectores.find((x) => x.id === id);
+  if (!confirm(`¿Eliminar "${s?.nombre}"?`)) return;
+  const { error } = await db.from('sectores').delete().eq('id', id);
+  if (error) return toast(error.message, true);
+  toast('Sector eliminado');
+  await loadSectores();
+}
+
+// ============================================================
+// DIBUJO DE SECTORES
+// ============================================================
+function startDraw() {
+  if (drawActive) { stopDraw(); return; }
+
+  drawActive = true;
+  drawVerts = [];
+  drawHover = null;
+  pendingSector = null;
+
+  // El modo referencia pisaría el primer clic: lo apagamos
+  if (refMode) {
+    refMode = false;
+    document.getElementById('refBtn').classList.remove('active');
+    document.getElementById('refBtn').textContent = '🎯 Modo referencia';
+    clearReference();
+  }
+
+  document.getElementById('sectorModal').classList.remove('visible');
+  document.getElementById('drawToolbar').classList.add('visible');
+  document.getElementById('drawBtn').classList.add('active');
+  map.doubleClickZoom.disable();
+  map.getCanvas().style.cursor = 'crosshair';
+  updateDraw();
+  toast('Clic para agregar vértices · doble clic o primer vértice para cerrar');
+}
+
+function stopDraw() {
+  drawActive = false;
+  drawVerts = [];
+  drawHover = null;
+  pendingSector = null;
+
+  if (map) {
+    if (map.getSource('draw-preview')) map.getSource('draw-preview').setData(emptyFC());
+    if (map.getSource('draw-verts')) map.getSource('draw-verts').setData(emptyFC());
+    map.doubleClickZoom.enable();
+    map.getCanvas().style.cursor = '';
+  }
+  document.getElementById('sectorModal').classList.remove('visible');
+  document.getElementById('drawToolbar').classList.remove('visible');
+  document.getElementById('drawBtn').classList.remove('active');
+  document.getElementById('drawCount').textContent = '—';
+}
+
+function distPx(a, point) {
+  const p = map.project(a);
+  return Math.hypot(p.x - point.x, p.y - point.y);
+}
+
+function updateDraw() {
+  if (!map || !map.getSource('draw-preview')) return;
+
+  const line = drawHover && drawVerts.length ? drawVerts.concat([drawHover]) : drawVerts.slice();
+
+  const preview = [];
+  if (line.length >= 2) {
+    preview.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line } });
+    if (line.length >= 3) {
+      preview.push({
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'Polygon', coordinates: [line.concat([line[0]])] },
+      });
+    }
+  }
+  map.getSource('draw-preview').setData({ type: 'FeatureCollection', features: preview });
+
+  map.getSource('draw-verts').setData({
+    type: 'FeatureCollection',
+    features: drawVerts.map((c, i) => ({
+      type: 'Feature',
+      properties: { first: i === 0 },
+      geometry: { type: 'Point', coordinates: c },
+    })),
+  });
+
+  // Contador en vivo: puntos que caerían dentro del sector
+  const badge = document.getElementById('drawCount');
+  if (line.length >= 3) {
+    const n = countPointsInRing(line);
+    badge.textContent = `${n} punto${n === 1 ? '' : 's'}`;
+  } else {
+    badge.textContent = '—';
+  }
+}
+
+function handleDrawClick(e) {
+  // Con el modal abierto el mapa queda "congelado" (evita vértices fantasma)
+  if (document.getElementById('sectorModal').classList.contains('visible')) return;
+
+  const pt = [e.lngLat.lng, e.lngLat.lat];
+
+  // Clic sobre el primer vértice = cerrar el sector
+  if (drawVerts.length >= 3 && distPx(drawVerts[0], e.point) <= 12) {
+    drawHover = null;
+    closeDraw();
+    return;
+  }
+
+  drawVerts.push(pt);
+  updateDraw();
+}
+
+function onMapMove(e) {
+  if (drawActive) {
+    drawHover = [e.lngLat.lng, e.lngLat.lat];
+    map.getCanvas().style.cursor = 'crosshair';
+    updateDraw();
+    return;
+  }
+
+  const hasLayer = map.getLayer('sectores-fill');
+  const feats = hasLayer ? map.queryRenderedFeatures(e.point, { layers: ['sectores-fill'] }) : [];
+  const id = feats.length ? feats[0].properties.id : null;
+
+  if (id !== sectorHoverId) {
+    setSectorHover(sectorHoverId, false);
+    setSectorHover(id, true);
+    sectorHoverId = id;
+  }
+  map.getCanvas().style.cursor = id ? 'pointer' : '';
+}
+
+function onMapDblClick(e) {
+  if (!drawActive) return;
+  if (document.getElementById('sectorModal').classList.contains('visible')) return;
+  e.preventDefault();
+
+  // Los clics previos al doble clic dejaron vértices repetidos en la misma
+  // ubicación: los quitamos (solo si son duplicados entre sí)
+  while (
+    drawVerts.length >= 4 &&
+    distPx(drawVerts[drawVerts.length - 1], e.point) <= 12 &&
+    distPx(drawVerts[drawVerts.length - 1], map.project(drawVerts[drawVerts.length - 2])) <= 12
+  ) {
+    drawVerts.pop();
+  }
+  drawHover = null;
+  closeDraw();
+}
+
+function closeDraw() {
+  if (drawVerts.length < 3) {
+    toast('Necesitas al menos 3 vértices para cerrar un sector', true);
+    return;
+  }
+
+  const ring = drawVerts.concat([drawVerts[0]]);
+  if (Math.abs(ringArea(ring)) < 1e-11) {
+    toast('El polígono es demasiado pequeño', true);
+    return;
+  }
+
+  const count = countPointsInRing(ring);
+  pendingSector = { ring, color: drawColor, comuna: comunaSel.value || null, count };
+
+  document.getElementById('sectorNombre').value = `Sector ${allSectores.length + 1}`;
+  document.getElementById('sectorCount').innerHTML =
+    `<span class="swatch" style="background:${escapeHtml(drawColor)}"></span>` +
+    `${count} punto${count === 1 ? '' : 's'} incluido${count === 1 ? '' : 's'}`;
+  document.getElementById('sectorErr').textContent = '';
+  document.getElementById('sectorModal').classList.add('visible');
+
+  drawHover = null;
+  updateDraw();
+}
+
+async function saveSector() {
+  if (!pendingSector) return;
+  const err = document.getElementById('sectorErr');
+  const nombre =
+    document.getElementById('sectorNombre').value.trim() || `Sector ${allSectores.length + 1}`;
+
+  const { error } = await db.from('sectores').insert({
+    comuna: pendingSector.comuna,
+    nombre,
+    color: pendingSector.color,
+    geom: { type: 'Polygon', coordinates: [pendingSector.ring] },
+    created_by: currentUser.id,
+  });
+  if (error) { err.textContent = error.message; return; }
+
+  const n = pendingSector.count;
+  pendingSector = null;
+  document.getElementById('sectorModal').classList.remove('visible');
+  stopDraw();
+  toast(`Sector guardado · ${n} punto${n === 1 ? '' : 's'} incluido${n === 1 ? '' : 's'}`);
+  await loadSectores();
+}
+
+// --- Toolbar y atajos ---
+const drawPalette = document.getElementById('drawPalette');
+SECTOR_COLORS.forEach((c) => {
+  const chip = document.createElement('button');
+  chip.className = 'chip' + (c === drawColor ? ' selected' : '');
+  chip.style.background = c;
+  chip.title = 'Color del sector';
+  chip.addEventListener('click', () => {
+    drawColor = c;
+    drawPalette.querySelectorAll('.chip').forEach((x) => x.classList.remove('selected'));
+    chip.classList.add('selected');
+    setDrawColor(c);
+  });
+  drawPalette.appendChild(chip);
+});
+
+document.getElementById('drawBtn').addEventListener('click', startDraw);
+document.getElementById('drawUndo').addEventListener('click', () => { drawVerts.pop(); updateDraw(); });
+document.getElementById('drawCancel').addEventListener('click', () => stopDraw());
+document.getElementById('drawClose').addEventListener('click', () => { drawHover = null; closeDraw(); });
+document.getElementById('sectorCancelBtn').addEventListener('click', () => {
+  pendingSector = null;
+  document.getElementById('sectorModal').classList.remove('visible');
+});
+document.getElementById('sectorSaveBtn').addEventListener('click', saveSector);
+
+document.addEventListener('keydown', (e) => {
+  const typing = e.target && e.target.matches && e.target.matches('input, textarea');
+
+  if (e.key === 'Escape') {
+    if (document.getElementById('sectorModal').classList.contains('visible')) {
+      pendingSector = null;
+      document.getElementById('sectorModal').classList.remove('visible');
+      return;
+    }
+    if (drawActive) stopDraw();
+    return;
+  }
+
+  if (!typing && drawActive && (e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    drawVerts.pop();
+    updateDraw();
+  }
+});
+
 
 // ============================================================
 // BUSCAR DIRECCIÓN (Nominatim)

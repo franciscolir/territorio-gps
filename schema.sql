@@ -207,3 +207,45 @@ begin
   where id = p_id;
 end;
 $$;
+
+-- ============================================================
+-- 6. SECTORES (dibujados a mano en el mapa)
+-- ============================================================
+create table if not exists public.sectores (
+  id uuid primary key default gen_random_uuid(),
+  comuna text,
+  nombre text not null default 'Sector',
+  color text not null default '#3b82f6',
+  geom geometry(Polygon, 4326) not null,
+  created_by uuid references auth.users(id),
+  created_at timestamptz default now()
+);
+
+create index if not exists sectores_geom_idx on public.sectores using gist (geom);
+
+alter table public.sectores enable row level security;
+
+-- Todos los autenticados ven los sectores
+drop policy if exists "sectores_select_all" on public.sectores;
+create policy "sectores_select_all" on public.sectores
+  for select to authenticated
+  using (true);
+
+-- Cualquier autenticado crea los suyos
+drop policy if exists "sectores_insert_auth" on public.sectores;
+create policy "sectores_insert_auth" on public.sectores
+  for insert to authenticated
+  with check (auth.uid() = created_by);
+
+-- Solo admin renombra / recolorea
+drop policy if exists "sectores_update_admin" on public.sectores;
+create policy "sectores_update_admin" on public.sectores
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- Solo admin elimina
+drop policy if exists "sectores_delete_admin" on public.sectores;
+create policy "sectores_delete_admin" on public.sectores
+  for delete to authenticated
+  using (public.is_admin());

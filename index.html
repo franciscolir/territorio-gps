@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gestión de Puntos · RM Chile</title>
+
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.js"></script>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: system-ui, -apple-system, sans-serif; }
+  body { display: flex; flex-direction: column; overflow: hidden; background: #f8fafc; color: #0f172a; }
+
+  /* ============ LOGIN ============ */
+  #loginView {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #1e293b, #0f172a);
+  }
+  #loginView .card {
+    background: #fff; padding: 32px; border-radius: 14px;
+    width: 100%; max-width: 380px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.4);
+  }
+  #loginView h1 { font-size: 20px; margin-bottom: 6px; }
+  #loginView p.sub { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+  #loginView label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .5px; }
+  #loginView input {
+    width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px;
+  }
+  #loginView input:focus { outline: 2px solid #3b82f6; border-color: transparent; }
+  #loginView button {
+    width: 100%; margin-top: 18px; padding: 12px; background: #3b82f6; color: #fff;
+    border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  #loginView button:hover { background: #2563eb; }
+  #loginError { color: #dc2626; font-size: 13px; margin-top: 10px; min-height: 18px; }
+
+  /* ============ APP ============ */
+  #appView { display: none; flex-direction: column; height: 100%; }
+
+  header {
+    background: #fff; border-bottom: 1px solid #e2e8f0;
+    padding: 10px 16px; display: flex; gap: 10px; align-items: center;
+    flex-wrap: wrap; z-index: 20; box-shadow: 0 1px 3px rgba(0,0,0,.05);
+  }
+  header .brand { font-weight: 700; font-size: 15px; color: #1e293b; margin-right: 6px; }
+  header input, header button {
+    padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;
+  }
+  header input:focus { outline: 2px solid #3b82f6; }
+  header button {
+    background: #3b82f6; color: #fff; border: none; cursor: pointer; font-weight: 600;
+  }
+  header button:hover { background: #2563eb; }
+  header button.ghost { background: #f1f5f9; color: #1e293b; }
+  header button.ghost:hover { background: #e2e8f0; }
+  header button.danger { background: #dc2626; }
+  header button.danger:hover { background: #b91c1c; }
+  header button.active { background: #f59e0b; color: #fff; }
+  header .spacer { flex: 1; }
+  header .user { font-size: 12px; color: #64748b; }
+
+  #main { flex: 1; display: flex; position: relative; overflow: hidden; }
+
+  /* ============ SIDEBAR ============ */
+  #sidebar {
+    width: 340px; background: #fff; border-right: 1px solid #e2e8f0;
+    display: flex; flex-direction: column; z-index: 10;
+    transition: transform .25s;
+  }
+  #sidebar.collapsed { transform: translateX(-100%); position: absolute; height: 100%; }
+  #sidebar .panel-head {
+    padding: 12px 14px; border-bottom: 1px solid #e2e8f0;
+  }
+  #sidebar .panel-head h2 { font-size: 14px; margin-top: 12px; margin-bottom: 8px; }
+  #sidebar .panel-head select {
+    width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1;
+    border-radius: 8px; font-size: 13px; background: #fff;
+  }
+  #sidebar .panel-head select:focus { outline: 2px solid #3b82f6; }
+  #sidebar .panel-head input {
+    width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1;
+    border-radius: 8px; font-size: 13px;
+  }
+  #sidebar .panel-head input:focus { outline: 2px solid #3b82f6; }
+  #sidebar .filters { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  #sidebar .filters select {
+    flex: 1; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px;
+  }
+  #list { flex: 1; overflow-y: auto; padding: 8px; }
+  .point-card {
+    border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;
+    margin-bottom: 8px; cursor: pointer; transition: all .15s;
+    background: #fff;
+  }
+  .point-card:hover { border-color: #3b82f6; box-shadow: 0 2px 8px rgba(59,130,246,.15); }
+  .point-card.selected { border-color: #3b82f6; background: #eff6ff; }
+  .point-card h3 { font-size: 13px; margin-bottom: 3px; }
+  .point-card .meta { font-size: 11px; color: #64748b; line-height: 1.4; }
+  .point-card .tag {
+    display: inline-block; background: #e0e7ff; color: #3730a3;
+    padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;
+    margin-right: 4px; margin-top: 4px;
+  }
+  .point-card .actions { display: flex; gap: 6px; margin-top: 8px; }
+  .point-card .actions button {
+    flex: 1; padding: 5px; font-size: 11px; border-radius: 6px;
+    border: 1px solid #cbd5e1; background: #f8fafc; cursor: pointer;
+  }
+  .point-card .actions button:hover { background: #e2e8f0; }
+  .point-card .actions button.del { color: #dc2626; }
+  .point-card .actions button.del:hover { background: #fee2e2; border-color: #fca5a5; }
+
+  #sidebar .empty { padding: 30px 16px; text-align: center; color: #94a3b8; font-size: 13px; }
+
+  /* ============ MAP ============ */
+  #map { flex: 1; position: relative; }
+
+  /* ============ REFERENCE PANEL ============ */
+  #refPanel {
+    position: absolute; bottom: 20px; right: 20px;
+    background: #fff; padding: 16px; border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.15); z-index: 15;
+    width: 300px; display: none;
+  }
+  #refPanel.visible { display: block; }
+  #refPanel h3 { font-size: 13px; margin-bottom: 10px; color: #1e293b; }
+  #refPanel .coord { font-size: 11px; font-family: monospace; color: #64748b; margin-bottom: 10px; }
+  #refPanel label { font-size: 12px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px; }
+  #refPanel input[type=range] { width: 100%; }
+  #refPanel .radius-val { font-size: 12px; color: #3b82f6; font-weight: 700; }
+  #refPanel .close {
+    position: absolute; top: 8px; right: 10px; background: none; border: none;
+    font-size: 18px; cursor: pointer; color: #94a3b8;
+  }
+  #refResults { margin-top: 12px; max-height: 200px; overflow-y: auto; }
+  #refResults .count {
+    font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;
+  }
+  #refResults .item {
+    padding: 6px 8px; font-size: 12px; border-radius: 6px;
+    border: 1px solid #e2e8f0; margin-bottom: 4px; cursor: pointer;
+  }
+  #refResults .item:hover { background: #eff6ff; border-color: #3b82f6; }
+  #refResults .empty { text-align: center; color: #94a3b8; font-size: 12px; padding: 10px; }
+
+  /* ============ MODAL ============ */
+  #modal {
+    position: fixed; inset: 0; z-index: 500; background: rgba(15,23,42,.6);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  #modal.visible { display: flex; }
+  #modal .box {
+    background: #fff; border-radius: 14px; padding: 24px;
+    width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+  }
+  #modal h2 { font-size: 17px; margin-bottom: 16px; }
+  #modal label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin: 12px 0 4px; text-transform: uppercase; }
+  #modal input, #modal textarea {
+    width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1;
+    border-radius: 8px; font-size: 14px; font-family: inherit;
+  }
+  #modal textarea { resize: vertical; min-height: 60px; }
+  #modal input:focus, #modal textarea:focus { outline: 2px solid #3b82f6; }
+  #modal .row { display: flex; gap: 10px; }
+  #modal .row > div { flex: 1; }
+  #modal .buttons { display: flex; gap: 10px; margin-top: 20px; }
+  #modal button {
+    flex: 1; padding: 11px; border-radius: 8px; font-size: 14px;
+    font-weight: 600; cursor: pointer; border: none;
+  }
+  #modal button.primary { background: #3b82f6; color: #fff; }
+  #modal button.primary:hover { background: #2563eb; }
+  #modal button.secondary { background: #f1f5f9; color: #1e293b; }
+  #modal button.secondary:hover { background: #e2e8f0; }
+  #modalError { color: #dc2626; font-size: 13px; margin-top: 10px; min-height: 18px; }
+
+  /* ============ POPUP MApLibre ============ */
+  .maplibregl-popup-content {
+    padding: 12px 14px; border-radius: 10px; font-size: 13px;
+  }
+  .maplibregl-popup-content button {
+    margin-top: 8px; padding: 6px 12px; background: #3b82f6;
+    color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;
+  }
+
+  /* ============ TOAST ============ */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 8px;
+    font-size: 13px; z-index: 2000; transition: transform .3s; pointer-events: none;
+  }
+  #toast.visible { transform: translateX(-50%) translateY(0); }
+  #toast.error { background: #dc2626; }
+
+  /* Toggle sidebar */
+  #toggleSidebar {
+    position: absolute; top: 10px; left: 10px; z-index: 11;
+    background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
+    width: 36px; height: 36px; cursor: pointer; font-size: 16px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="loginView">
+  <div class="card">
+    <h1>Gestión de Puntos</h1>
+    <p class="sub">Región Metropolitana · Chile</p>
+    <label>Email</label>
+    <input id="loginEmail" type="email" autocomplete="username" />
+    <label>Contraseña</label>
+    <input id="loginPass" type="password" autocomplete="current-password" />
+    <button id="loginBtn">Ingresar</button>
+    <div id="loginError"></div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="appView">
+  <header>
+    <span class="brand">📍 Puntos RM</span>
+    <input id="searchAddr" type="text" placeholder="Buscar dirección…" style="width:220px" />
+    <button id="searchBtn" class="ghost">Buscar</button>
+    <input id="gmapsLink" type="text" placeholder="Pegar link Google Maps…" style="width:220px" />
+    <button id="gmapsBtn" class="ghost">Ir</button>
+    <button id="newPointBtn">+ Nuevo punto</button>
+    <button id="refBtn" class="ghost">🎯 Modo referencia</button>
+    <span class="spacer"></span>
+    <span class="user" id="userInfo"></span>
+    <button id="logoutBtn" class="ghost">Salir</button>
+  </header>
+
+  <div id="main">
+    <button id="toggleSidebar" title="Mostrar/ocultar panel">☰</button>
+
+    <aside id="sidebar">
+      <div class="panel-head">
+        <select id="comunaSel" aria-label="Elegir comuna">
+          <option value="">Todas las comunas</option>
+        </select>
+        <h2>Puntos guardados</h2>
+        <input id="filterText" type="text" placeholder="Filtrar por nombre, dirección…" />
+        <div class="filters">
+          <select id="filterCat"><option value="">Todas las categorías</option></select>
+        </div>
+      </div>
+      <div id="list"></div>
+    </aside>
+
+    <div id="map"></div>
+
+    <div id="refPanel">
+      <button class="close" id="refClose">×</button>
+      <h3>🎯 Puntos cercanos a referencia</h3>
+      <div class="coord" id="refCoord">—</div>
+      <label>Radio: <span class="radius-val" id="refRadiusVal">500 m</span></label>
+      <input id="refRadius" type="range" min="100" max="5000" step="100" value="500" />
+      <div id="refResults"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL ================= -->
+<div id="modal">
+  <div class="box">
+    <h2 id="modalTitle">Nuevo punto</h2>
+    <label>Nombre *</label>
+    <input id="fNombre" type="text" />
+    <label>Dirección</label>
+    <input id="fDireccion" type="text" />
+    <label>Categoría</label>
+    <input id="fCategoria" type="text" placeholder="ej: cliente, bodega…" />
+    <label>Notas</label>
+    <textarea id="fNotas"></textarea>
+    <div class="row">
+      <div>
+        <label>Latitud *</label>
+        <input id="fLat" type="number" step="any" />
+      </div>
+      <div>
+        <label>Longitud *</label>
+        <input id="fLng" type="number" step="any" />
+      </div>
+    </div>
+    <div id="modalError"></div>
+    <div class="buttons">
+      <button class="secondary" id="modalCancel">Cancelar</button>
+      <button class="primary" id="modalSave">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ============================================================
+// CONFIG — EDITA AQUÍ
+// ============================================================
+const SUPABASE_URL = 'https://yfdkyccmaseztypccoww.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_jmltUeff0VTuLXf2KrujcA_zktLmoSS';
+
+const SANTIAGO_CENTER = [-70.6483, -33.457];
+const SANTIAGO_ZOOM = 12;
+
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+
+// ============================================================
+// CLIENTE SUPABASE
+// ============================================================
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true },
+});
+
+// ============================================================
+// ESTADO GLOBAL
+// ============================================================
+let map = null;
+let currentUser = null;
+let isAdmin = false;
+let allPoints = [];
+let allComunas = [];
+let pointMarkers = {};       // id -> Marker
+let tempMarker = null;       // marker temporal al hacer clic
+let refMarker = null;        // marker de referencia
+let refRadiusTimer = null;   // debounce al cambiar el radio
+let refMode = false;         // modo referencia activo
+let editingId = null;        // id del punto que se edita
+let refResultsIds = new Set();
+
+// ============================================================
+// TOAST
+// ============================================================
+function toast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'visible' + (isError ? ' error' : '');
+  setTimeout(() => (t.className = ''), 2600);
+}
+
+// ============================================================
+// LOGIN
+// ============================================================
+document.getElementById('loginBtn').addEventListener('click', doLogin);
+document.getElementById('loginPass').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doLogin();
+});
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
+  const err   = document.getElementById('loginError');
+  err.textContent = '';
+
+  const { data, error } = await db.auth.signInWithPassword({ email, password: pass });
+  if (error) { err.textContent = error.message; return; }
+  currentUser = data.user;
+  await afterLogin();
+}
+
+async function afterLogin() {
+  document.getElementById('loginView').style.display = 'none';
+  document.getElementById('appView').style.display = 'flex';
+  document.getElementById('userInfo').textContent = currentUser.email;
+
+  // ¿Es admin?
+  const { data: prof } = await db
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', currentUser.id)
+    .maybeSingle();
+  isAdmin = !!prof?.is_admin;
+
+  initMap();
+}
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await db.auth.signOut();
+  location.reload();
+});
+
+// ============================================================
+// MAPA
+// ============================================================
+function initMap() {
+  map = new maplibregl.Map({
+    container: 'map',
+    style: MAP_STYLE,
+    center: SANTIAGO_CENTER,
+    zoom: SANTIAGO_ZOOM,
+  });
+  map.addControl(new maplibregl.NavigationControl(), 'top-right');
+  map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
+
+  map.on('load', async () => {
+    await loadComunas();
+    await loadPoints();
+    fitSantiago(0);
+    map.on('click', onMapClick);
+  });
+}
+
+// ============================================================
+// COMUNAS RM
+// ============================================================
+async function loadComunas() {
+  const { data, error } = await db.from('comunas_rm').select('*');
+  if (error) { console.error(error); toast('Error cargando comunas', true); return; }
+
+  allComunas = data.map((c) => ({ nombre: c.nombre, geom: c.geom }));
+  populateComunaFilter();
+
+  // Construir FeatureCollection
+  const features = data.map((c) => ({
+    type: 'Feature',
+    properties: { nombre: c.nombre, codigo: c.codigo_comuna },
+    geometry: c.geom, // PostGIS devuelve GeoJSON en la columna geom
+  }));
+
+  map.addSource('comunas', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features },
+  });
+
+  map.addLayer({
+    id: 'comunas-fill',
+    type: 'fill',
+    source: 'comunas',
+    paint: {
+      'fill-color': '#3b82f6',
+      'fill-opacity': 0.06,
+    },
+  });
+
+  map.addLayer({
+    id: 'comunas-outline',
+    type: 'line',
+    source: 'comunas',
+    paint: {
+      'line-color': '#1e40af',
+      'line-width': 1,
+      'line-opacity': 0.7,
+    },
+  });
+
+  map.addLayer({
+    id: 'comunas-labels',
+    type: 'symbol',
+    source: 'comunas',
+    layout: {
+      'text-field': ['get', 'nombre'],
+      'text-size': 11,
+      'text-allow-overlap': false,
+    },
+    paint: {
+      'text-color': '#1e3a8a',
+      'text-halo-color': '#ffffff',
+      'text-halo-width': 1.5,
+    },
+  });
+}
+
+// ============================================================
+// COMUNAS: SELECTOR, POLÍGONO Y VISTA
+// ============================================================
+const comunaSel = document.getElementById('comunaSel');
+comunaSel.addEventListener('change', onComunaChange);
+
+function populateComunaFilter() {
+  const names = allComunas
+    .map((c) => c.nombre)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, 'es'));
+  comunaSel.innerHTML =
+    '<option value="">Todas las comunas</option>' +
+    names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+}
+
+function onComunaChange() {
+  const nombre = comunaSel.value;
+  const comuna = allComunas.find((c) => c.nombre === nombre);
+
+  for (const layerId of ['comunas-fill', 'comunas-outline', 'comunas-labels']) {
+    if (map.getLayer(layerId)) {
+      map.setFilter(layerId, comuna ? ['==', ['get', 'nombre'], nombre] : null);
+    }
+  }
+
+  if (comuna) {
+    map.setPaintProperty('comunas-fill', 'fill-opacity', 0.18);
+    map.setPaintProperty('comunas-outline', 'line-color', '#1d4ed8');
+    map.setPaintProperty('comunas-outline', 'line-width', 3);
+    map.setPaintProperty('comunas-outline', 'line-opacity', 1);
+    const b = boundsFromGeometry(comuna.geom);
+    if (b && !b.isEmpty()) {
+      map.fitBounds(b, { padding: 60, duration: 1200 });
+      return;
+    }
+    toast('No pude calcular los límites de la comuna', true);
+  } else {
+    map.setPaintProperty('comunas-fill', 'fill-opacity', 0.06);
+    map.setPaintProperty('comunas-outline', 'line-color', '#1e40af');
+    map.setPaintProperty('comunas-outline', 'line-width', 1);
+    map.setPaintProperty('comunas-outline', 'line-opacity', 0.7);
+    fitSantiago(1200);
+  }
+}
+
+function fitSantiago(duration = 0) {
+  const santiago = allComunas.find((c) => c.nombre === 'Santiago');
+  const b = santiago ? boundsFromGeometry(santiago.geom) : null;
+  if (b && !b.isEmpty()) {
+    map.fitBounds(b, { padding: 40, duration });
+  } else {
+    map.jumpTo({ center: SANTIAGO_CENTER, zoom: SANTIAGO_ZOOM });
+  }
+}
+
+function boundsFromGeometry(geom) {
+  if (!geom || !geom.coordinates) return null;
+  const bounds = new maplibregl.LngLatBounds();
+  const walk = (coords) => {
+    if (typeof coords[0] === 'number') {
+      bounds.extend([coords[0], coords[1]]);
+      return;
+    }
+    coords.forEach(walk);
+  };
+  walk(geom.coordinates);
+  return bounds;
+}
+
+// ============================================================
+// CARGAR PUNTOS
+// ============================================================
+async function loadPoints() {
+  const { data, error } = await db
+    .from('puntos')
+    .select('*')
+    .is('deleted_at', null);
+
+  if (error) { console.error(error); toast('Error cargando puntos', true); return; }
+
+  // PostGIS devuelve geom como EWKB hex (o GeoJSON); extraemos lat/lng
+  allPoints = data.map((p) => {
+    const c = pointFromGeom(p.geom);
+    return { ...p, lat: c ? c.lat : null, lng: c ? c.lng : null };
+  });
+
+  renderList();
+  renderMarkers();
+  populateCategoryFilter();
+}
+
+function populateCategoryFilter() {
+  const cats = [...new Set(allPoints.map((p) => p.categoria).filter(Boolean))].sort();
+  const sel = document.getElementById('filterCat');
+  sel.innerHTML = '<option value="">Todas las categorías</option>' +
+    cats.map((c) => `<option value="${c}">${c}</option>`).join('');
+}
+
+// ============================================================
+// RENDER LISTA
+// ============================================================
+const filterText = document.getElementById('filterText');
+const filterCat  = document.getElementById('filterCat');
+filterText.addEventListener('input', renderList);
+filterCat.addEventListener('change', renderList);
+
+function renderList() {
+  const txt = filterText.value.toLowerCase().trim();
+  const cat = filterCat.value;
+
+  const filtered = allPoints.filter((p) => {
+    if (cat && p.categoria !== cat) return false;
+    if (txt) {
+      const blob = `${p.nombre || ''} ${p.direccion || ''} ${p.categoria || ''}`.toLowerCase();
+      if (!blob.includes(txt)) return false;
+    }
+    return true;
+  });
+
+  const list = document.getElementById('list');
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty">No hay puntos que coincidan</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map((p) => `
+    <div class="point-card" data-id="${p.id}">
+      <h3>${escapeHtml(p.nombre)}</h3>
+      <div class="meta">
+        ${p.direccion ? escapeHtml(p.direccion) + '<br>' : ''}
+        ${p.lat != null && p.lng != null ? `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}` : 'sin coordenadas'}
+      </div>
+      ${p.categoria ? `<span class="tag">${escapeHtml(p.categoria)}</span>` : ''}
+      ${refResultsIds.has(p.id) ? '<span class="tag" style="background:#fef3c7;color:#92400e">🎯 en radio</span>' : ''}
+      ${isAdmin ? `
+        <div class="actions">
+          <button class="edit">Editar</button>
+          <button class="del">Eliminar</button>
+        </div>` : ''}
+    </div>
+  `).join('');
+
+  // Eventos
+  list.querySelectorAll('.point-card').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (e.target.classList.contains('edit') || e.target.classList.contains('del')) return;
+      const id = el.dataset.id;
+      focusPoint(id);
+    });
+    const btnEdit = el.querySelector('.edit');
+    const btnDel  = el.querySelector('.del');
+    if (btnEdit) btnEdit.addEventListener('click', (e) => { e.stopPropagation(); openEditModal(el.dataset.id); });
+    if (btnDel)  btnDel.addEventListener('click',  (e) => { e.stopPropagation(); deletePoint(el.dataset.id); });
+  });
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+// PostGIS devuelve la columna `geography` como EWKB hexadecimal
+// (ej: "0101000020E6100000..." = byte order + type con flag SRID + 4326 + X + Y).
+// También acepta GeoJSON por si el backend cambia el formato.
+function pointFromGeom(geom) {
+  if (!geom) return null;
+
+  if (typeof geom === 'object' && Array.isArray(geom.coordinates)) {
+    const [lng, lat] = geom.coordinates;
+    return isFinite(lat) && isFinite(lng) ? { lat, lng } : null;
+  }
+
+  if (typeof geom !== 'string') return null;
+  const hex = geom.trim();
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length < 18 || hex.length % 2 !== 0) return null;
+
+  try {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+
+    const view = new DataView(bytes.buffer);
+    const little = bytes[0] === 1;
+    const type = view.getUint32(1, little);
+    const baseType = type & 0x1fffffff;          // quita flags EWKB (SRID/Z/M)
+    if (baseType !== 1) return null;             // solo Point
+
+    const offset = 5 + ((type & 0x20000000) ? 4 : 0);  // 4 bytes extra si hay SRID
+    if (bytes.length < offset + 16) return null;
+
+    const lng = view.getFloat64(offset, little);
+    const lat = view.getFloat64(offset + 8, little);
+    return isFinite(lat) && isFinite(lng) ? { lat, lng } : null;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
+// MARCADORES EN MAPA
+// ============================================================
+function renderMarkers() {
+  // Limpiar todos
+  Object.values(pointMarkers).forEach((m) => m.remove());
+  pointMarkers = {};
+
+  allPoints.forEach((p) => {
+    if (p.lat == null || p.lng == null) return;
+    const el = document.createElement('div');
+    const inRef = refResultsIds.has(p.id);
+    el.style.cssText = `
+      width: 18px; height: 18px; border-radius: 50%;
+      background: ${inRef ? '#f59e0b' : '#3b82f6'};
+      border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3);
+      cursor: pointer;
+    `;
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat([p.lng, p.lat])
+      .setPopup(new maplibregl.Popup().setHTML(`
+        <b>${escapeHtml(p.nombre)}</b><br>
+        ${p.direccion ? escapeHtml(p.direccion) + '<br>' : ''}
+        ${p.categoria ? `<small>${escapeHtml(p.categoria)}</small>` : ''}
+      `))
+      .addTo(map);
+    pointMarkers[p.id] = marker;
+  });
+}
+
+function focusPoint(id) {
+  const p = allPoints.find((x) => x.id === id);
+  if (!p) return;
+  document.querySelectorAll('.point-card').forEach((el) => {
+    el.classList.toggle('selected', el.dataset.id === id);
+  });
+  if (p.lat == null || p.lng == null) {
+    return toast('Este punto no tiene coordenadas válidas', true);
+  }
+  map.flyTo({ center: [p.lng, p.lat], zoom: Math.max(map.getZoom(), 15) });
+  const m = pointMarkers[id];
+  if (m) m.togglePopup();
+}
+
+// ============================================================
+// CLIC EN MAPA
+// ============================================================
+function onMapClick(e) {
+  const { lng, lat } = e.lngLat;
+
+  if (refMode) {
+    setReferencePoint(lng, lat);
+    return;
+  }
+
+  // Clic normal: marker temporal + popup
+  if (tempMarker) tempMarker.remove();
+  const el = document.createElement('div');
+  el.style.cssText = `
+    width: 22px; height: 22px; border-radius: 50% 50% 50% 0;
+    background: #ef4444; border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    transform: rotate(-45deg);
+  `;
+  tempMarker = new maplibregl.Marker({ element: el })
+    .setLngLat([lng, lat])
+    .setPopup(new maplibregl.Popup({ closeButton: true }).setHTML(`
+      <b>Punto seleccionado</b><br>
+      <small>${lat.toFixed(6)}, ${lng.toFixed(6)}</small><br>
+      <button id="popupSaveBtn">Guardar punto aquí</button>
+    `))
+    .addTo(map)
+    .togglePopup();
+
+  // El botón dentro del popup se agrega al DOM después; esperamos un tick
+  setTimeout(() => {
+    const btn = document.getElementById('popupSaveBtn');
+    if (btn) btn.addEventListener('click', () => {
+      tempMarker.getPopup().remove();
+      openNewModal(lat, lng);
+    });
+  }, 0);
+}
+
+// ============================================================
+// MODAL NUEVO/EDITAR
+// ============================================================
+const modal = document.getElementById('modal');
+document.getElementById('modalCancel').addEventListener('click', closeModal);
+document.getElementById('modalSave').addEventListener('click', savePoint);
+
+function openNewModal(lat = null, lng = null) {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'Nuevo punto';
+  document.getElementById('fNombre').value = '';
+  document.getElementById('fDireccion').value = '';
+  document.getElementById('fCategoria').value = '';
+  document.getElementById('fNotas').value = '';
+  document.getElementById('fLat').value = lat ?? '';
+  document.getElementById('fLng').value = lng ?? '';
+  document.getElementById('modalError').textContent = '';
+  modal.classList.add('visible');
+}
+
+function openEditModal(id) {
+  if (!isAdmin) return toast('Solo administradores pueden editar', true);
+  const p = allPoints.find((x) => x.id === id);
+  if (!p) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'Editar punto';
+  document.getElementById('fNombre').value = p.nombre || '';
+  document.getElementById('fDireccion').value = p.direccion || '';
+  document.getElementById('fCategoria').value = p.categoria || '';
+  document.getElementById('fNotas').value = p.notas || '';
+  document.getElementById('fLat').value = p.lat;
+  document.getElementById('fLng').value = p.lng;
+  document.getElementById('modalError').textContent = '';
+  modal.classList.add('visible');
+}
+
+function closeModal() {
+  modal.classList.remove('visible');
+  editingId = null;
+}
+
+async function savePoint() {
+  const nombre = document.getElementById('fNombre').value.trim();
+  const direccion = document.getElementById('fDireccion').value.trim();
+  const categoria = document.getElementById('fCategoria').value.trim();
+  const notas = document.getElementById('fNotas').value.trim();
+  const lat = parseFloat(document.getElementById('fLat').value);
+  const lng = parseFloat(document.getElementById('fLng').value);
+  const err = document.getElementById('modalError');
+
+  if (!nombre) { err.textContent = 'El nombre es obligatorio'; return; }
+  if (isNaN(lat) || isNaN(lng)) { err.textContent = 'Latitud/longitud inválidas'; return; }
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) { err.textContent = 'Coordenadas fuera de rango'; return; }
+
+  const { error } = await db.rpc('guardar_punto', {
+    p_id: editingId,
+    p_nombre: nombre,
+    p_direccion: direccion,
+    p_categoria: categoria,
+    p_notas: notas,
+    p_lat: lat,
+    p_lng: lng,
+  });
+
+  if (error) { err.textContent = error.message; return; }
+
+  closeModal();
+  if (tempMarker) { tempMarker.remove(); tempMarker = null; }
+  toast(editingId ? 'Punto actualizado' : 'Punto guardado');
+  await loadPoints();
+}
+
+// ============================================================
+// ELIMINAR
+// ============================================================
+async function deletePoint(id) {
+  if (!isAdmin) return toast('Solo administradores pueden eliminar', true);
+  const p = allPoints.find((x) => x.id === id);
+  if (!confirm(`¿Eliminar "${p?.nombre}"?`)) return;
+  const { error } = await db.rpc('eliminar_punto', { p_id: id });
+  if (error) return toast(error.message, true);
+  toast('Punto eliminado');
+  await loadPoints();
+}
+
+// ============================================================
+// BUSCAR DIRECCIÓN (Nominatim)
+// ============================================================
+document.getElementById('searchBtn').addEventListener('click', searchAddress);
+document.getElementById('searchAddr').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') searchAddress();
+});
+
+async function searchAddress() {
+  const q = document.getElementById('searchAddr').value.trim();
+  if (!q) return;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=cl&q=${encodeURIComponent(q)}`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
+    if (!data.length) return toast('Dirección no encontrada', true);
+    const { lat, lon, display_name } = data[0];
+    map.flyTo({ center: [parseFloat(lon), parseFloat(lat)], zoom: 16 });
+    openNewModal(parseFloat(lat), parseFloat(lon));
+    document.getElementById('fDireccion').value = display_name;
+  } catch (e) {
+    toast('Error en la búsqueda', true);
+  }
+}
+
+// ============================================================
+// GOOGLE MAPS LINK PARSER
+// ============================================================
+document.getElementById('gmapsBtn').addEventListener('click', parseGmapsLink);
+
+function parseGmapsLink() {
+  const url = document.getElementById('gmapsLink').value.trim();
+  if (!url) return;
+
+  let lat = null, lng = null;
+
+  // Formato: /@lat,lng,zoomz
+  let m = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (m) { lat = parseFloat(m[1]); lng = parseFloat(m[2]); }
+
+  // Formato: ?q=lat,lng  o  &q=lat,lng
+  if (lat === null) {
+    m = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (m) { lat = parseFloat(m[1]); lng = parseFloat(m[2]); }
+  }
+
+  // Formato: ?ll=lat,lng
+  if (lat === null) {
+    m = url.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (m) { lat = parseFloat(m[1]); lng = parseFloat(m[2]); }
+  }
+
+  if (lat === null || lng === null) {
+    return toast('No pude extraer coordenadas del link', true);
+  }
+
+  map.flyTo({ center: [lng, lat], zoom: 16 });
+  openNewModal(lat, lng);
+}
+
+// ============================================================
+// MODO REFERENCIA
+// ============================================================
+const refBtn = document.getElementById('refBtn');
+const refPanel = document.getElementById('refPanel');
+const refRadius = document.getElementById('refRadius');
+const refRadiusVal = document.getElementById('refRadiusVal');
+
+refBtn.addEventListener('click', () => {
+  refMode = !refMode;
+  refBtn.classList.toggle('active', refMode);
+  refBtn.textContent = refMode ? '🎯 Modo referencia (activo)' : '🎯 Modo referencia';
+  if (!refMode) {
+    clearReference();
+  } else {
+    toast('Haz clic en el mapa para marcar la referencia');
+  }
+});
+
+document.getElementById('refClose').addEventListener('click', () => {
+  clearReference();
+  refMode = false;
+  refBtn.classList.remove('active');
+  refBtn.textContent = '🎯 Modo referencia';
+});
+
+refRadius.addEventListener('input', () => {
+  const r = parseInt(refRadius.value);
+  refRadiusVal.textContent = r >= 1000 ? (r / 1000).toFixed(1) + ' km' : r + ' m';
+  if (!refMarker) return;
+  updateRefCircle();
+  clearTimeout(refRadiusTimer);
+  refRadiusTimer = setTimeout(() => {
+    if (!refMarker) return;
+    const c = refMarker.getLngLat();
+    searchInRadius(c.lat, c.lng, r);
+  }, 250);
+});
+
+function setReferencePoint(lng, lat) {
+  if (refMarker) refMarker.remove();
+
+  const el = document.createElement('div');
+  el.style.cssText = `
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #f59e0b; border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+  `;
+  refMarker = new maplibregl.Marker({ element: el })
+    .setLngLat([lng, lat])
+    .addTo(map);
+
+  document.getElementById('refCoord').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  refPanel.classList.add('visible');
+  updateRefCircleAndSearch();
+}
+
+function updateRefCircle() {
+  if (!refMarker) return null;
+  const center = refMarker.getLngLat();
+  const radius = parseInt(refRadius.value);
+
+  // Círculo (reemplaza la fuente si ya existe)
+  if (map.getLayer('ref-circle-fill')) map.removeLayer('ref-circle-fill');
+  if (map.getLayer('ref-circle-line')) map.removeLayer('ref-circle-line');
+  if (map.getSource('ref-circle')) map.removeSource('ref-circle');
+
+  const circleGeoJSON = createCircle(center.lng, center.lat, radius);
+  map.addSource('ref-circle', { type: 'geojson', data: circleGeoJSON });
+  map.addLayer({
+    id: 'ref-circle-fill',
+    type: 'fill',
+    source: 'ref-circle',
+    paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.12 },
+  });
+  map.addLayer({
+    id: 'ref-circle-line',
+    type: 'line',
+    source: 'ref-circle',
+    paint: { 'line-color': '#f59e0b', 'line-width': 2, 'line-dasharray': [3,2] },
+  });
+
+  return { center, radius };
+}
+
+function updateRefCircleAndSearch() {
+  const ctx = updateRefCircle();
+  if (ctx) searchInRadius(ctx.center.lat, ctx.center.lng, ctx.radius);
+}
+
+function createCircle(lng, lat, radiusMeters) {
+  const points = 64;
+  const coords = [];
+  const distanceX = radiusMeters / (111320 * Math.cos((lat * Math.PI) / 180));
+  const distanceY = radiusMeters / 110540;
+  for (let i = 0; i < points; i++) {
+    const theta = (i / points) * (2 * Math.PI);
+    coords.push([lng + distanceX * Math.cos(theta), lat + distanceY * Math.sin(theta)]);
+  }
+  coords.push(coords[0]);
+  return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] }, properties: {} };
+}
+
+async function searchInRadius(lat, lng, radio) {
+  const { data, error } = await db.rpc('puntos_en_radio', {
+    lat, lng, radio_m: radio,
+  });
+
+  const results = document.getElementById('refResults');
+  if (error) { results.innerHTML = `<div class="empty">Error: ${error.message}</div>`; return; }
+
+  refResultsIds = new Set((data || []).map((p) => p.id));
+  renderMarkers();
+  renderList();
+
+  if (!data || !data.length) {
+    results.innerHTML = '<div class="empty">Sin direcciones cercanas</div>';
+    return;
+  }
+
+  results.innerHTML =
+    `<div class="count">${data.length} punto${data.length === 1 ? '' : 's'} en radio</div>` +
+    data.map((p) => `
+    <div class="item" data-id="${p.id}">
+      <b>${escapeHtml(p.nombre)}</b><br>
+      <small>${escapeHtml(p.direccion || '')}</small>
+    </div>
+  `).join('');
+
+  results.querySelectorAll('.item').forEach((el) => {
+    el.addEventListener('click', () => focusPoint(el.dataset.id));
+  });
+}
+
+function clearReference() {
+  if (refMarker) { refMarker.remove(); refMarker = null; }
+  if (map.getLayer('ref-circle-fill')) map.removeLayer('ref-circle-fill');
+  if (map.getLayer('ref-circle-line')) map.removeLayer('ref-circle-line');
+  if (map.getSource('ref-circle')) map.removeSource('ref-circle');
+  refPanel.classList.remove('visible');
+  refResultsIds = new Set();
+  renderMarkers();
+  renderList();
+}
+
+// ============================================================
+// BOTONES GLOBALES
+// ============================================================
+document.getElementById('newPointBtn').addEventListener('click', () => openNewModal());
+
+document.getElementById('toggleSidebar').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+  setTimeout(() => map && map.resize(), 300);
+});
+
+// ============================================================
+// ARRANQUE
+// ============================================================
+(async () => {
+  const { data } = await db.auth.getSession();
+  if (data?.session?.user) {
+    currentUser = data.session.user;
+    await afterLogin();
+  }
+})();
+</script>
+</body>
+</html>

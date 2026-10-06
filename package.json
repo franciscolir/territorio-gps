@@ -1,0 +1,12 @@
+{
+  "name": "seed-comunas-rm",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "seed": "node seed-comunas.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5"
+  }
+}

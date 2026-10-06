@@ -225,6 +225,12 @@ create index if not exists sectores_geom_idx on public.sectores using gist (geom
 
 alter table public.sectores enable row level security;
 
+-- Permisos de tabla para los roles de PostgREST (sin esto da
+-- "permission denied for table sectores" aunque las policies existan)
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.sectores to authenticated;
+grant select on public.sectores to anon;
+
 -- Todos los autenticados ven los sectores
 drop policy if exists "sectores_select_all" on public.sectores;
 create policy "sectores_select_all" on public.sectores

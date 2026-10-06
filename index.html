@@ -244,7 +244,7 @@
         <select id="comunaSel" aria-label="Elegir comuna">
           <option value="">Todas las comunas</option>
         </select>
-        <h2>Puntos guardados</h2>
+        <h2>Sectores</h2>
         <input id="filterText" type="text" placeholder="Filtrar por nombre, dirección…" />
         <div class="filters">
           <select id="filterCat"><option value="">Todas las categorías</option></select>
@@ -326,6 +326,7 @@ let currentUser = null;
 let isAdmin = false;
 let allPoints = [];
 let allComunas = [];
+let comunaFeatures = null;
 let pointMarkers = {};       // id -> Marker
 let tempMarker = null;       // marker temporal al hacer clic
 let refMarker = null;        // marker de referencia
@@ -377,6 +378,9 @@ async function afterLogin() {
     .maybeSingle();
   isAdmin = !!prof?.is_admin;
 
+  // Descarga las comunas ANTES de crear el mapa, para poder encuadrar la
+  // cámara en Santiago sin tener que moverla después de cargar la fuente.
+  await loadComunas();
   initMap();
 }
 
@@ -389,19 +393,25 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 // MAPA
 // ============================================================
 function initMap() {
-  map = new maplibregl.Map({
-    container: 'map',
-    style: MAP_STYLE,
-    center: SANTIAGO_CENTER,
-    zoom: SANTIAGO_ZOOM,
-  });
+  const santiago = allComunas.find((c) => c.nombre === 'Santiago');
+  const b = santiago ? boundsFromGeometry(santiago.geom) : null;
+
+  const options = { container: 'map', style: MAP_STYLE };
+  if (b && !b.isEmpty()) {
+    options.bounds = [[b.getWest(), b.getSouth()], [b.getEast(), b.getNorth()]];
+    options.fitBoundsOptions = { padding: 40 };
+  } else {
+    options.center = SANTIAGO_CENTER;
+    options.zoom = SANTIAGO_ZOOM;
+  }
+
+  map = new maplibregl.Map(options);
   map.addControl(new maplibregl.NavigationControl(), 'top-right');
   map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
 
   map.on('load', async () => {
-    await loadComunas();
+    await ensureComunasLoaded();
     await loadPoints();
-    fitSantiago(0);
     map.on('click', onMapClick);
   });
 }
@@ -417,15 +427,25 @@ async function loadComunas() {
   populateComunaFilter();
 
   // Construir FeatureCollection
-  const features = data.map((c) => ({
+  comunaFeatures = data.map((c) => ({
     type: 'Feature',
     properties: { nombre: c.nombre, codigo: c.codigo_comuna },
     geometry: c.geom, // PostGIS devuelve GeoJSON en la columna geom
   }));
+}
+
+// Dibuja la fuente/capas de comunas solo cuando ya existe el mapa
+async function ensureComunasLoaded() {
+  if (!comunaFeatures) await loadComunas();
+  drawComunas();
+}
+
+function drawComunas() {
+  if (!comunaFeatures || map.getLayer('comunas-fill')) return;
 
   map.addSource('comunas', {
     type: 'geojson',
-    data: { type: 'FeatureCollection', features },
+    data: { type: 'FeatureCollection', features: comunaFeatures },
   });
 
   map.addLayer({
@@ -455,6 +475,10 @@ async function loadComunas() {
     source: 'comunas',
     layout: {
       'text-field': ['get', 'nombre'],
+      // text-font obligatorio: la pila por defecto (Open Sans) devuelve 404
+      // en OpenFreeMap y eso deja TODOS los tiles de la fuente en "errored",
+      // destruyendo también los polígonos de fill y outline.
+      'text-font': ['Noto Sans Regular'],
       'text-size': 11,
       'text-allow-overlap': false,
     },
@@ -485,18 +509,33 @@ function populateComunaFilter() {
 function onComunaChange() {
   const nombre = comunaSel.value;
   const comuna = allComunas.find((c) => c.nombre === nombre);
+  const hayCapas = map && map.getLayer('comunas-fill');
 
-  for (const layerId of ['comunas-fill', 'comunas-outline', 'comunas-labels']) {
-    if (map.getLayer(layerId)) {
-      map.setFilter(layerId, comuna ? ['==', ['get', 'nombre'], nombre] : null);
+  if (hayCapas) {
+    for (const layerId of ['comunas-fill', 'comunas-outline', 'comunas-labels']) {
+      if (map.getLayer(layerId)) {
+        map.setFilter(layerId, comuna ? ['==', ['get', 'nombre'], nombre] : null);
+      }
+    }
+
+    if (comuna) {
+      map.setPaintProperty('comunas-fill', 'fill-opacity', 0.18);
+      map.setPaintProperty('comunas-outline', 'line-color', '#1d4ed8');
+      map.setPaintProperty('comunas-outline', 'line-width', 3);
+      map.setPaintProperty('comunas-outline', 'line-opacity', 1);
+    } else {
+      map.setPaintProperty('comunas-fill', 'fill-opacity', 0.06);
+      map.setPaintProperty('comunas-outline', 'line-color', '#1e40af');
+      map.setPaintProperty('comunas-outline', 'line-width', 1);
+      map.setPaintProperty('comunas-outline', 'line-opacity', 0.7);
     }
   }
 
+  populateCategoryFilter();
+  renderList();
+  renderMarkers();
+
   if (comuna) {
-    map.setPaintProperty('comunas-fill', 'fill-opacity', 0.18);
-    map.setPaintProperty('comunas-outline', 'line-color', '#1d4ed8');
-    map.setPaintProperty('comunas-outline', 'line-width', 3);
-    map.setPaintProperty('comunas-outline', 'line-opacity', 1);
     const b = boundsFromGeometry(comuna.geom);
     if (b && !b.isEmpty()) {
       map.fitBounds(b, { padding: 60, duration: 1200 });
@@ -504,10 +543,6 @@ function onComunaChange() {
     }
     toast('No pude calcular los límites de la comuna', true);
   } else {
-    map.setPaintProperty('comunas-fill', 'fill-opacity', 0.06);
-    map.setPaintProperty('comunas-outline', 'line-color', '#1e40af');
-    map.setPaintProperty('comunas-outline', 'line-width', 1);
-    map.setPaintProperty('comunas-outline', 'line-opacity', 0.7);
     fitSantiago(1200);
   }
 }
@@ -536,6 +571,38 @@ function boundsFromGeometry(geom) {
   return bounds;
 }
 
+// ¿El punto (lng, lat) cae dentro del polígono/multipolígono de la comuna?
+function pointInGeometry(lng, lat, geom) {
+  if (!geom || !geom.coordinates) return false;
+  const polygons = geom.type === 'MultiPolygon' ? geom.coordinates : [geom.coordinates];
+  return polygons.some(
+    (poly) => inRing(lng, lat, poly[0]) && !poly.slice(1).some((hole) => inRing(lng, lat, hole))
+  );
+}
+
+function inRing(lng, lat, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// Sectores visibles: solo existen si hay comuna elegida y el punto está dentro
+function displayedPoints() {
+  const nombre = comunaSel.value;
+  if (!nombre) return [];
+  const comuna = allComunas.find((c) => c.nombre === nombre);
+  if (!comuna) return [];
+  return allPoints.filter(
+    (p) => p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, comuna.geom)
+  );
+}
+
 // ============================================================
 // CARGAR PUNTOS
 // ============================================================
@@ -553,16 +620,18 @@ async function loadPoints() {
     return { ...p, lat: c ? c.lat : null, lng: c ? c.lng : null };
   });
 
+  populateCategoryFilter();
   renderList();
   renderMarkers();
-  populateCategoryFilter();
 }
 
 function populateCategoryFilter() {
-  const cats = [...new Set(allPoints.map((p) => p.categoria).filter(Boolean))].sort();
+  const cats = [...new Set(displayedPoints().map((p) => p.categoria).filter(Boolean))].sort();
   const sel = document.getElementById('filterCat');
+  const prev = sel.value;
   sel.innerHTML = '<option value="">Todas las categorías</option>' +
-    cats.map((c) => `<option value="${c}">${c}</option>`).join('');
+    cats.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if (!cats.includes(prev)) sel.value = '';
 }
 
 // ============================================================
@@ -574,10 +643,17 @@ filterText.addEventListener('input', renderList);
 filterCat.addEventListener('change', renderList);
 
 function renderList() {
+  const list = document.getElementById('list');
+
+  if (!comunaSel.value) {
+    list.innerHTML = '<div class="empty">Elige una comuna para ver sus sectores</div>';
+    return;
+  }
+
   const txt = filterText.value.toLowerCase().trim();
   const cat = filterCat.value;
 
-  const filtered = allPoints.filter((p) => {
+  const filtered = displayedPoints().filter((p) => {
     if (cat && p.categoria !== cat) return false;
     if (txt) {
       const blob = `${p.nombre || ''} ${p.direccion || ''} ${p.categoria || ''}`.toLowerCase();
@@ -586,9 +662,8 @@ function renderList() {
     return true;
   });
 
-  const list = document.getElementById('list');
   if (!filtered.length) {
-    list.innerHTML = '<div class="empty">No hay puntos que coincidan</div>';
+    list.innerHTML = '<div class="empty">No hay sectores en esta comuna</div>';
     return;
   }
 
@@ -673,7 +748,11 @@ function renderMarkers() {
   Object.values(pointMarkers).forEach((m) => m.remove());
   pointMarkers = {};
 
-  allPoints.forEach((p) => {
+  // Sectores dentro de la comuna + puntos del modo referencia (aunque estén fuera)
+  const visibleIds = new Set(displayedPoints().map((p) => p.id));
+  const toShow = allPoints.filter((p) => visibleIds.has(p.id) || refResultsIds.has(p.id));
+
+  toShow.forEach((p) => {
     if (p.lat == null || p.lng == null) return;
     const el = document.createElement('div');
     const inRef = refResultsIds.has(p.id);

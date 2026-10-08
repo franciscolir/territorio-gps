@@ -416,7 +416,10 @@
           <button id="drawBtn" title="Dibujar un sector a mano">✏️ Dibujar</button>
         </div>
         <div id="sectorList"><div class="empty">Aún no hay sectores</div></div>
-        <h2>Puntos</h2>
+        <div class="sect-head">
+          <h2 id="puntosHead">Puntos</h2>
+          <button id="clearSectorSel" class="ghost" style="display:none" title="Ver todos los puntos de la comuna">Ver todos</button>
+        </div>
         <input id="filterText" type="text" placeholder="Filtrar por nombre, dirección…" />
         <div class="filters">
           <select id="filterCat"><option value="">Todas las categorías</option></select>
@@ -1047,16 +1050,23 @@ filterCat.addEventListener('change', renderList);
 
 function renderList() {
   const list = document.getElementById('list');
+  const sec = sectorSelected();
 
-  if (!comunaSel.value) {
+  if (!comunaSel.value && !sec) {
     list.innerHTML = '<div class="empty">Elige una comuna para ver sus puntos</div>';
+    updateListScope();
     return;
   }
 
   const txt = filterText.value.toLowerCase().trim();
   const cat = filterCat.value;
 
-  const filtered = displayedPoints().filter((p) => {
+  // Con un sector seleccionado: solo los puntos que caen dentro de él
+  const base = sec
+    ? allPoints.filter((p) => p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, sec.geom))
+    : displayedPoints();
+
+  const filtered = base.filter((p) => {
     if (cat && p.categoria !== cat) return false;
     if (txt) {
       const blob = `${p.nombre || ''} ${p.direccion || ''} ${p.categoria || ''}`.toLowerCase();
@@ -1066,7 +1076,8 @@ function renderList() {
   });
 
   if (!filtered.length) {
-    list.innerHTML = '<div class="empty">No hay puntos en esta comuna</div>';
+    list.innerHTML = `<div class="empty">${sec ? 'No hay puntos en este sector' : 'No hay puntos en esta comuna'}</div>`;
+    updateListScope();
     return;
   }
 
@@ -1099,6 +1110,8 @@ function renderList() {
     if (btnEdit) btnEdit.addEventListener('click', (e) => { e.stopPropagation(); openEditModal(el.dataset.id); });
     if (btnDel)  btnDel.addEventListener('click',  (e) => { e.stopPropagation(); deletePoint(el.dataset.id); });
   });
+
+  updateListScope();
 }
 
 function escapeHtml(s) {
@@ -1213,6 +1226,21 @@ function setSectorSelected(id) {
     map.setFeatureState({ source: 'sectores', id }, { selected: true });
   }
   syncSelectedCard();
+  renderList(); // la lista muestra solo los puntos del sector seleccionado
+}
+
+// Sector seleccionado (o null)
+function sectorSelected() {
+  return sectorSelectedId ? allSectores.find((s) => s.id === sectorSelectedId) : null;
+}
+
+function updateListScope() {
+  const head = document.getElementById('puntosHead');
+  const btn = document.getElementById('clearSectorSel');
+  if (!head || !btn) return;
+  const sec = sectorSelected();
+  head.textContent = sec ? `Puntos · ${sec.nombre}` : 'Puntos';
+  btn.style.display = sec ? '' : 'none';
 }
 
 function syncSelectedCard() {
@@ -1542,8 +1570,12 @@ async function loadSectores() {
   sectorListError = null;
   allSectores = data || [];
   snapRingsCache = null;
+  if (sectorSelectedId && !allSectores.some((s) => s.id === sectorSelectedId)) {
+    sectorSelectedId = null; // el sector seleccionado ya no existe
+  }
   updateSectorsSource();
   renderSectorList();
+  updateListScope();
 }
 
 function sectorsVisible(s) {
@@ -2036,6 +2068,7 @@ document.getElementById('sectorCancelBtn').addEventListener('click', () => {
   document.getElementById('sectorModal').classList.remove('visible');
 });
 document.getElementById('sectorSaveBtn').addEventListener('click', saveSector);
+document.getElementById('clearSectorSel').addEventListener('click', () => setSectorSelected(null));
 
 document.addEventListener('keydown', (e) => {
   const typing = e.target && e.target.matches && e.target.matches('input, textarea');

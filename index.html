@@ -131,6 +131,63 @@
   .estado-erroneo { background: #fee2e2; color: #991b1b; }
   .estado-no_pasar { background: #fef9c3; color: #854d0e; }
 
+  /* Segmented control de estados */
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin-top: 8px; background: #eef2f7; border-radius: 10px; padding: 3px; }
+  .seg button { border: 0; background: transparent; border-radius: 8px; padding: 6px 2px; font-size: 10px; font-weight: 700; color: #475569; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .seg button .ic { font-size: 13px; line-height: 1; }
+  .seg button.active { background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.15); color: #0f172a; }
+  .seg button[data-estado="visitado"].active { background: #dcfce7; color: #166534; }
+  .seg button[data-estado="erroneo"].active { background: #fee2e2; color: #991b1b; }
+  .seg button[data-estado="no_pasar"].active { background: #fef9c3; color: #854d0e; }
+
+  /* Chips de filtro por estado */
+  .estado-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .chip-f { border: 1px solid #cbd5e1; background: #fff; color: #475569; font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 999px; cursor: pointer; }
+  .chip-f:hover { background: #f1f5f9; }
+  .chip-f.active { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+
+  /* Barra de avance multicolor */
+  .progress.multi { display: flex; }
+  .progress.multi > i { height: 100%; display: block; }
+  .progress .seg-visited { background: #22c55e; }
+  .progress .seg-erroneo { background: #ef4444; }
+  .progress .seg-no_pasar { background: #f59e0b; }
+
+  /* Toast con Deshacer */
+  #undoToast { position: fixed; bottom: 24px; right: 24px; z-index: 600; display: none; align-items: center; gap: 12px; background: #0f172a; color: #fff; padding: 12px 16px; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.3); font-size: 13px; border-left: 4px solid #3b82f6; }
+  #undoToast.visible { display: flex; }
+  #undoToast #undoBtn { background: rgba(255,255,255,.12); color: #bfdbfe; border: 0; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 12px; }
+  #undoToast #undoBtn:hover { background: rgba(255,255,255,.2); }
+
+  /* Vista terreno móvil */
+  #mobileView { position: fixed; inset: 0; z-index: 700; background: #eef2f7; display: none; flex-direction: column; max-width: 460px; margin: 0 auto; box-shadow: 0 0 0 100vmax rgba(15,23,42,.5); }
+  #mobileView.visible { display: flex; }
+  #mobileView .mv-top { background: #0f385a; color: #fff; padding: 14px 16px; }
+  #mobileView .mv-head { display: flex; align-items: center; gap: 12px; }
+  #mobileView .mv-head > div:first-child { flex: 1; min-width: 0; }
+  #mobileView .mv-comuna { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #a7caf3; }
+  #mobileView .mv-sector { font-size: 15px; font-weight: 700; }
+  #mobileView .mv-prog { text-align: right; }
+  #mobileView .mv-count { font-size: 20px; font-weight: 800; color: #95f8a7; line-height: 1; }
+  #mobileView .mv-pct { font-size: 11px; color: #d5e3fc; }
+  #mobileView #mvClose { background: rgba(255,255,255,.15); border: 0; color: #fff; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; }
+  #mobileView .mv-bar { height: 8px; background: rgba(255,255,255,.2); border-radius: 5px; margin-top: 10px; overflow: hidden; }
+  #mobileView .mv-bar > i { display: block; height: 100%; background: #95f8a7; }
+  #mobileView .mv-list { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  #mobileView .mv-card { background: #fff; border-radius: 14px; padding: 12px; box-shadow: 0 1px 4px rgba(15,23,42,.12); }
+  #mobileView .mv-card .mv-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  #mobileView .mv-card .mv-id { font-size: 11px; font-weight: 700; color: #2563eb; }
+  #mobileView .mv-card .mv-nombre { font-size: 14px; font-weight: 700; color: #0f172a; }
+  #mobileView .mv-card .mv-dir { font-size: 12px; color: #64748b; }
+  #mobileView .mv-nav { width: 40px; height: 40px; border-radius: 12px; background: #eff6ff; color: #1d4ed8; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 20px; flex-shrink: 0; }
+  #mobileView .mv-warn { background: #fee2e2; color: #991b1b; font-size: 11px; font-weight: 700; padding: 5px 8px; border-radius: 8px; margin-top: 8px; }
+  #mobileView .mv-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+  #mobileView .mv-actions button { border: 0; border-radius: 12px; padding: 12px 4px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; background: #eef2f7; color: #0f172a; }
+  #mobileView .mv-actions button.on-visitado { background: #dcfce7; color: #166534; }
+  #mobileView .mv-actions button.on-erroneo { background: #fee2e2; color: #991b1b; }
+  #mobileView .mv-actions button.on-no_pasar { background: #fef9c3; color: #854d0e; }
+  #mobileView .mv-empty { text-align: center; color: #94a3b8; padding: 40px 16px; font-size: 13px; }
+
   /* ============ PANEL DE SECTORES (resumen / detalle / asignación) ============ */
   #sidebar .sect-btns { display: flex; gap: 4px; }
   #sidebar .sect-btns button { padding: 4px 8px; }
@@ -471,6 +528,7 @@
             <button id="drawBtn" title="Dibujar un sector a mano">✏️</button>
             <button id="editSectorsBtn" title="Editar sectores (renombrar, color, borrar)">✎ Editar</button>
             <button id="assignSectorsBtn" title="Asignar sectores a usuarios">👤 Asignar</button>
+            <button id="mobileViewBtn" title="Vista terreno (móvil)">📱</button>
           </div>
         </div>
         <div id="sectorList"><div class="empty">Aún no hay sectores</div></div>
@@ -481,14 +539,12 @@
           <button id="clearSectorSel" class="ghost" style="display:none" title="Quitar selección de sector">Ver todos</button>
         </div>
         <input id="filterText" type="text" placeholder="Filtrar por nombre, dirección…" />
-        <div class="filters">
-          <select id="filterEstado">
-            <option value="">Todos los estados</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="visitado">Visitado</option>
-            <option value="erroneo">Erróneo</option>
-            <option value="no_pasar">No pasar</option>
-          </select>
+        <div class="estado-chips" id="estadoChips">
+          <button class="chip-f" data-estado="">Todos</button>
+          <button class="chip-f" data-estado="pendiente">Pendiente</button>
+          <button class="chip-f" data-estado="visitado">Visitado</button>
+          <button class="chip-f" data-estado="erroneo">Erróneo</button>
+          <button class="chip-f" data-estado="no_pasar">No pasar</button>
         </div>
       </div>
       <div id="list"></div>
@@ -610,6 +666,29 @@
 </div>
 
 <div id="toast"></div>
+<div id="undoToast">
+  <span class="ut-msg" id="undoMsg">Estado actualizado</span>
+  <button id="undoBtn">Deshacer</button>
+</div>
+
+<!-- ================= VISTA TERRENO (MÓVIL) ================= -->
+<div id="mobileView">
+  <div class="mv-top">
+    <div class="mv-head">
+      <div>
+        <div class="mv-comuna" id="mvComuna">—</div>
+        <div class="mv-sector" id="mvSector">Selecciona un sector</div>
+      </div>
+      <div class="mv-prog">
+        <div class="mv-count" id="mvCount">0 / 0</div>
+        <div class="mv-pct" id="mvPct">0%</div>
+      </div>
+      <button id="mvClose" title="Cerrar">✕</button>
+    </div>
+    <div class="mv-bar"><i id="mvBar"></i></div>
+  </div>
+  <div class="mv-list" id="mvList"></div>
+</div>
 
 <script>
 // ============================================================
@@ -650,6 +729,16 @@ let usuarios = [];           // [{id, email}] para asignar
 let asignaciones = {};       // sector_id -> user_id
 let editSectorsMode = false; // muestra renombrar/color/borrar en el resumen
 let assignOpen = false;      // muestra la tabla de asignación
+let estadoFiltro = '';       // chip de estado activo en la lista
+let lastEstadoUndo = null;   // {id, prev} para el toast "Deshacer"
+let mobileOpen = false;      // vista terreno (móvil)
+
+const SEGMENTOS = [
+  ['pendiente', 'Pendiente', '•'],
+  ['visitado', 'Visitado', '✔'],
+  ['erroneo', 'Erróneo', '⚠'],
+  ['no_pasar', 'No pasar', '⛔'],
+];
 
 const ESTADOS = [
   ['pendiente', 'Pendiente'],
@@ -1155,28 +1244,27 @@ async function loadPoints() {
     return { ...p, lat: c ? c.lat : null, lng: c ? c.lng : null };
   });
 
-  populateEstadoFilter();
   renderList();
   renderMarkers();
   renderSectorList(); // los contadores "N puntos" cambian con cada alta/baja
-}
-
-function populateEstadoFilter() {
-  const sel = document.getElementById('filterEstado');
-  if (!sel) return;
-  const prev = sel.value;
-  sel.innerHTML = '<option value="">Todos los estados</option>' +
-    ESTADOS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
-  sel.value = ESTADOS.some((k) => k[0] === prev) ? prev : '';
 }
 
 // ============================================================
 // RENDER LISTA
 // ============================================================
 const filterText = document.getElementById('filterText');
-const filterEstado = document.getElementById('filterEstado');
 filterText.addEventListener('input', renderList);
-filterEstado.addEventListener('change', renderList);
+
+// Chips de filtro por estado
+const estadoChips = document.getElementById('estadoChips');
+estadoChips.querySelectorAll('.chip-f').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    estadoFiltro = btn.dataset.estado;
+    estadoChips.querySelectorAll('.chip-f').forEach((b) => b.classList.toggle('active', b === btn));
+    renderList();
+  });
+});
+estadoChips.querySelector('.chip-f[data-estado=""]').classList.add('active');
 
 function renderList() {
   const list = document.getElementById('list');
@@ -1189,7 +1277,7 @@ function renderList() {
   }
 
   const txt = filterText.value.toLowerCase().trim();
-  const est = filterEstado.value;
+  const est = estadoFiltro;
 
   const base = pointsInSector(sec);
   const filtered = base.filter((p) => {
@@ -1209,8 +1297,9 @@ function renderList() {
 
   list.innerHTML = filtered.map((p) => {
     const e = p.estado || 'pendiente';
-    const chk = (val, label) =>
-      `<label><input type="checkbox" data-estado="${val}"${e === val ? ' checked' : ''}> ${label}</label>`;
+    const seg = SEGMENTOS.map(([v, l, ic]) =>
+      `<button data-estado="${v}" class="${e === v ? 'active' : ''}"><span class="ic">${ic}</span><span>${l}</span></button>`
+    ).join('');
     return `
     <div class="point-card" data-id="${p.id}">
       <h3>${escapeHtml(p.nombre)}</h3>
@@ -1218,25 +1307,17 @@ function renderList() {
         ${p.direccion ? escapeHtml(p.direccion) + '<br>' : ''}
         ${p.lat != null && p.lng != null ? `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}` : 'sin coordenadas'}
       </div>
-      <span class="estado-tag ${estadoClass(e)}">${estadoLabel(e)}</span>
-      <div class="estados">
-        ${chk('visitado', 'Visitado')}
-        ${chk('erroneo', 'Erróneo')}
-        ${chk('no_pasar', 'No pasar')}
-      </div>
+      <div class="seg">${seg}</div>
       <button class="pd-btn">Ver detalles</button>
     </div>`;
   }).join('');
 
   list.querySelectorAll('.point-card').forEach((el) => {
     const id = el.dataset.id;
-    el.addEventListener('click', (ev) => { if (ev.target.closest('input,button')) return; focusPoint(id); });
+    el.addEventListener('click', (ev) => { if (ev.target.closest('button')) return; focusPoint(id); });
     el.querySelector('.pd-btn').addEventListener('click', (ev) => { ev.stopPropagation(); openPointDetail(id); });
-    el.querySelectorAll('input[data-estado]').forEach((cb) => {
-      cb.addEventListener('change', (ev) => {
-        ev.stopPropagation();
-        setEstadoPunto(id, cb.checked ? cb.dataset.estado : 'pendiente');
-      });
+    el.querySelectorAll('.seg button').forEach((b) => {
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); setEstadoPunto(id, b.dataset.estado); });
     });
   });
 
@@ -1369,6 +1450,7 @@ function setSectorSelected(id) {
   renderList();     // la lista muestra solo los puntos del sector seleccionado
   renderMarkers();  // en modo "sector" también cambian los marcadores del mapa
   renderSectorDetail();
+  if (mobileOpen) renderMobile();
 }
 
 // Sector seleccionado (o null)
@@ -1749,6 +1831,33 @@ function sectorStats(s) {
   return { total, hechos, pct: total ? Math.round((hechos / total) * 100) : 0 };
 }
 
+// Desglose por estado (para la barra multicolor)
+function sectorBreakdown(s) {
+  const pts = pointsInSector(s);
+  const total = pts.length;
+  const c = { pendiente: 0, visitado: 0, erroneo: 0, no_pasar: 0 };
+  pts.forEach((p) => { const e = p.estado || 'pendiente'; c[e] = (c[e] || 0) + 1; });
+  const hechos = total - c.pendiente;
+  return {
+    total,
+    visitado: c.visitado,
+    erroneo: c.erroneo,
+    no_pasar: c.no_pasar,
+    pendiente: c.pendiente,
+    hechos,
+    pct: total ? Math.round((hechos / total) * 100) : 0,
+  };
+}
+
+function progressBarHtml(b) {
+  const w = (n) => (b.total ? (n / b.total) * 100 : 0);
+  return `<div class="progress multi">` +
+    `<i class="seg-visited" style="width:${w(b.visitado)}%"></i>` +
+    `<i class="seg-erroneo" style="width:${w(b.erroneo)}%"></i>` +
+    `<i class="seg-no_pasar" style="width:${w(b.no_pasar)}%"></i>` +
+    `</div>`;
+}
+
 function emailDe(userId) {
   const u = usuarios.find((x) => x.id === userId);
   return u ? u.email : '';
@@ -1832,7 +1941,7 @@ function renderSectorList() {
   }
 
   box.innerHTML = visible.map((s) => {
-    const st = sectorStats(s);
+    const st = sectorBreakdown(s);
     const quien = asignaciones[s.id] ? emailDe(asignaciones[s.id]) : '';
     const acciones = (isAdmin && editSectorsMode) ? `
       <div class="s-actions">
@@ -1855,7 +1964,7 @@ function renderSectorList() {
           ${quien ? `<small class="who">👤 ${escapeHtml(quien)}</small>` : ''}
         </div>
         ${acciones}
-        <div class="progress"><i style="width:${st.pct}%"></i></div>
+        ${progressBarHtml(st)}
         ${palette}
       </div>`;
   }).join('');
@@ -1898,7 +2007,7 @@ function renderSectorDetail() {
   if (!box) return;
   const s = sectorSelected();
   if (!s) { box.innerHTML = ''; return; }
-  const st = sectorStats(s);
+  const st = sectorBreakdown(s);
   const quien = asignaciones[s.id] ? emailDe(asignaciones[s.id]) : 'sin asignar';
   box.innerHTML = `
     <div class="detail-card">
@@ -1908,7 +2017,7 @@ function renderSectorDetail() {
         ${st.total} punto${st.total === 1 ? '' : 's'} · ${st.hechos} resuelto${st.hechos === 1 ? '' : 's'} · <b>${st.pct}%</b><br>
         👤 ${escapeHtml(quien)}
       </div>
-      <div class="progress"><i style="width:${st.pct}%"></i></div>
+      ${progressBarHtml(st)}
       <div class="d-actions">
         <button id="sdFocus">Ver en mapa</button>
         ${isAdmin ? '<button id="sdEdit">Renombrar</button><button id="sdDel">Eliminar</button>' : ''}
@@ -1989,21 +2098,120 @@ async function assignSector(sectorId, userId) {
 // ============================================================
 // ESTADO DEL PUNTO
 // ============================================================
-async function setEstadoPunto(id, estado) {
+function refreshAfterEstado() {
+  renderList();
+  renderSectorList();
+  renderSectorDetail();
+  if (mobileOpen) renderMobile();
+}
+
+async function setEstadoPunto(id, estado, silent) {
   if (!isAdmin) return toast('Solo administradores pueden cambiar el estado', true);
   const p = allPoints.find((x) => x.id === id);
   if (!p) return;
-  if ((p.estado || 'pendiente') === estado) return;
+  const prev = p.estado || 'pendiente';
+  if (prev === estado) return;
   const { error } = await db
     .from('puntos')
     .update({ estado, updated_at: new Date().toISOString() })
     .eq('id', id);
   if (error) return toast(error.message, true);
   p.estado = estado;
-  renderList();
-  renderSectorList();
-  renderSectorDetail();
+  refreshAfterEstado();
+  if (silent) {
+    hideUndoToast();
+  } else {
+    lastEstadoUndo = { id, prev };
+    showUndoToast(`Punto marcado como ${estadoLabel(estado)}`, undoEstado);
+  }
 }
+
+function undoEstado() {
+  const u = lastEstadoUndo;
+  lastEstadoUndo = null;
+  if (u) setEstadoPunto(u.id, u.prev, true);
+}
+
+let undoToastTimer = null;
+function showUndoToast(msg, onUndo) {
+  const el = document.getElementById('undoToast');
+  document.getElementById('undoMsg').textContent = msg;
+  el.classList.add('visible');
+  clearTimeout(undoToastTimer);
+  undoToastTimer = setTimeout(hideUndoToast, 5000);
+  window.__undoHandler = onUndo;
+}
+function hideUndoToast() {
+  document.getElementById('undoToast').classList.remove('visible');
+}
+document.getElementById('undoBtn').addEventListener('click', () => {
+  const h = window.__undoHandler;
+  hideUndoToast();
+  if (h) h();
+});
+
+// ============================================================
+// VISTA TERRENO (MÓVIL)
+// ============================================================
+function renderMobile() {
+  const sec = sectorSelected();
+  const list = document.getElementById('mvList');
+  if (!sec) {
+    document.getElementById('mvComuna').textContent = '';
+    document.getElementById('mvSector').textContent = 'Selecciona un sector';
+    document.getElementById('mvCount').textContent = '0 / 0';
+    document.getElementById('mvPct').textContent = '0%';
+    document.getElementById('mvBar').style.width = '0%';
+    list.innerHTML = '<div class="mv-empty">Selecciona un sector en el panel para verlo en modo terreno.</div>';
+    return;
+  }
+  const b = sectorBreakdown(sec);
+  document.getElementById('mvComuna').textContent = sec.comuna || '—';
+  document.getElementById('mvSector').textContent = sec.nombre;
+  document.getElementById('mvCount').textContent = `${b.hechos} / ${b.total}`;
+  document.getElementById('mvPct').textContent = `${b.pct}%`;
+  document.getElementById('mvBar').style.width = `${b.pct}%`;
+  const pts = pointsInSector(sec);
+  if (!pts.length) { list.innerHTML = '<div class="mv-empty">Este sector no tiene puntos.</div>'; return; }
+  list.innerHTML = pts.map((p) => {
+    const e = p.estado || 'pendiente';
+    const nav = (p.lat != null && p.lng != null)
+      ? `<a class="mv-nav" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank" rel="noopener" title="Cómo llegar">➤</a>` : '';
+    const warn = (p.lat == null || p.lng == null) ? '<div class="mv-warn">Sin coordenadas GPS. Validar en terreno.</div>' : '';
+    const act = (v, l, ic) => `<button class="${e === v ? 'on-' + v : ''}" data-estado="${v}"><span>${ic}</span><span>${l}</span></button>`;
+    return `<div class="mv-card" data-id="${p.id}">
+      <div class="mv-row">
+        <div style="min-width:0">
+          <div class="mv-nombre">${escapeHtml(p.nombre)}</div>
+          <div class="mv-dir">${p.direccion ? escapeHtml(p.direccion) : '—'}</div>
+        </div>
+        ${nav}
+      </div>
+      ${warn}
+      <div class="mv-actions">
+        ${act('visitado', 'Visitado', '✔')}
+        ${act('erroneo', 'Erróneo', '⚠')}
+        ${act('no_pasar', 'No pasar', '⛔')}
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.mv-card').forEach((card) => {
+    const id = card.dataset.id;
+    card.querySelectorAll('.mv-actions button').forEach((btn) => {
+      btn.addEventListener('click', () => setEstadoPunto(id, btn.dataset.estado));
+    });
+  });
+}
+
+document.getElementById('mobileViewBtn').addEventListener('click', () => {
+  mobileOpen = true;
+  document.getElementById('mobileView').classList.add('visible');
+  renderMobile();
+});
+document.getElementById('mvClose').addEventListener('click', () => {
+  mobileOpen = false;
+  document.getElementById('mobileView').classList.remove('visible');
+});
 
 function setSectorHover(id, on) {
   if (!map || !map.getSource('sectores') || !id) return;
@@ -2424,6 +2632,11 @@ document.addEventListener('keydown', (e) => {
   const typing = e.target && e.target.matches && e.target.matches('input, textarea');
 
   if (e.key === 'Escape') {
+    if (mobileOpen) {
+      mobileOpen = false;
+      document.getElementById('mobileView').classList.remove('visible');
+      return;
+    }
     if (document.getElementById('pointDetail').classList.contains('visible')) {
       closePointDetail();
       return;

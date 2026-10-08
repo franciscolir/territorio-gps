@@ -138,6 +138,10 @@
     padding: 6px 8px; margin-bottom: 6px; cursor: pointer; background: #fff;
   }
   .sector-card:hover { border-color: #3b82f6; }
+  .sector-card.selected {
+    border-color: #1d4ed8; background: #eff6ff;
+    box-shadow: 0 0 0 2px #bfdbfe;
+  }
   .sector-card .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
   .sector-card .s-body { flex: 1; min-width: 0; }
   .sector-card .s-body b {
@@ -556,6 +560,8 @@ let drawVerts = [];          // vértices [[lng,lat], ...]
 let drawHover = null;        // última posición del cursor (goma elástica)
 let pendingSector = null;    // polígono cerrado esperando guardado
 let sectorHoverId = null;    // sector bajo el cursor
+let sectorSelectedId = null; // sector seleccionado (habilita marcar puntos)
+let lastPlaceAt = 0;         // debounce: evita colocar dos veces en un doble clic
 let sectorListError = null;  // mensaje de error al cargar (tabla ausente, etc.)
 
 // --- Configuración (app_config) ---
@@ -779,6 +785,8 @@ function onComunaChange() {
 
   // Un sector dibujado queda huérfano si cambias de comuna a mitad de trazo
   if (drawActive) stopDraw();
+  // La selección no sobrevive al cambio de comuna
+  if (sectorSelectedId) setSectorSelected(null);
   updateSectorsSource();
   renderSectorList();
 
@@ -1182,6 +1190,79 @@ function focusPoint(id) {
 // ============================================================
 // CLIC EN MAPA
 // ============================================================
+// Sector (visible) bajo un lng/lat: hit-test geométrico preciso.
+// OJO: queryRenderedFeatures con un punto sobre capas de fill da falsos
+// positivos en MapLibre 4.7.1 (devuelve el sector aunque estés fuera).
+function sectorAtLngLat(lng, lat) {
+  const s = allSectores.find((x) => sectorsVisible(x) && pointInGeometry(lng, lat, x.geom));
+  return s ? s.id : null;
+}
+
+// Selección de sector: feature-state en el mapa + clase en la tarjeta lateral
+function setSectorSelected(id) {
+  if (sectorSelectedId === id) return;
+  if (map && map.getSource('sectores') && sectorSelectedId != null) {
+    map.setFeatureState({ source: 'sectores', id: sectorSelectedId }, { selected: false });
+  }
+  sectorSelectedId = id;
+  if (map && map.getSource('sectores') && id != null) {
+    map.setFeatureState({ source: 'sectores', id }, { selected: true });
+  }
+  syncSelectedCard();
+}
+
+function syncSelectedCard() {
+  document.querySelectorAll('#sectorList .sector-card').forEach((el) => {
+    el.classList.toggle('selected', el.dataset.id === sectorSelectedId);
+  });
+}
+
+// Marker temporal + popup "Guardar punto aquí".
+// El marker se REUSA (setLngLat + setHTML) en vez de destruirlo: quitarlo
+// dentro del dispatch del click dispara el listener del marker retirado
+// (togglePopup con _map undefined → TypeError en MapLibre 4.7.1, el mismo
+// crash que ya existía en producción con el doble clic).
+function placeTempMarker(lng, lat) {
+  const now = Date.now();
+  if (now - lastPlaceAt < 300) return; // dos clics del doble clic = una sola marca
+  lastPlaceAt = now;
+
+  const html = `
+      <b>Punto seleccionado</b><br>
+      <small>${lat.toFixed(6)}, ${lng.toFixed(6)}</small><br>
+      <button id="popupSaveBtn">Guardar punto aquí</button>`;
+
+  if (!tempMarker) {
+    const el = document.createElement('div');
+    el.style.cssText = `
+      width: 22px; height: 22px; border-radius: 50% 50% 50% 0;
+      background: #ef4444; border: 3px solid #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,.4);
+      transform: rotate(-45deg);
+    `;
+    tempMarker = new maplibregl.Marker({ element: el })
+      .setLngLat([lng, lat])
+      .setPopup(new maplibregl.Popup({ closeButton: true }).setHTML(html))
+      .addTo(map);
+  } else {
+    tempMarker.setLngLat([lng, lat]);
+    tempMarker.getPopup().setHTML(html);
+  }
+
+  // Abre y enlaza el popup FUERA del dispatch: así ningún handler
+  // closeOnClick del propio click lo cierra ni crash.
+  setTimeout(() => {
+    if (!tempMarker) return;
+    const popup = tempMarker.getPopup();
+    if (!popup.isOpen()) tempMarker.togglePopup();
+    const btn = document.getElementById('popupSaveBtn');
+    if (btn) btn.addEventListener('click', () => {
+      popup.remove();
+      openNewModal(lat, lng);
+    });
+  }, 0);
+}
+
 function onMapClick(e) {
   // Modo dibujo: cada clic agrega un vértice del sector
   if (drawActive) { handleDrawClick(e); return; }
@@ -1193,33 +1274,25 @@ function onMapClick(e) {
     return;
   }
 
-  // Clic normal: marker temporal + popup
-  if (tempMarker) tempMarker.remove();
-  const el = document.createElement('div');
-  el.style.cssText = `
-    width: 22px; height: 22px; border-radius: 50% 50% 50% 0;
-    background: #ef4444; border: 3px solid #fff;
-    box-shadow: 0 2px 8px rgba(0,0,0,.4);
-    transform: rotate(-45deg);
-  `;
-  tempMarker = new maplibregl.Marker({ element: el })
-    .setLngLat([lng, lat])
-    .setPopup(new maplibregl.Popup({ closeButton: true }).setHTML(`
-      <b>Punto seleccionado</b><br>
-      <small>${lat.toFixed(6)}, ${lng.toFixed(6)}</small><br>
-      <button id="popupSaveBtn">Guardar punto aquí</button>
-    `))
-    .addTo(map)
-    .togglePopup();
+  const sectorId = sectorAtLngLat(lng, lat);
 
-  // El botón dentro del popup se agrega al DOM después; esperamos un tick
-  setTimeout(() => {
-    const btn = document.getElementById('popupSaveBtn');
-    if (btn) btn.addEventListener('click', () => {
-      tempMarker.getPopup().remove();
-      openNewModal(lat, lng);
-    });
-  }, 0);
+  if (sectorId) {
+    if (sectorId === sectorSelectedId) {
+      // Sector ya seleccionado: el clic marca el punto
+      placeTempMarker(lng, lat);
+    } else {
+      // Sector distinto (o ninguno seleccionado): cambia/selecciona
+      setSectorSelected(sectorId);
+    }
+    return;
+  }
+
+  // Sin sector debajo
+  if (sectorSelectedId) {
+    // Clic en zona vacía: deselecciona (el punto se marca con doble clic)
+    setSectorSelected(null);
+  }
+  // Sin selección: el clic simple no hace nada (marcar = doble clic)
 }
 
 // ============================================================
@@ -1323,7 +1396,10 @@ function initSectorLayers() {
       source: 'sectores',
       paint: {
         'fill-color': ['get', 'color'],
-        'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.32, 0.14],
+        'fill-opacity': ['case',
+          ['boolean', ['feature-state', 'selected'], false], 0.40,
+          ['boolean', ['feature-state', 'hover'], false], 0.32,
+          0.14],
       },
     });
   }
@@ -1333,8 +1409,13 @@ function initSectorLayers() {
       type: 'line',
       source: 'sectores',
       paint: {
-        'line-color': ['get', 'color'],
-        'line-width': ['case', ['boolean', ['feature-state', 'hover'], false], 4, 2],
+        'line-color': ['case',
+          ['boolean', ['feature-state', 'selected'], false], '#1d4ed8',
+          ['get', 'color']],
+        'line-width': ['case',
+          ['boolean', ['feature-state', 'selected'], false], 5,
+          ['boolean', ['feature-state', 'hover'], false], 4,
+          2],
       },
     });
   }
@@ -1464,6 +1545,10 @@ function updateSectorsSource() {
     geometry: s.geom,
   }));
   map.getSource('sectores').setData({ type: 'FeatureCollection', features });
+  // setData puede descartar los feature-states: reafirma la selección
+  if (sectorSelectedId != null) {
+    map.setFeatureState({ source: 'sectores', id: sectorSelectedId }, { selected: true });
+  }
 }
 
 function renderSectorList() {
@@ -1528,6 +1613,8 @@ function renderSectorList() {
       });
     });
   });
+
+  syncSelectedCard();
 }
 
 function setSectorHover(id, on) {
@@ -1540,6 +1627,8 @@ function focusSector(id) {
   if (!s || !s.geom) return;
   const b = boundsFromGeometry(s.geom);
   if (b && !b.isEmpty()) map.fitBounds(b, { padding: 60, duration: 800 });
+  // La tarjeta también deja el sector listo para marcar puntos
+  setSectorSelected(id);
 }
 
 async function renameSector(id) {
@@ -1569,6 +1658,7 @@ async function deleteSector(id) {
   const { error } = await db.from('sectores').delete().eq('id', id);
   if (error) return toast(error.message, true);
   toast('Sector eliminado');
+  if (sectorSelectedId === id) setSectorSelected(null);
   await loadSectores();
 }
 
@@ -1685,34 +1775,43 @@ function onMapMove(e) {
     return;
   }
 
-  const hasLayer = map.getLayer('sectores-fill');
-  const feats = hasLayer ? map.queryRenderedFeatures(e.point, { layers: ['sectores-fill'] }) : [];
-  const id = feats.length ? feats[0].properties.id : null;
+  const id = sectorAtLngLat(e.lngLat.lng, e.lngLat.lat);
 
   if (id !== sectorHoverId) {
     setSectorHover(sectorHoverId, false);
     setSectorHover(id, true);
     sectorHoverId = id;
   }
-  map.getCanvas().style.cursor = id ? 'pointer' : '';
+  // Feedback: pointer sobre sector, crosshair donde se puede marcar
+  map.getCanvas().style.cursor = id ? 'pointer' : 'crosshair';
 }
 
 function onMapDblClick(e) {
-  if (!drawActive) return;
-  if (document.getElementById('sectorModal').classList.contains('visible')) return;
-  e.preventDefault();
+  if (drawActive) {
+    if (document.getElementById('sectorModal').classList.contains('visible')) return;
+    e.preventDefault();
 
-  // Los clics previos al doble clic dejaron vértices repetidos en la misma
-  // ubicación: los quitamos (solo si son duplicados entre sí)
-  while (
-    drawVerts.length >= 4 &&
-    distPx(drawVerts[drawVerts.length - 1], e.point) <= 12 &&
-    distPx(drawVerts[drawVerts.length - 1], map.project(drawVerts[drawVerts.length - 2])) <= 12
-  ) {
-    drawVerts.pop();
+    // Los clics previos al doble clic dejaron vértices repetidos en la misma
+    // ubicación: los quitamos (solo si son duplicados entre sí)
+    while (
+      drawVerts.length >= 4 &&
+      distPx(drawVerts[drawVerts.length - 1], e.point) <= 12 &&
+      distPx(drawVerts[drawVerts.length - 1], map.project(drawVerts[drawVerts.length - 2])) <= 12
+    ) {
+      drawVerts.pop();
+    }
+    drawHover = null;
+    closeDraw();
+    return;
   }
-  drawHover = null;
-  closeDraw();
+
+  if (refMode) return; // modo referencia: sin cambios
+
+  // Modo normal: corta el zoom de MapLibre. Si hay sector, los clics previos
+  // ya resolvieron (seleccionar/marcar); sin sector, el doble clic marca.
+  e.preventDefault();
+  if (sectorAtLngLat(e.lngLat.lng, e.lngLat.lat)) return;
+  placeTempMarker(e.lngLat.lng, e.lngLat.lat);
 }
 
 function closeDraw() {
@@ -1803,7 +1902,8 @@ document.addEventListener('keydown', (e) => {
       document.getElementById('sectorModal').classList.remove('visible');
       return;
     }
-    if (drawActive) stopDraw();
+    if (drawActive) { stopDraw(); return; }
+    if (sectorSelectedId) setSectorSelected(null);
     return;
   }
 

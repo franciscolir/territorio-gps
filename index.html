@@ -266,6 +266,9 @@
   #settingsModal .set-empty { grid-column: 1 / -1; text-align: center; color: #94a3b8; font-size: 12px; padding: 14px; }
   #settingsModal .set-note { font-size: 11px; color: #64748b; margin-top: 8px; }
   #settingsModal .err { color: #dc2626; font-size: 12px; min-height: 16px; margin-top: 6px; }
+  #settingsModal .set-radios { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+  #settingsModal .set-radios label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #334155; cursor: pointer; }
+  #settingsModal .set-radios input { accent-color: #3b82f6; width: 15px; height: 15px; }
   #settingsModal .buttons { display: flex; margin-top: 14px; }
   #settingsModal button.primary {
     flex: 1; padding: 11px; border-radius: 8px; font-size: 14px; font-weight: 600;
@@ -509,6 +512,15 @@
     </div>
     <div id="setComunaList" class="set-list"></div>
     <div class="set-note">Las comunas sin marcar no aparecerán en el selector del mapa. Cambios compartidos para todos los usuarios.</div>
+    <div class="set-head" style="margin-top:16px">
+      <h3>Puntos en el mapa</h3>
+    </div>
+    <div class="set-radios">
+      <label><input type="radio" name="mapScope" value="region" /> Toda la región</label>
+      <label><input type="radio" name="mapScope" value="comuna" /> Comuna seleccionada</label>
+      <label><input type="radio" name="mapScope" value="sector" /> Sector seleccionado</label>
+    </div>
+    <div class="set-note">Solo afecta a los marcadores del mapa; es una preferencia de este navegador. La lista lateral muestra siempre los puntos del sector seleccionado.</div>
     <div class="err" id="setErr"></div>
     <div class="buttons">
       <button class="primary" id="setCloseBtn">Cerrar</button>
@@ -548,6 +560,11 @@ let allPoints = [];
 let allComunas = [];
 let comunaFeatures = null;
 let pointMarkers = {};       // id -> Marker
+let puntosScope = 'comuna';  // marcadores del mapa: region | comuna | sector
+try {
+  const s = localStorage.getItem('puntosScope');
+  if (s === 'region' || s === 'comuna' || s === 'sector') puntosScope = s;
+} catch (_) {}
 let tempMarker = null;       // marker temporal al hacer clic
 let refMarker = null;        // marker de referencia
 let refRadiusTimer = null;   // debounce al cambiar el radio
@@ -914,6 +931,9 @@ const setComunaFilter = document.getElementById('setComunaFilter');
 settingsBtn.addEventListener('click', () => {
   setComunaFilter.value = '';
   document.getElementById('setErr').textContent = configError || '';
+  document.querySelectorAll('#settingsModal input[name="mapScope"]').forEach((r) => {
+    r.checked = r.value === puntosScope;
+  });
   renderSettingsList();
   settingsModal.classList.add('visible');
 });
@@ -931,6 +951,16 @@ document.getElementById('setAllBtn').addEventListener('click', () => {
   if (prev !== comunaSel.value) onComunaChange();
   renderSettingsList();
   persistirConfig();
+});
+
+// Preferencia local: qué puntos se muestran en el mapa
+document.querySelectorAll('#settingsModal input[name="mapScope"]').forEach((r) => {
+  r.addEventListener('change', () => {
+    if (!r.checked) return;
+    puntosScope = r.value;
+    try { localStorage.setItem('puntosScope', puntosScope); } catch (_) {}
+    renderMarkers();
+  });
 });
 
 function renderSettingsList() {
@@ -1052,8 +1082,8 @@ function renderList() {
   const list = document.getElementById('list');
   const sec = sectorSelected();
 
-  if (!comunaSel.value && !sec) {
-    list.innerHTML = '<div class="empty">Elige una comuna para ver sus puntos</div>';
+  if (!sec) {
+    list.innerHTML = '<div class="empty">Selecciona un sector para ver sus puntos</div>';
     updateListScope();
     return;
   }
@@ -1061,10 +1091,8 @@ function renderList() {
   const txt = filterText.value.toLowerCase().trim();
   const cat = filterCat.value;
 
-  // Con un sector seleccionado: solo los puntos que caen dentro de él
-  const base = sec
-    ? allPoints.filter((p) => p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, sec.geom))
-    : displayedPoints();
+  // La lista lateral muestra solo los puntos del sector seleccionado
+  const base = allPoints.filter((p) => p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, sec.geom));
 
   const filtered = base.filter((p) => {
     if (cat && p.categoria !== cat) return false;
@@ -1076,7 +1104,7 @@ function renderList() {
   });
 
   if (!filtered.length) {
-    list.innerHTML = `<div class="empty">${sec ? 'No hay puntos en este sector' : 'No hay puntos en esta comuna'}</div>`;
+    list.innerHTML = '<div class="empty">No hay puntos en este sector</div>';
     updateListScope();
     return;
   }
@@ -1159,13 +1187,24 @@ function pointFromGeom(geom) {
 // ============================================================
 // MARCADORES EN MAPA
 // ============================================================
+// Puntos que se muestran en el MAPA según la preferencia (region/comuna/sector)
+function mapScopePoints() {
+  if (puntosScope === 'region') return allPoints;
+  if (puntosScope === 'sector') {
+    const sec = sectorSelected();
+    if (!sec) return [];
+    return allPoints.filter((p) => p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, sec.geom));
+  }
+  return displayedPoints();
+}
+
 function renderMarkers() {
   // Limpiar todos
   Object.values(pointMarkers).forEach((m) => m.remove());
   pointMarkers = {};
 
-  // Sectores dentro de la comuna + puntos del modo referencia (aunque estén fuera)
-  const visibleIds = new Set(displayedPoints().map((p) => p.id));
+  // Puntos del alcance elegido + puntos del modo referencia (aunque estén fuera)
+  const visibleIds = new Set(mapScopePoints().map((p) => p.id));
   const toShow = allPoints.filter((p) => visibleIds.has(p.id) || refResultsIds.has(p.id));
 
   toShow.forEach((p) => {
@@ -1226,7 +1265,8 @@ function setSectorSelected(id) {
     map.setFeatureState({ source: 'sectores', id }, { selected: true });
   }
   syncSelectedCard();
-  renderList(); // la lista muestra solo los puntos del sector seleccionado
+  renderList();     // la lista muestra solo los puntos del sector seleccionado
+  renderMarkers();  // en modo "sector" también cambian los marcadores del mapa
 }
 
 // Sector seleccionado (o null)

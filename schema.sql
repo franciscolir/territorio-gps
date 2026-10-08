@@ -255,3 +255,44 @@ drop policy if exists "sectores_delete_admin" on public.sectores;
 create policy "sectores_delete_admin" on public.sectores
   for delete to authenticated
   using (public.is_admin());
+
+-- ============================================================
+-- 7. CONFIG APP (clave/valor compartida entre usuarios)
+-- ============================================================
+create table if not exists public.app_config (
+  key text primary key,
+  value jsonb,
+  updated_by uuid references auth.users(id),
+  updated_at timestamptz default now()
+);
+
+alter table public.app_config enable row level security;
+
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.app_config to authenticated;
+grant select on public.app_config to anon;
+-- service_role (scripts con SERVICE_ROLE_KEY) también necesita acceso,
+-- si no PostgREST responde "permission denied for table app_config"
+grant select, insert, update, delete on public.app_config to service_role;
+
+-- Lectura para todos; escritura solo admin
+drop policy if exists "app_config_select" on public.app_config;
+create policy "app_config_select" on public.app_config
+  for select to authenticated
+  using (true);
+
+drop policy if exists "app_config_insert_admin" on public.app_config;
+create policy "app_config_insert_admin" on public.app_config
+  for insert to authenticated
+  with check (public.is_admin());
+
+drop policy if exists "app_config_update_admin" on public.app_config;
+create policy "app_config_update_admin" on public.app_config
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- Semilla opcional: sin fila = todas las comunas activas
+insert into public.app_config (key, value)
+values ('comunas_activas', null)
+on conflict (key) do nothing;

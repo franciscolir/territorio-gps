@@ -214,6 +214,61 @@
   #refResults .item:hover { background: #eff6ff; border-color: #3b82f6; }
   #refResults .empty { text-align: center; color: #94a3b8; font-size: 12px; padding: 10px; }
 
+  /* ============ MODAL CONFIGURACIÓN ============ */
+  #settingsModal {
+    position: fixed; inset: 0; z-index: 530; background: rgba(15,23,42,.6);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  #settingsModal.visible { display: flex; }
+  #settingsModal .box {
+    background: #fff; border-radius: 14px; padding: 24px;
+    width: 100%; max-width: 470px; max-height: 88vh;
+    display: flex; flex-direction: column;
+  }
+  #settingsModal h2 { font-size: 16px; margin-bottom: 4px; }
+  #settingsModal .set-head {
+    display: flex; justify-content: space-between; align-items: center; margin-top: 12px;
+  }
+  #settingsModal .set-head h3 { font-size: 13px; color: #334155; }
+  #settingsModal .badge {
+    font-size: 12px; font-weight: 700; background: #eff6ff; color: #1d4ed8;
+    padding: 3px 10px; border-radius: 999px;
+  }
+  #settingsModal .set-tools { display: flex; gap: 8px; margin: 10px 0; }
+  #settingsModal .set-tools input {
+    flex: 1; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;
+  }
+  #settingsModal .set-tools input:focus { outline: 2px solid #3b82f6; }
+  #settingsModal .set-tools button {
+    padding: 8px 12px; border: 1px solid #cbd5e1; background: #f8fafc;
+    border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  #settingsModal .set-tools button:hover { background: #e2e8f0; }
+  #settingsModal .set-list {
+    overflow-y: auto; max-height: 46vh; border: 1px solid #e2e8f0;
+    border-radius: 10px; padding: 8px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px;
+  }
+  #settingsModal .set-item {
+    display: flex; align-items: center; gap: 8px; font-size: 13px;
+    padding: 5px 6px; border-radius: 6px; cursor: pointer; color: #334155;
+  }
+  #settingsModal .set-item:hover { background: #f1f5f9; }
+  #settingsModal .set-item.off { color: #94a3b8; }
+  #settingsModal .set-item input { accent-color: #3b82f6; width: 15px; height: 15px; }
+  #settingsModal .set-item span {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #settingsModal .set-empty { grid-column: 1 / -1; text-align: center; color: #94a3b8; font-size: 12px; padding: 14px; }
+  #settingsModal .set-note { font-size: 11px; color: #64748b; margin-top: 8px; }
+  #settingsModal .err { color: #dc2626; font-size: 12px; min-height: 16px; margin-top: 6px; }
+  #settingsModal .buttons { display: flex; margin-top: 14px; }
+  #settingsModal button.primary {
+    flex: 1; padding: 11px; border-radius: 8px; font-size: 14px; font-weight: 600;
+    border: none; background: #3b82f6; color: #fff; cursor: pointer;
+  }
+  #settingsModal button.primary:hover { background: #2563eb; }
+
   /* ============ MODAL NUEVO SECTOR ============ */
   #sectorModal {
     position: fixed; inset: 0; z-index: 520; background: rgba(15,23,42,.6);
@@ -334,6 +389,7 @@
     <button id="gmapsBtn" class="ghost">Ir</button>
     <button id="newPointBtn">+ Nuevo punto</button>
     <button id="refBtn" class="ghost">🎯 Modo referencia</button>
+    <button id="settingsBtn" class="ghost">⚙️ Ajustes</button>
     <span class="spacer"></span>
     <span class="user" id="userInfo"></span>
     <button id="logoutBtn" class="ghost">Salir</button>
@@ -428,6 +484,27 @@
   </div>
 </div>
 
+<!-- ================= MODAL CONFIGURACIÓN ================= -->
+<div id="settingsModal">
+  <div class="box">
+    <h2>⚙️ Configuración</h2>
+    <div class="set-head">
+      <h3>Comunas a usar</h3>
+      <span class="badge" id="comunaCount">—</span>
+    </div>
+    <div class="set-tools">
+      <input id="setComunaFilter" type="text" placeholder="Buscar comuna…" />
+      <button id="setAllBtn">Marcar todas</button>
+    </div>
+    <div id="setComunaList" class="set-list"></div>
+    <div class="set-note">Las comunas sin marcar no aparecerán en el selector del mapa. Cambios compartidos para todos los usuarios.</div>
+    <div class="err" id="setErr"></div>
+    <div class="buttons">
+      <button class="primary" id="setCloseBtn">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -477,6 +554,11 @@ let pendingSector = null;    // polígono cerrado esperando guardado
 let sectorHoverId = null;    // sector bajo el cursor
 let sectorListError = null;  // mensaje de error al cargar (tabla ausente, etc.)
 
+// --- Configuración (app_config) ---
+let comunasActivas = null;   // Set de comunas activas; null = todas
+let configError = null;      // error al cargar app_config (tabla ausente, etc.)
+let setSaveTimer = null;     // debounce del guardado en app_config
+
 const SECTOR_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
   '#8b5cf6', '#ec4899', '#14b8a6', '#64748b',
@@ -525,8 +607,9 @@ async function afterLogin() {
     .maybeSingle();
   isAdmin = !!prof?.is_admin;
 
-  // Descarga las comunas ANTES de crear el mapa, para poder encuadrar la
-  // cámara en Santiago sin tener que moverla después de cargar la fuente.
+  // Descarga la config y las comunas ANTES de crear el mapa, para poder
+  // encuadrar la cámara en Santiago sin tener que moverla después.
+  await loadConfig();
   await loadComunas();
   initMap();
 }
@@ -648,13 +731,17 @@ const comunaSel = document.getElementById('comunaSel');
 comunaSel.addEventListener('change', onComunaChange);
 
 function populateComunaFilter() {
+  const prev = comunaSel.value;
   const names = allComunas
     .map((c) => c.nombre)
     .filter(Boolean)
+    .filter(comunaActiva)
     .sort((a, b) => a.localeCompare(b, 'es'));
   comunaSel.innerHTML =
     '<option value="">Todas las comunas</option>' +
     names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  // Conserva la selección si sigue activa; si fue desactivada, vuelve a ""
+  comunaSel.value = names.includes(prev) ? prev : '';
 }
 
 function onComunaChange() {
@@ -757,6 +844,149 @@ function displayedPoints() {
   return allPoints.filter(
     (p) => p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, comuna.geom)
   );
+}
+
+// ============================================================
+// CONFIGURACIÓN (app_config: comunas activas, compartida)
+// ============================================================
+async function loadConfig() {
+  const { data, error } = await db
+    .from('app_config')
+    .select('value')
+    .eq('key', 'comunas_activas')
+    .maybeSingle();
+
+  if (error) {
+    console.error('app_config:', error);
+    const missing =
+      error.code === '42P01' ||
+      error.code === 'PGRST205' ||
+      /does not exist|could not find the table/i.test(error.message || '');
+    configError = missing
+      ? 'Falta la tabla: ejecuta la sección 7 de schema.sql en Supabase'
+      : 'Error cargando la configuración: ' + error.message;
+    comunasActivas = null;
+    return;
+  }
+
+  configError = null;
+  const arr = data?.value;
+  comunasActivas = Array.isArray(arr) && arr.length ? new Set(arr) : null;
+}
+
+// ¿La comuna está activa? (sin config = todas)
+function comunaActiva(nombre) {
+  return !comunasActivas || comunasActivas.has(nombre);
+}
+
+function todasLasComunas() {
+  return allComunas.map((c) => c.nombre).filter(Boolean);
+}
+
+function comunasSeleccionadas() {
+  const names = todasLasComunas();
+  return comunasActivas ? names.filter((n) => comunasActivas.has(n)) : names;
+}
+
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsModal = document.getElementById('settingsModal');
+const setComunaFilter = document.getElementById('setComunaFilter');
+
+settingsBtn.addEventListener('click', () => {
+  setComunaFilter.value = '';
+  document.getElementById('setErr').textContent = configError || '';
+  renderSettingsList();
+  settingsModal.classList.add('visible');
+});
+
+document.getElementById('setCloseBtn').addEventListener('click', () => {
+  settingsModal.classList.remove('visible');
+});
+
+setComunaFilter.addEventListener('input', renderSettingsList);
+document.getElementById('setAllBtn').addEventListener('click', () => {
+  if (!isAdmin) return toast('Solo administradores pueden cambiar la configuración', true);
+  const prev = comunaSel.value;
+  comunasActivas = null; // null = todas
+  populateComunaFilter();
+  if (prev !== comunaSel.value) onComunaChange();
+  renderSettingsList();
+  persistirConfig();
+});
+
+function renderSettingsList() {
+  const box = document.getElementById('setComunaList');
+  const txt = setComunaFilter.value.toLowerCase().trim();
+  const names = todasLasComunas().sort((a, b) => a.localeCompare(b, 'es'));
+  const shown = names.filter((n) => !txt || n.toLowerCase().includes(txt));
+
+  box.innerHTML = shown.length
+    ? shown
+        .map(
+          (n) => `
+      <label class="set-item${comunaActiva(n) ? '' : ' off'}">
+        <input type="checkbox" data-nombre="${escapeHtml(n)}" ${comunaActiva(n) ? 'checked' : ''} />
+        <span>${escapeHtml(n)}</span>
+      </label>`
+        )
+        .join('')
+    : '<div class="set-empty">Sin coincidencias</div>';
+
+  document.getElementById('comunaCount').textContent =
+    `${comunasSeleccionadas().length} de ${names.length}`;
+
+  box.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener('change', onToggleComuna);
+  });
+}
+
+function onToggleComuna(e) {
+  if (!isAdmin) {
+    e.target.checked = !e.target.checked;
+    return toast('Solo administradores pueden cambiar la configuración', true);
+  }
+
+  const nombre = e.target.dataset.nombre;
+  const names = todasLasComunas();
+  const activas = comunasActivas ? new Set(comunasActivas) : new Set(names);
+
+  if (e.target.checked) activas.add(nombre);
+  else activas.delete(nombre);
+
+  if (activas.size === 0) {
+    e.target.checked = true;
+    return toast('Debe quedar al menos una comuna activa', true);
+  }
+
+  const perdida = comunaSel.value && !activas.has(comunaSel.value);
+  comunasActivas = activas.size === names.length ? null : activas;
+
+  e.target.closest('.set-item').classList.toggle('off', !e.target.checked);
+  document.getElementById('comunaCount').textContent =
+    `${comunasSeleccionadas().length} de ${names.length}`;
+
+  populateComunaFilter(); // el <select> se actualiza al instante
+  if (perdida) onComunaChange(); // la comuna elegida ya no existe → resetear vista
+  persistirConfig();
+}
+
+// Guardado con debounce (varios clics seguidos = una sola escritura)
+function persistirConfig() {
+  if (configError) return; // tabla ausente: el aviso ya se ve en el modal
+  clearTimeout(setSaveTimer);
+  setSaveTimer = setTimeout(async () => {
+    const value = comunasActivas ? [...comunasActivas] : null;
+    const { error } = await db.from('app_config').upsert(
+      {
+        key: 'comunas_activas',
+        value,
+        updated_by: currentUser ? currentUser.id : null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'key' }
+    );
+    if (error) toast('No se pudo guardar la configuración: ' + error.message, true);
+  }, 400);
 }
 
 // ============================================================
@@ -1560,6 +1790,10 @@ document.addEventListener('keydown', (e) => {
   const typing = e.target && e.target.matches && e.target.matches('input, textarea');
 
   if (e.key === 'Escape') {
+    if (settingsModal.classList.contains('visible')) {
+      settingsModal.classList.remove('visible');
+      return;
+    }
     if (document.getElementById('sectorModal').classList.contains('visible')) {
       pendingSector = null;
       document.getElementById('sectorModal').classList.remove('visible');

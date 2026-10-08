@@ -135,13 +135,13 @@ set search_path = public, extensions
 as $$
   select
     p.id, p.nombre, p.direccion, p.categoria, p.notas,
-    extensions.st_y(p.geom::extensions.geometry) as lat,
-    extensions.st_x(p.geom::extensions.geometry) as lng
+    st_y(p.geom::geometry) as lat,
+    st_x(p.geom::geometry) as lng
   from public.puntos p
   where p.deleted_at is null
-    and extensions.st_dwithin(
+    and st_dwithin(
       p.geom,
-      extensions.st_setsrid(extensions.st_makepoint(lng, lat), 4326)::extensions.geography,
+      st_setsrid(st_makepoint(lng, lat), 4326)::geography,
       radio_m
     );
 $$;
@@ -169,7 +169,7 @@ begin
     insert into public.puntos (user_id, nombre, direccion, categoria, notas, geom)
     values (
       auth.uid(), p_nombre, p_direccion, p_categoria, p_notas,
-      extensions.st_setsrid(extensions.st_makepoint(p_lng, p_lat), 4326)::extensions.geography
+      st_setsrid(st_makepoint(p_lng, p_lat), 4326)::geography
     )
     returning id into v_id;
   else
@@ -183,7 +183,7 @@ begin
         direccion = p_direccion,
         categoria = p_categoria,
         notas = p_notas,
-        geom = extensions.st_setsrid(extensions.st_makepoint(p_lng, p_lat), 4326)::extensions.geography,
+        geom = st_setsrid(st_makepoint(p_lng, p_lat), 4326)::geography,
         updated_at = now()
     where id = p_id
     returning id into v_id;
@@ -407,4 +407,150 @@ begin
     'recortado', v_pct < 0.995
   );
 end;
+$$;
+
+-- ============================================================
+-- 9. ESTADO DE PUNTOS Y ASIGNACIÓN DE SECTORES
+-- ============================================================
+-- Migración para bases que ya tenían la versión con "categoria".
+-- Deja todos los puntos existentes en estado 'pendiente'.
+
+-- 9.1 Tipo de estado (reemplaza a "categoria")
+do $$
+begin
+  if not exists (
+    select 1 from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where t.typname = 'estado_punto' and n.nspname = 'public'
+  ) then
+    create type public.estado_punto as enum ('pendiente', 'visitado', 'erroneo', 'no_pasar');
+  end if;
+end $$;
+
+alter table public.puntos
+  add column if not exists estado public.estado_punto not null default 'pendiente';
+
+alter table public.puntos drop column if exists categoria;
+
+-- 9.2 RPCs que usaban categoria
+drop function if exists public.puntos_en_radio(double precision, double precision, double precision);
+create or replace function public.puntos_en_radio(
+  lat double precision,
+  lng double precision,
+  radio_m double precision
+)
+returns table (
+  id uuid,
+  nombre text,
+  direccion text,
+  estado public.estado_punto,
+  notas text,
+  lat double precision,
+  lng double precision
+)
+language sql
+security invoker
+set search_path = public, extensions
+as $$
+  select
+    p.id, p.nombre, p.direccion, p.estado, p.notas,
+    st_y(p.geom::geometry) as lat,
+    st_x(p.geom::geometry) as lng
+  from public.puntos p
+  where p.deleted_at is null
+    and st_dwithin(
+      p.geom,
+      st_setsrid(st_makepoint(lng, lat), 4326)::geography,
+      radio_m
+    );
+$$;
+
+drop function if exists public.guardar_punto(uuid, text, text, text, text, double precision, double precision);
+create or replace function public.guardar_punto(
+  p_id uuid,
+  p_nombre text,
+  p_direccion text,
+  p_estado public.estado_punto,
+  p_notas text,
+  p_lat double precision,
+  p_lng double precision
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = public, extensions
+as $$
+declare
+  v_id uuid;
+  v_admin boolean;
+begin
+  if p_id is null then
+    -- INSERT: cualquier autenticado
+    insert into public.puntos (user_id, nombre, direccion, estado, notas, geom)
+    values (
+      auth.uid(), p_nombre, p_direccion, coalesce(p_estado, 'pendiente'), p_notas,
+      st_setsrid(st_makepoint(p_lng, p_lat), 4326)::geography
+    )
+    returning id into v_id;
+  else
+    -- UPDATE: solo admin
+    select public.is_admin() into v_admin;
+    if not v_admin then
+      raise exception 'Solo un administrador puede editar puntos';
+    end if;
+    update public.puntos
+    set nombre = p_nombre,
+        direccion = p_direccion,
+        estado = coalesce(p_estado, estado),
+        notas = p_notas,
+        geom = st_setsrid(st_makepoint(p_lng, p_lat), 4326)::geography,
+        updated_at = now()
+    where id = p_id
+    returning id into v_id;
+  end if;
+  return v_id;
+end;
+$$;
+
+-- 9.3 Asignación de sector a un usuario (uno por sector)
+create table if not exists public.sectores_asignaciones (
+  sector_id uuid primary key references public.sectores(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  assigned_by uuid references auth.users(id),
+  assigned_at timestamptz default now()
+);
+
+alter table public.sectores_asignaciones enable row level security;
+
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.sectores_asignaciones to authenticated;
+grant select, insert, update, delete on public.sectores_asignaciones to service_role;
+
+drop policy if exists "asig_select" on public.sectores_asignaciones;
+create policy "asig_select" on public.sectores_asignaciones
+  for select to authenticated using (true);
+
+drop policy if exists "asig_insert_admin" on public.sectores_asignaciones;
+create policy "asig_insert_admin" on public.sectores_asignaciones
+  for insert to authenticated with check (public.is_admin());
+
+drop policy if exists "asig_update_admin" on public.sectores_asignaciones;
+create policy "asig_update_admin" on public.sectores_asignaciones
+  for update to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "asig_delete_admin" on public.sectores_asignaciones;
+create policy "asig_delete_admin" on public.sectores_asignaciones
+  for delete to authenticated using (public.is_admin());
+
+-- 9.4 Listar usuarios para asignar (los perfiles solo son visibles por su dueño;
+--     security definer permite listarlos para el panel de asignación)
+create or replace function public.usuarios_asignables()
+returns table (id uuid, email text)
+language sql
+security definer
+set search_path = public
+as $$
+  select p.id, coalesce(p.email, '')::text as email
+  from public.profiles p
+  order by p.email;
 $$;

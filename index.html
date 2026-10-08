@@ -75,6 +75,7 @@
   #sidebar.collapsed { transform: translateX(-100%); position: absolute; height: 100%; }
   #sidebar .panel-head {
     padding: 12px 14px; border-bottom: 1px solid #e2e8f0;
+    overflow-y: auto; max-height: 68vh;
   }
   #sidebar .panel-head h2 { font-size: 14px; margin-top: 12px; margin-bottom: 8px; }
   #sidebar .panel-head select {
@@ -114,6 +115,56 @@
   .point-card .actions button:hover { background: #e2e8f0; }
   .point-card .actions button.del { color: #dc2626; }
   .point-card .actions button.del:hover { background: #fee2e2; border-color: #fca5a5; }
+
+  /* ============ ESTADO DEL PUNTO + DETALLE ============ */
+  .point-card .estados { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  .point-card .estados label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #475569; cursor: pointer; }
+  .point-card .estados input { accent-color: #3b82f6; }
+  .point-card .pd-btn {
+    margin-top: 8px; width: 100%; padding: 5px; font-size: 11px; border-radius: 6px;
+    border: 1px solid #cbd5e1; background: #f8fafc; cursor: pointer;
+  }
+  .point-card .pd-btn:hover { background: #e2e8f0; }
+  .estado-tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-top: 6px; }
+  .estado-pendiente { background: #e2e8f0; color: #475569; }
+  .estado-visitado { background: #dcfce7; color: #166534; }
+  .estado-erroneo { background: #fee2e2; color: #991b1b; }
+  .estado-no_pasar { background: #fef9c3; color: #854d0e; }
+
+  /* ============ PANEL DE SECTORES (resumen / detalle / asignación) ============ */
+  #sidebar .sect-btns { display: flex; gap: 4px; }
+  #sidebar .sect-btns button { padding: 4px 8px; }
+  .sector-card .progress { width: 100%; height: 6px; background: #e2e8f0; border-radius: 4px; margin-top: 6px; overflow: hidden; }
+  .sector-card .progress > i { display: block; height: 100%; background: #22c55e; }
+  .sector-card .who { font-size: 10px; color: #7c3aed; }
+  #sectorDetail .detail-card { border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 10px; padding: 10px 12px; margin-top: 8px; }
+  #sectorDetail .detail-card h3 { font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  #sectorDetail .detail-card .meta { font-size: 11px; color: #475569; line-height: 1.5; }
+  #sectorDetail .progress { width: 100%; height: 8px; background: #dbeafe; border-radius: 5px; margin: 6px 0; overflow: hidden; }
+  #sectorDetail .progress > i { display: block; height: 100%; background: #2563eb; }
+  #sectorDetail .d-actions { display: flex; gap: 6px; margin-top: 8px; }
+  #sectorDetail .d-actions button { flex: 1; padding: 6px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
+  .assign-panel { border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; margin-top: 8px; background: #f8fafc; }
+  .assign-panel .a-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #334155; }
+  .assign-panel table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .assign-panel th, .assign-panel td { text-align: left; padding: 5px 4px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+  .assign-panel select { width: 100%; font-size: 11px; padding: 3px; border: 1px solid #cbd5e1; border-radius: 5px; }
+  .assign-panel button { font-size: 11px; padding: 3px 6px; border-radius: 5px; border: 1px solid #3b82f6; background: #eff6ff; color: #1d4ed8; cursor: pointer; }
+  .assign-panel button.clear-assign { border-color: #cbd5e1; background: #fff; color: #64748b; }
+
+  /* ============ MODAL DETALLE DE PUNTO ============ */
+  #pointDetail { position: fixed; inset: 0; z-index: 510; background: rgba(15,23,42,.6); display: none; align-items: center; justify-content: center; padding: 20px; }
+  #pointDetail.visible { display: flex; }
+  #pointDetail .box { background: #fff; border-radius: 14px; padding: 24px; width: 100%; max-width: 440px; }
+  #pointDetail h2 { font-size: 17px; margin-bottom: 12px; }
+  #pointDetail .pd-row { font-size: 13px; color: #334155; margin: 6px 0; }
+  #pointDetail .pd-row b { color: #0f172a; }
+  #pointDetail .buttons { display: flex; gap: 10px; margin-top: 20px; }
+  #pointDetail button { flex: 1; padding: 11px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
+  #pointDetail button.primary { background: #3b82f6; color: #fff; }
+  #pointDetail button.secondary { background: #f1f5f9; color: #1e293b; }
+  #pointDetail button.danger { background: #fee2e2; color: #b91c1c; }
+  #modal select { width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-family: inherit; }
 
   #sidebar .empty { padding: 30px 16px; text-align: center; color: #94a3b8; font-size: 13px; }
 
@@ -416,16 +467,28 @@
         </div>
         <div class="sect-head">
           <h2>Sectores</h2>
-          <button id="drawBtn" title="Dibujar un sector a mano">✏️ Dibujar</button>
+          <div class="sect-btns">
+            <button id="drawBtn" title="Dibujar un sector a mano">✏️</button>
+            <button id="editSectorsBtn" title="Editar sectores (renombrar, color, borrar)">✎ Editar</button>
+            <button id="assignSectorsBtn" title="Asignar sectores a usuarios">👤 Asignar</button>
+          </div>
         </div>
         <div id="sectorList"><div class="empty">Aún no hay sectores</div></div>
+        <div id="assignPanel" style="display:none"></div>
+        <div id="sectorDetail"></div>
         <div class="sect-head">
           <h2 id="puntosHead">Puntos</h2>
-          <button id="clearSectorSel" class="ghost" style="display:none" title="Ver todos los puntos de la comuna">Ver todos</button>
+          <button id="clearSectorSel" class="ghost" style="display:none" title="Quitar selección de sector">Ver todos</button>
         </div>
         <input id="filterText" type="text" placeholder="Filtrar por nombre, dirección…" />
         <div class="filters">
-          <select id="filterCat"><option value="">Todas las categorías</option></select>
+          <select id="filterEstado">
+            <option value="">Todos los estados</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="visitado">Visitado</option>
+            <option value="erroneo">Erróneo</option>
+            <option value="no_pasar">No pasar</option>
+          </select>
         </div>
       </div>
       <div id="list"></div>
@@ -461,8 +524,13 @@
     <input id="fNombre" type="text" />
     <label>Dirección</label>
     <input id="fDireccion" type="text" />
-    <label>Categoría</label>
-    <input id="fCategoria" type="text" placeholder="ej: cliente, bodega…" />
+    <label>Estado</label>
+    <select id="fEstado">
+      <option value="pendiente">Pendiente</option>
+      <option value="visitado">Visitado</option>
+      <option value="erroneo">Erróneo</option>
+      <option value="no_pasar">No pasar</option>
+    </select>
     <label>Notas</label>
     <textarea id="fNotas"></textarea>
     <div class="row">
@@ -479,6 +547,19 @@
     <div class="buttons">
       <button class="secondary" id="modalCancel">Cancelar</button>
       <button class="primary" id="modalSave">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL DETALLE DE PUNTO ================= -->
+<div id="pointDetail">
+  <div class="box">
+    <h2 id="pdTitle">Detalle del punto</h2>
+    <div id="pdBody"></div>
+    <div class="buttons">
+      <button class="secondary" id="pdClose">Cerrar</button>
+      <button class="danger" id="pdDelete" style="display:none">Eliminar</button>
+      <button class="primary" id="pdEdit" style="display:none">Editar</button>
     </div>
   </div>
 </div>
@@ -565,6 +646,24 @@ try {
   const s = localStorage.getItem('puntosScope');
   if (s === 'region' || s === 'comuna' || s === 'sector') puntosScope = s;
 } catch (_) {}
+let usuarios = [];           // [{id, email}] para asignar
+let asignaciones = {};       // sector_id -> user_id
+let editSectorsMode = false; // muestra renombrar/color/borrar en el resumen
+let assignOpen = false;      // muestra la tabla de asignación
+
+const ESTADOS = [
+  ['pendiente', 'Pendiente'],
+  ['visitado', 'Visitado'],
+  ['erroneo', 'Erróneo'],
+  ['no_pasar', 'No pasar'],
+];
+function estadoLabel(e) {
+  const x = ESTADOS.find((k) => k[0] === e);
+  return x ? x[1] : 'Pendiente';
+}
+function estadoClass(e) {
+  return 'estado-' + (ESTADOS.some((k) => k[0] === e) ? e : 'pendiente');
+}
 let tempMarker = null;       // marker temporal al hacer clic
 let refMarker = null;        // marker de referencia
 let refRadiusTimer = null;   // debounce al cambiar el radio
@@ -673,6 +772,8 @@ function initMap() {
 
   map.on('load', async () => {
     await ensureComunasLoaded();
+    await loadUsuarios();
+    await loadAsignaciones();
     await loadPoints();
     initSectorLayers();
     await loadSectores();
@@ -803,7 +904,6 @@ function onComunaChange() {
     }
   }
 
-  populateCategoryFilter();
   renderList();
   renderMarkers();
 
@@ -1055,28 +1155,28 @@ async function loadPoints() {
     return { ...p, lat: c ? c.lat : null, lng: c ? c.lng : null };
   });
 
-  populateCategoryFilter();
+  populateEstadoFilter();
   renderList();
   renderMarkers();
   renderSectorList(); // los contadores "N puntos" cambian con cada alta/baja
 }
 
-function populateCategoryFilter() {
-  const cats = [...new Set(displayedPoints().map((p) => p.categoria).filter(Boolean))].sort();
-  const sel = document.getElementById('filterCat');
+function populateEstadoFilter() {
+  const sel = document.getElementById('filterEstado');
+  if (!sel) return;
   const prev = sel.value;
-  sel.innerHTML = '<option value="">Todas las categorías</option>' +
-    cats.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-  if (!cats.includes(prev)) sel.value = '';
+  sel.innerHTML = '<option value="">Todos los estados</option>' +
+    ESTADOS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  sel.value = ESTADOS.some((k) => k[0] === prev) ? prev : '';
 }
 
 // ============================================================
 // RENDER LISTA
 // ============================================================
 const filterText = document.getElementById('filterText');
-const filterCat  = document.getElementById('filterCat');
+const filterEstado = document.getElementById('filterEstado');
 filterText.addEventListener('input', renderList);
-filterCat.addEventListener('change', renderList);
+filterEstado.addEventListener('change', renderList);
 
 function renderList() {
   const list = document.getElementById('list');
@@ -1089,15 +1189,13 @@ function renderList() {
   }
 
   const txt = filterText.value.toLowerCase().trim();
-  const cat = filterCat.value;
+  const est = filterEstado.value;
 
-  // La lista lateral muestra solo los puntos del sector seleccionado
-  const base = allPoints.filter((p) => p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, sec.geom));
-
+  const base = pointsInSector(sec);
   const filtered = base.filter((p) => {
-    if (cat && p.categoria !== cat) return false;
+    if (est && (p.estado || 'pendiente') !== est) return false;
     if (txt) {
-      const blob = `${p.nombre || ''} ${p.direccion || ''} ${p.categoria || ''}`.toLowerCase();
+      const blob = `${p.nombre || ''} ${p.direccion || ''}`.toLowerCase();
       if (!blob.includes(txt)) return false;
     }
     return true;
@@ -1109,34 +1207,37 @@ function renderList() {
     return;
   }
 
-  list.innerHTML = filtered.map((p) => `
+  list.innerHTML = filtered.map((p) => {
+    const e = p.estado || 'pendiente';
+    const chk = (val, label) =>
+      `<label><input type="checkbox" data-estado="${val}"${e === val ? ' checked' : ''}> ${label}</label>`;
+    return `
     <div class="point-card" data-id="${p.id}">
       <h3>${escapeHtml(p.nombre)}</h3>
       <div class="meta">
         ${p.direccion ? escapeHtml(p.direccion) + '<br>' : ''}
         ${p.lat != null && p.lng != null ? `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}` : 'sin coordenadas'}
       </div>
-      ${p.categoria ? `<span class="tag">${escapeHtml(p.categoria)}</span>` : ''}
-      ${refResultsIds.has(p.id) ? '<span class="tag" style="background:#fef3c7;color:#92400e">🎯 en radio</span>' : ''}
-      ${isAdmin ? `
-        <div class="actions">
-          <button class="edit">Editar</button>
-          <button class="del">Eliminar</button>
-        </div>` : ''}
-    </div>
-  `).join('');
+      <span class="estado-tag ${estadoClass(e)}">${estadoLabel(e)}</span>
+      <div class="estados">
+        ${chk('visitado', 'Visitado')}
+        ${chk('erroneo', 'Erróneo')}
+        ${chk('no_pasar', 'No pasar')}
+      </div>
+      <button class="pd-btn">Ver detalles</button>
+    </div>`;
+  }).join('');
 
-  // Eventos
   list.querySelectorAll('.point-card').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      if (e.target.classList.contains('edit') || e.target.classList.contains('del')) return;
-      const id = el.dataset.id;
-      focusPoint(id);
+    const id = el.dataset.id;
+    el.addEventListener('click', (ev) => { if (ev.target.closest('input,button')) return; focusPoint(id); });
+    el.querySelector('.pd-btn').addEventListener('click', (ev) => { ev.stopPropagation(); openPointDetail(id); });
+    el.querySelectorAll('input[data-estado]').forEach((cb) => {
+      cb.addEventListener('change', (ev) => {
+        ev.stopPropagation();
+        setEstadoPunto(id, cb.checked ? cb.dataset.estado : 'pendiente');
+      });
     });
-    const btnEdit = el.querySelector('.edit');
-    const btnDel  = el.querySelector('.del');
-    if (btnEdit) btnEdit.addEventListener('click', (e) => { e.stopPropagation(); openEditModal(el.dataset.id); });
-    if (btnDel)  btnDel.addEventListener('click',  (e) => { e.stopPropagation(); deletePoint(el.dataset.id); });
   });
 
   updateListScope();
@@ -1222,7 +1323,7 @@ function renderMarkers() {
       .setPopup(new maplibregl.Popup().setHTML(`
         <b>${escapeHtml(p.nombre)}</b><br>
         ${p.direccion ? escapeHtml(p.direccion) + '<br>' : ''}
-        ${p.categoria ? `<small>${escapeHtml(p.categoria)}</small>` : ''}
+        <small class="estado-tag ${estadoClass(p.estado || 'pendiente')}">${estadoLabel(p.estado || 'pendiente')}</small>
       `))
       .addTo(map);
     pointMarkers[p.id] = marker;
@@ -1267,6 +1368,7 @@ function setSectorSelected(id) {
   syncSelectedCard();
   renderList();     // la lista muestra solo los puntos del sector seleccionado
   renderMarkers();  // en modo "sector" también cambian los marcadores del mapa
+  renderSectorDetail();
 }
 
 // Sector seleccionado (o null)
@@ -1379,7 +1481,7 @@ function openNewModal(lat = null, lng = null) {
   document.getElementById('modalTitle').textContent = 'Nuevo punto';
   document.getElementById('fNombre').value = '';
   document.getElementById('fDireccion').value = '';
-  document.getElementById('fCategoria').value = '';
+  document.getElementById('fEstado').value = 'pendiente';
   document.getElementById('fNotas').value = '';
   document.getElementById('fLat').value = lat ?? '';
   document.getElementById('fLng').value = lng ?? '';
@@ -1395,7 +1497,7 @@ function openEditModal(id) {
   document.getElementById('modalTitle').textContent = 'Editar punto';
   document.getElementById('fNombre').value = p.nombre || '';
   document.getElementById('fDireccion').value = p.direccion || '';
-  document.getElementById('fCategoria').value = p.categoria || '';
+  document.getElementById('fEstado').value = p.estado || 'pendiente';
   document.getElementById('fNotas').value = p.notas || '';
   document.getElementById('fLat').value = p.lat;
   document.getElementById('fLng').value = p.lng;
@@ -1411,7 +1513,7 @@ function closeModal() {
 async function savePoint() {
   const nombre = document.getElementById('fNombre').value.trim();
   const direccion = document.getElementById('fDireccion').value.trim();
-  const categoria = document.getElementById('fCategoria').value.trim();
+  const estado = document.getElementById('fEstado').value || 'pendiente';
   const notas = document.getElementById('fNotas').value.trim();
   const lat = parseFloat(document.getElementById('fLat').value);
   const lng = parseFloat(document.getElementById('fLng').value);
@@ -1425,7 +1527,7 @@ async function savePoint() {
     p_id: editingId,
     p_nombre: nombre,
     p_direccion: direccion,
-    p_categoria: categoria,
+    p_estado: estado,
     p_notas: notas,
     p_lat: lat,
     p_lng: lng,
@@ -1451,6 +1553,46 @@ async function deletePoint(id) {
   toast('Punto eliminado');
   await loadPoints();
 }
+
+// ============================================================
+// DETALLE DE PUNTO
+// ============================================================
+let pdId = null;
+
+function openPointDetail(id) {
+  const p = allPoints.find((x) => x.id === id);
+  if (!p) return;
+  pdId = id;
+  const e = p.estado || 'pendiente';
+  document.getElementById('pdBody').innerHTML = `
+    <div class="pd-row"><b>Nombre:</b> ${escapeHtml(p.nombre)}</div>
+    <div class="pd-row"><b>Dirección:</b> ${p.direccion ? escapeHtml(p.direccion) : '—'}</div>
+    <div class="pd-row"><b>Estado:</b> <span class="estado-tag ${estadoClass(e)}">${estadoLabel(e)}</span></div>
+    <div class="pd-row"><b>Notas:</b> ${p.notas ? escapeHtml(p.notas) : '—'}</div>
+    <div class="pd-row"><b>Coordenadas:</b> ${p.lat != null && p.lng != null ? `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}` : '—'}</div>`;
+  document.getElementById('pdEdit').style.display = isAdmin ? '' : 'none';
+  document.getElementById('pdDelete').style.display = isAdmin ? '' : 'none';
+  document.getElementById('pointDetail').classList.add('visible');
+}
+
+function closePointDetail() {
+  document.getElementById('pointDetail').classList.remove('visible');
+  pdId = null;
+}
+
+document.getElementById('pdClose').addEventListener('click', closePointDetail);
+document.getElementById('pdEdit').addEventListener('click', () => {
+  if (!pdId) return;
+  const id = pdId;
+  closePointDetail();
+  openEditModal(id);
+});
+document.getElementById('pdDelete').addEventListener('click', () => {
+  if (!pdId) return;
+  const id = pdId;
+  closePointDetail();
+  deletePoint(id);
+});
 
 // ============================================================
 // SECTORES: CAPAS, CARGA Y LISTA
@@ -1593,6 +1735,38 @@ function countPointsInSector(s) {
   return ring ? countPointsInRing(ring) : 0;
 }
 
+// Puntos dentro de un sector
+function pointsInSector(s) {
+  if (!s || !s.geom) return [];
+  return allPoints.filter((p) => p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, s.geom));
+}
+
+// Avance del sector: (visitado + erroneo + no_pasar) / total
+function sectorStats(s) {
+  const pts = pointsInSector(s);
+  const total = pts.length;
+  const hechos = pts.filter((p) => (p.estado || 'pendiente') !== 'pendiente').length;
+  return { total, hechos, pct: total ? Math.round((hechos / total) * 100) : 0 };
+}
+
+function emailDe(userId) {
+  const u = usuarios.find((x) => x.id === userId);
+  return u ? u.email : '';
+}
+
+async function loadUsuarios() {
+  const { data, error } = await db.rpc('usuarios_asignables');
+  if (error) { console.error('usuarios:', error); usuarios = []; return; }
+  usuarios = data || [];
+}
+
+async function loadAsignaciones() {
+  const { data, error } = await db.from('sectores_asignaciones').select('sector_id, user_id');
+  if (error) { console.error('asignaciones:', error); asignaciones = {}; return; }
+  asignaciones = {};
+  (data || []).forEach((r) => { asignaciones[r.sector_id] = r.user_id; });
+}
+
 async function loadSectores() {
   const { data, error } = await db.from('sectores').select('*');
   if (error) {
@@ -1651,30 +1825,37 @@ function renderSectorList() {
     box.innerHTML = sectorListError
       ? `<div class="empty">${escapeHtml(sectorListError)}</div>`
       : '<div class="empty">Aún no hay sectores · dibuja uno con ✏️</div>';
+    renderSectorDetail();
+    renderAssign();
     return;
   }
 
   box.innerHTML = visible.map((s) => {
-    const n = countPointsInSector(s);
-    const meta = `${n} punto${n === 1 ? '' : 's'}${s.comuna ? ' · ' + escapeHtml(s.comuna) : ''}`;
+    const st = sectorStats(s);
+    const quien = asignaciones[s.id] ? emailDe(asignaciones[s.id]) : '';
+    const acciones = (isAdmin && editSectorsMode) ? `
+      <div class="s-actions">
+        <button class="rename" title="Renombrar">✎</button>
+        <button class="color" title="Cambiar color">🎨</button>
+        <button class="del" title="Eliminar">🗑</button>
+      </div>` : '';
+    const palette = (isAdmin && editSectorsMode) ? `
+      <div class="palette-row">
+        ${SECTOR_COLORS.map((c) => `
+          <button class="chip${c === s.color ? ' selected' : ''}" data-color="${c}"
+                  style="background:${c}" title="Color"></button>`).join('')}
+      </div>` : '';
     return `
-      <div class="sector-card" data-id="${s.id}">
+      <div class="sector-card${s.id === sectorSelectedId ? ' selected' : ''}" data-id="${s.id}">
         <span class="dot" style="background:${escapeHtml(s.color || '#3b82f6')}"></span>
         <div class="s-body">
           <b>${escapeHtml(s.nombre)}</b>
-          <small>${meta}</small>
+          <small>${st.total} punto${st.total === 1 ? '' : 's'} · ${st.pct}%</small>
+          ${quien ? `<small class="who">👤 ${escapeHtml(quien)}</small>` : ''}
         </div>
-        ${isAdmin ? `
-          <div class="s-actions">
-            <button class="rename" title="Renombrar">✎</button>
-            <button class="color" title="Cambiar color">🎨</button>
-            <button class="del" title="Eliminar">🗑</button>
-          </div>` : ''}
-        <div class="palette-row">
-          ${SECTOR_COLORS.map((c) => `
-            <button class="chip${c === s.color ? ' selected' : ''}" data-color="${c}"
-                    style="background:${c}" title="Color"></button>`).join('')}
-        </div>
+        ${acciones}
+        <div class="progress"><i style="width:${st.pct}%"></i></div>
+        ${palette}
       </div>`;
   }).join('');
 
@@ -1706,6 +1887,121 @@ function renderSectorList() {
   });
 
   syncSelectedCard();
+  renderSectorDetail();
+  renderAssign();
+}
+
+// Card completa del sector seleccionado
+function renderSectorDetail() {
+  const box = document.getElementById('sectorDetail');
+  if (!box) return;
+  const s = sectorSelected();
+  if (!s) { box.innerHTML = ''; return; }
+  const st = sectorStats(s);
+  const quien = asignaciones[s.id] ? emailDe(asignaciones[s.id]) : 'sin asignar';
+  box.innerHTML = `
+    <div class="detail-card">
+      <h3><span class="dot" style="width:12px;height:12px;border-radius:50%;display:inline-block;background:${escapeHtml(s.color || '#3b82f6')}"></span>${escapeHtml(s.nombre)}</h3>
+      <div class="meta">
+        ${s.comuna ? 'Comuna: ' + escapeHtml(s.comuna) + '<br>' : ''}
+        ${st.total} punto${st.total === 1 ? '' : 's'} · ${st.hechos} resuelto${st.hechos === 1 ? '' : 's'} · <b>${st.pct}%</b><br>
+        👤 ${escapeHtml(quien)}
+      </div>
+      <div class="progress"><i style="width:${st.pct}%"></i></div>
+      <div class="d-actions">
+        <button id="sdFocus">Ver en mapa</button>
+        ${isAdmin ? '<button id="sdEdit">Renombrar</button><button id="sdDel">Eliminar</button>' : ''}
+      </div>
+    </div>`;
+  const f = document.getElementById('sdFocus');
+  if (f) f.addEventListener('click', () => focusSector(s.id));
+  const ed = document.getElementById('sdEdit');
+  if (ed) ed.addEventListener('click', () => renameSector(s.id));
+  const dl = document.getElementById('sdDel');
+  if (dl) dl.addEventListener('click', () => deleteSector(s.id));
+}
+
+// Tabla de asignación de sectores a usuarios
+function renderAssign() {
+  const panel = document.getElementById('assignPanel');
+  if (!panel) return;
+  if (!assignOpen) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+  panel.style.display = '';
+  const visible = allSectores.filter(sectorsVisible);
+  const head = '<div class="a-head">Asignar sectores<button id="assignClose" type="button" title="Cerrar">✕</button></div>';
+  if (!visible.length) {
+    panel.innerHTML = `<div class="assign-panel">${head}<div class="empty">Sin sectores en esta comuna</div></div>`;
+  } else {
+    const opts = (sel) => '<option value="">— sin asignar —</option>' +
+      usuarios.map((u) => `<option value="${u.id}"${u.id === sel ? ' selected' : ''}>${escapeHtml(u.email)}</option>`).join('');
+    panel.innerHTML = `
+      <div class="assign-panel">
+        ${head}
+        <table>
+          <thead><tr><th>Sector</th><th>Usuario</th><th></th></tr></thead>
+          <tbody>
+            ${visible.map((s) => `
+              <tr data-id="${s.id}">
+                <td>${escapeHtml(s.nombre)}</td>
+                <td><select class="asig-user">${opts(asignaciones[s.id] || '')}</select></td>
+                <td><button class="clear-assign" title="Quitar asignación">Quitar</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+  const close = document.getElementById('assignClose');
+  if (close) close.addEventListener('click', () => { assignOpen = false; document.getElementById('assignSectorsBtn').classList.remove('active'); renderAssign(); });
+  panel.querySelectorAll('tr[data-id]').forEach((tr) => {
+    const id = tr.dataset.id;
+    const sel = tr.querySelector('.asig-user');
+    if (sel) sel.addEventListener('change', (e) => assignSector(id, e.target.value));
+    const clr = tr.querySelector('.clear-assign');
+    if (clr) clr.addEventListener('click', () => assignSector(id, ''));
+  });
+}
+
+async function assignSector(sectorId, userId) {
+  if (!isAdmin) return toast('Solo administradores pueden asignar sectores', true);
+  if (!userId) {
+    const { error } = await db.from('sectores_asignaciones').delete().eq('sector_id', sectorId);
+    if (error) return toast(error.message, true);
+    delete asignaciones[sectorId];
+  } else {
+    const { error } = await db.from('sectores_asignaciones').upsert(
+      {
+        sector_id: sectorId,
+        user_id: userId,
+        assigned_by: currentUser ? currentUser.id : null,
+        assigned_at: new Date().toISOString(),
+      },
+      { onConflict: 'sector_id' }
+    );
+    if (error) return toast(error.message, true);
+    asignaciones[sectorId] = userId;
+  }
+  toast('Asignación guardada');
+  renderAssign();
+  renderSectorList();
+}
+
+// ============================================================
+// ESTADO DEL PUNTO
+// ============================================================
+async function setEstadoPunto(id, estado) {
+  if (!isAdmin) return toast('Solo administradores pueden cambiar el estado', true);
+  const p = allPoints.find((x) => x.id === id);
+  if (!p) return;
+  if ((p.estado || 'pendiente') === estado) return;
+  const { error } = await db
+    .from('puntos')
+    .update({ estado, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) return toast(error.message, true);
+  p.estado = estado;
+  renderList();
+  renderSectorList();
+  renderSectorDetail();
 }
 
 function setSectorHover(id, on) {
@@ -2110,10 +2406,27 @@ document.getElementById('sectorCancelBtn').addEventListener('click', () => {
 document.getElementById('sectorSaveBtn').addEventListener('click', saveSector);
 document.getElementById('clearSectorSel').addEventListener('click', () => setSectorSelected(null));
 
+document.getElementById('editSectorsBtn').addEventListener('click', (e) => {
+  if (!isAdmin) return toast('Solo administradores pueden editar sectores', true);
+  editSectorsMode = !editSectorsMode;
+  e.currentTarget.classList.toggle('active', editSectorsMode);
+  renderSectorList();
+});
+document.getElementById('assignSectorsBtn').addEventListener('click', (e) => {
+  if (!isAdmin) return toast('Solo administradores pueden asignar sectores', true);
+  assignOpen = !assignOpen;
+  e.currentTarget.classList.toggle('active', assignOpen);
+  renderAssign();
+});
+
 document.addEventListener('keydown', (e) => {
   const typing = e.target && e.target.matches && e.target.matches('input, textarea');
 
   if (e.key === 'Escape') {
+    if (document.getElementById('pointDetail').classList.contains('visible')) {
+      closePointDetail();
+      return;
+    }
     if (settingsModal.classList.contains('visible')) {
       settingsModal.classList.remove('visible');
       return;

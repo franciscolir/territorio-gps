@@ -78,7 +78,7 @@
   }
   #sidebar .panel-head h2 { font-size: 14px; margin-top: 12px; margin-bottom: 8px; }
   #sidebar .panel-head select {
-    width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1;
+    flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid #cbd5e1;
     border-radius: 8px; font-size: 13px; background: #fff;
   }
   #sidebar .panel-head select:focus { outline: 2px solid #3b82f6; }
@@ -357,10 +357,13 @@
 
   /* Toggle sidebar */
   #toggleSidebar {
-    position: absolute; top: 10px; left: 10px; z-index: 11;
+    width: 36px; height: 36px; flex: none; cursor: pointer; font-size: 16px;
     background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
-    width: 36px; height: 36px; cursor: pointer; font-size: 16px;
   }
+  #toggleSidebar.floating {
+    position: absolute; top: 10px; left: 10px; z-index: 11;
+  }
+  #sidebar .comuna-row { display: flex; gap: 8px; align-items: center; }
 </style>
 </head>
 <body>
@@ -396,13 +399,14 @@
   </header>
 
   <div id="main">
-    <button id="toggleSidebar" title="Mostrar/ocultar panel">☰</button>
-
     <aside id="sidebar">
       <div class="panel-head">
-        <select id="comunaSel" aria-label="Elegir comuna">
-          <option value="">Todas las comunas</option>
-        </select>
+        <div class="comuna-row">
+          <button id="toggleSidebar" title="Mostrar/ocultar panel">☰</button>
+          <select id="comunaSel" aria-label="Elegir comuna">
+            <option value="">Todas las comunas</option>
+          </select>
+        </div>
         <div class="sect-head">
           <h2>Sectores</h2>
           <button id="drawBtn" title="Dibujar un sector a mano">✏️ Dibujar</button>
@@ -2021,8 +2025,19 @@ function clearReference() {
 // ============================================================
 document.getElementById('newPointBtn').addEventListener('click', () => openNewModal());
 
-document.getElementById('toggleSidebar').addEventListener('click', () => {
-  document.getElementById('sidebar').classList.toggle('collapsed');
+document.getElementById('toggleSidebar').addEventListener('click', (e) => {
+  const sidebar = document.getElementById('sidebar');
+  const collapsed = sidebar.classList.toggle('collapsed');
+  const btn = e.currentTarget;
+  const row = document.querySelector('.comuna-row');
+  if (collapsed) {
+    // Sale del panel para seguir visible cuando el panel está fuera de pantalla
+    sidebar.parentNode.insertBefore(btn, sidebar);
+    btn.classList.add('floating');
+  } else {
+    row.insertBefore(btn, row.firstChild);
+    btn.classList.remove('floating');
+  }
   setTimeout(() => map && map.resize(), 300);
 });
 

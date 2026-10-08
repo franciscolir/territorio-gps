@@ -1794,7 +1794,8 @@ async function loadSectores() {
 
 function sectorsVisible(s) {
   const sel = comunaSel.value;
-  return !sel || !s.comuna || s.comuna === sel;
+  // Solo se muestran sectores de la comuna seleccionada; sin comuna, ninguno
+  return !!sel && s.comuna === sel;
 }
 
 function updateSectorsSource() {

@@ -296,3 +296,115 @@ create policy "app_config_update_admin" on public.app_config
 insert into public.app_config (key, value)
 values ('comunas_activas', null)
 on conflict (key) do nothing;
+
+-- ============================================================
+-- 8. GUARDAR SECTOR CON RECORTE GARANTIZADO
+-- ============================================================
+-- Pieza poligonal de mayor área: makevalid / intersection / difference
+-- pueden devolver colecciones o varios trozos (p.ej. un vecino parte el
+-- sector en dos). Se usa dentro de guardar_sector.
+create or replace function public.mayor_poligono(g geometry)
+returns geometry
+language sql
+immutable
+set search_path = public, extensions
+as $$
+  select d.geom
+  from (
+    select (st_dump(st_makevalid(g))).geom as geom
+  ) d
+  where st_geometrytype(d.geom) = 'ST_Polygon'
+  order by st_area(d.geom) desc
+  limit 1;
+$$;
+
+-- Recorta el polígono nuevo antes de insertarlo:
+--   1. nunca fuera de la comuna elegida (o de la RM si no hay comuna)
+--   2. nunca solapando sectores existentes (se resta la unión de vecinos)
+--   3. misma rejilla de coordenadas (≈1 cm) en todos los sectores
+-- Devuelve { id, pct, recortado }: pct = % del área dibujada que sobrevivió
+-- al recorte; si es < 2% se rechaza (caso "lo dibujó casi sobre otro").
+create or replace function public.guardar_sector(
+  p_comuna text,
+  p_nombre text,
+  p_color text,
+  p_geom geometry
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = public, extensions
+as $$
+declare
+  v_geom  geometry;
+  v_base  geometry;
+  v_nb    geometry;
+  v_area0 double precision;
+  v_pct   double precision;
+  v_id    uuid;
+begin
+  if p_geom is null then
+    raise exception 'La geometría dibujada está vacía';
+  end if;
+
+  -- Polígono válido (si el trazo se autointersecta, nos quedamos con la
+  -- pieza mayor) y su área de referencia
+  v_geom := public.mayor_poligono(p_geom);
+  if v_geom is null or st_isempty(v_geom) then
+    raise exception 'La geometría dibujada no es un polígono válido';
+  end if;
+  v_area0 := st_area(v_geom::geography);
+
+  -- 1) Contra la comuna
+  v_base :=
+    case
+      when p_comuna is null then
+        (select st_union(c.geom) from public.comunas_rm c)
+      else
+        (select c.geom from public.comunas_rm c where c.nombre = p_comuna)
+    end;
+  if p_comuna is not null and v_base is null then
+    raise exception 'Comuna no encontrada: %', p_comuna;
+  end if;
+  if v_base is not null then
+    v_geom := public.mayor_poligono(st_intersection(v_geom, v_base));
+    if v_geom is null or st_isempty(v_geom) then
+      raise exception 'El sector queda completamente fuera de la comuna';
+    end if;
+  end if;
+
+  -- 2) Contra los sectores existentes (cero solapes)
+  select st_union(public.mayor_poligono(s.geom))
+  into v_nb
+  from public.sectores s;
+  if v_nb is not null then
+    v_geom := public.mayor_poligono(st_difference(v_geom, v_nb));
+    if v_geom is null or st_isempty(v_geom) then
+      raise exception 'El sector queda completamente dentro de otro sector';
+    end if;
+  end if;
+
+  -- 3) Regla: como mínimo el 2% del área dibujada debe sobrevivir
+  v_pct := st_area(v_geom::geography) / nullif(v_area0, 0);
+  if v_pct is null or v_pct < 0.02 then
+    raise exception 'Quedó menos del 2%% del área dibujada (se solapa casi por completo con otro sector)';
+  end if;
+
+  -- 4) Misma rejilla que el resto de los sectores e insert
+  v_geom := st_snaptogrid(v_geom, 1e-7);
+  v_geom := public.mayor_poligono(v_geom);
+  if v_geom is null or st_isempty(v_geom) then
+    raise exception 'No se pudo preparar la geometría para guardar';
+  end if;
+
+  insert into public.sectores (comuna, nombre, color, geom, created_by)
+  values (p_comuna, p_nombre, p_color, v_geom, auth.uid())
+  returning id into v_id;
+
+  return jsonb_build_object(
+    'id', v_id,
+    'pct', round(v_pct * 100)::int,
+    'recortado', v_pct < 0.995
+  );
+end;
+$$;

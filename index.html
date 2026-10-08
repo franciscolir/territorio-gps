@@ -558,6 +558,8 @@ let drawActive = false;      // ¿modo dibujo activo?
 let drawColor = '#3b82f6';   // color del sector en curso
 let drawVerts = [];          // vértices [[lng,lat], ...]
 let drawHover = null;        // última posición del cursor (goma elástica)
+let drawSnap = null;         // { a, b } arista de referencia con la que se enganchó
+let snapRingsCache = null;   // anillos de referencia para el snap (comuna + sectores)
 let pendingSector = null;    // polígono cerrado esperando guardado
 let sectorHoverId = null;    // sector bajo el cursor
 let sectorSelectedId = null; // sector seleccionado (habilita marcar puntos)
@@ -668,6 +670,7 @@ async function loadComunas() {
   if (error) { console.error(error); toast('Error cargando comunas', true); return; }
 
   allComunas = data.map((c) => ({ nombre: c.nombre, geom: c.geom }));
+  snapRingsCache = null;
   populateComunaFilter();
 
   // Construir FeatureCollection
@@ -758,6 +761,7 @@ function onComunaChange() {
   const nombre = comunaSel.value;
   const comuna = allComunas.find((c) => c.nombre === nombre);
   const hayCapas = map && map.getLayer('comunas-fill');
+  snapRingsCache = null;
 
   if (hayCapas) {
     for (const layerId of ['comunas-fill', 'comunas-outline', 'comunas-labels']) {
@@ -1477,6 +1481,20 @@ function initSectorLayers() {
       },
     });
   }
+
+  // Arista de referencia enganchada por el snap
+  if (!map.getSource('snap-edge')) {
+    map.addSource('snap-edge', { type: 'geojson', data: emptyFC() });
+  }
+  if (!map.getLayer('snap-edge')) {
+    map.addLayer({
+      id: 'snap-edge',
+      type: 'line',
+      source: 'snap-edge',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#f97316', 'line-width': 5 },
+    });
+  }
 }
 
 function setDrawColor(c) {
@@ -1523,6 +1541,7 @@ async function loadSectores() {
   }
   sectorListError = null;
   allSectores = data || [];
+  snapRingsCache = null;
   updateSectorsSource();
   renderSectorList();
 }
@@ -1671,6 +1690,7 @@ function startDraw() {
   drawActive = true;
   drawVerts = [];
   drawHover = null;
+  snapRingsCache = null;
   pendingSector = null;
 
   // El modo referencia pisaría el primer clic: lo apagamos
@@ -1694,6 +1714,7 @@ function stopDraw() {
   drawActive = false;
   drawVerts = [];
   drawHover = null;
+  setDrawSnap(null);
   pendingSector = null;
 
   if (map) {
@@ -1750,11 +1771,115 @@ function updateDraw() {
   }
 }
 
+// ============================================================
+// SNAP A BORDES EXISTENTES (comuna + sectores) mientras dibujas
+// ============================================================
+const SNAP_PX = 14;
+
+function snapRefRings() {
+  if (snapRingsCache) return snapRingsCache;
+  const rings = [];
+  const push = (g) => {
+    if (!g || !g.coordinates) return;
+    const polys = g.type === 'MultiPolygon' ? g.coordinates : [g.coordinates];
+    for (const poly of polys) for (const ring of poly) rings.push(ring);
+  };
+  const sel = comunaSel.value;
+  if (sel) {
+    const c = allComunas.find((x) => x.nombre === sel);
+    if (c) push(c.geom);
+  } else {
+    for (const c of allComunas) push(c.geom);
+  }
+  for (const s of allSectores) if (sectorsVisible(s)) push(s.geom);
+  snapRingsCache = rings;
+  return rings;
+}
+
+// Engancha (lng, lat) al vértice/arista de referencia más cercano (≤ SNAP_PX).
+// Vértices ganan siempre: son coordenadas exactas del polígono de referencia.
+// Proyección en espacio de pantalla: es donde MapLibre pinta las líneas.
+function snapDrawPoint(lng, lat, point) {
+  const rings = snapRefRings();
+  if (!rings.length) return null;
+
+  const p0 = map.unproject([point.x, point.y]);
+  const pX = map.unproject([point.x + SNAP_PX, point.y]);
+  const pY = map.unproject([point.x, point.y + SNAP_PX]);
+  const mLng = Math.abs(pX.lng - p0.lng);
+  const mLat = Math.abs(pY.lat - p0.lat);
+  const cos0 = Math.cos((lat * Math.PI) / 180);
+
+  let bestV = null;
+  let bestE = null;
+
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length - 1; i++) {
+      const a = ring[i];
+      const b = ring[i + 1];
+      // Filtro AABB barato en grados (ventana + margen de tolerancia)
+      if (
+        Math.min(a[0], b[0]) - mLng > lng || Math.max(a[0], b[0]) + mLng < lng ||
+        Math.min(a[1], b[1]) - mLat > lat || Math.max(a[1], b[1]) + mLat < lat
+      ) continue;
+
+      const dvx = (a[0] - lng) * cos0;
+      const dvy = a[1] - lat;
+      const dv2 = dvx * dvx + dvy * dvy;
+      if (!bestV || dv2 < bestV.d2) bestV = { d2: dv2, coord: a };
+
+      // Proyección del cursor sobre la arista (lineal en lng/lat, como el GeoJSON)
+      const dx = (b[0] - a[0]) * cos0;
+      const dy = b[1] - a[1];
+      const dd = dx * dx + dy * dy;
+      const px = (lng - a[0]) * cos0;
+      const py = lat - a[1];
+      let t = dd > 0 ? (px * dx + py * dy) / dd : 0;
+      if (t < 0) t = 0;
+      else if (t > 1) t = 1;
+      const sx = a[0] + t * (b[0] - a[0]);
+      const sy = a[1] + t * (b[1] - a[1]);
+      const dex = (sx - lng) * cos0;
+      const dey = sy - lat;
+      const de2 = dex * dex + dey * dey;
+      if (!bestE || de2 < bestE.d2) bestE = { d2: de2, coord: [sx, sy], a, b };
+    }
+  }
+
+  const toPx = (c) => {
+    const p = map.project(c);
+    return Math.hypot(p.x - point.x, p.y - point.y);
+  };
+  if (bestV && toPx(bestV.coord) <= SNAP_PX) return { coord: bestV.coord, edge: null };
+  if (bestE && toPx(bestE.coord) <= SNAP_PX) return { coord: bestE.coord, edge: [bestE.a, bestE.b] };
+  return null;
+}
+
+function setDrawSnap(edge) {
+  const has = !!edge;
+  const changed = has !== !!drawSnap || (has && (drawSnap.a !== edge[0] || drawSnap.b !== edge[1]));
+  if (!changed) return;
+  drawSnap = has ? { a: edge[0], b: edge[1] } : null;
+  if (!map || !map.getSource('snap-edge')) return;
+  map.getSource('snap-edge').setData(
+    drawSnap
+      ? {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              properties: {},
+              geometry: { type: 'LineString', coordinates: [drawSnap.a, drawSnap.b] },
+            },
+          ],
+        }
+      : emptyFC()
+  );
+}
+
 function handleDrawClick(e) {
   // Con el modal abierto el mapa queda "congelado" (evita vértices fantasma)
   if (document.getElementById('sectorModal').classList.contains('visible')) return;
-
-  const pt = [e.lngLat.lng, e.lngLat.lat];
 
   // Clic sobre el primer vértice = cerrar el sector
   if (drawVerts.length >= 3 && distPx(drawVerts[0], e.point) <= 12) {
@@ -1763,13 +1888,16 @@ function handleDrawClick(e) {
     return;
   }
 
-  drawVerts.push(pt);
+  const snap = snapDrawPoint(e.lngLat.lng, e.lngLat.lat, e.point);
+  drawVerts.push(snap ? snap.coord : [e.lngLat.lng, e.lngLat.lat]);
   updateDraw();
 }
 
 function onMapMove(e) {
   if (drawActive) {
-    drawHover = [e.lngLat.lng, e.lngLat.lat];
+    const snap = snapDrawPoint(e.lngLat.lng, e.lngLat.lat, e.point);
+    drawHover = snap ? snap.coord : [e.lngLat.lng, e.lngLat.lat];
+    setDrawSnap(snap ? snap.edge : null);
     map.getCanvas().style.cursor = 'crosshair';
     updateDraw();
     return;
@@ -1837,7 +1965,12 @@ function closeDraw() {
   document.getElementById('sectorModal').classList.add('visible');
 
   drawHover = null;
+  setDrawSnap(null);
   updateDraw();
+}
+
+function ringToEwkt(ring) {
+  return 'SRID=4326;POLYGON((' + ring.map(([lng, lat]) => `${lng} ${lat}`).join(',') + '))';
 }
 
 async function saveSector() {
@@ -1846,21 +1979,36 @@ async function saveSector() {
   const nombre =
     document.getElementById('sectorNombre').value.trim() || `Sector ${allSectores.length + 1}`;
 
-  const { error } = await db.from('sectores').insert({
-    comuna: pendingSector.comuna,
-    nombre,
-    color: pendingSector.color,
-    geom: { type: 'Polygon', coordinates: [pendingSector.ring] },
-    created_by: currentUser.id,
+  // guardar_sector recorta en el servidor: contra la comuna (nunca sale)
+  // y contra los sectores existentes (cero solapes)
+  const { data, error } = await db.rpc('guardar_sector', {
+    p_comuna: pendingSector.comuna,
+    p_nombre: nombre,
+    p_color: pendingSector.color,
+    p_geom: ringToEwkt(pendingSector.ring),
   });
-  if (error) { err.textContent = error.message; return; }
+  if (error) {
+    const missing = /could not find the function|does not exist/i.test(error.message || '');
+    err.textContent = missing
+      ? 'Falta la función SQL: ejecuta la sección 8 de schema.sql en Supabase'
+      : (error.message || 'No se pudo guardar el sector');
+    return;
+  }
 
-  const n = pendingSector.count;
   pendingSector = null;
   document.getElementById('sectorModal').classList.remove('visible');
   stopDraw();
-  toast(`Sector guardado · ${n} punto${n === 1 ? '' : 's'} incluido${n === 1 ? '' : 's'}`);
   await loadSectores();
+
+  // Recién tras el recorte se cuentan los puntos que quedaron dentro
+  const saved = data && data.id ? allSectores.find((s) => s.id === data.id) : null;
+  const n = saved ? countPointsInSector(saved) : 0;
+  const pts = `· ${n} punto${n === 1 ? '' : 's'} incluido${n === 1 ? '' : 's'}`;
+  if (data && data.recortado) {
+    toast(`Sector guardado recortado a los límites · ${data.pct}% del área dibujada ${pts}`);
+  } else {
+    toast(`Sector guardado ${pts}`);
+  }
 }
 
 // --- Toolbar y atajos ---

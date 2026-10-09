@@ -121,10 +121,10 @@
   }
   #sidebar .sect-zone.compact { flex: 0 1 auto; min-height: 0; max-height: 58%; overflow-y: auto; }
 
-  /* Zona de puntos: fondo diferenciado (azulado) para distinguirla de un vistazo */
+  /* Zona de puntos: fondo con mayor contraste para distinguirla de los sectores */
   #sidebar .pts-zone {
     flex: 1; min-height: 0; overflow-y: auto;
-    background: var(--surface-low); border-top: 1px solid var(--outline-variant);
+    background: var(--surface-high); border-top: 2px solid var(--secondary);
     padding: 8px 14px; display: flex; flex-direction: column; gap: 7px;
   }
   #sidebar .pts-zone.compact { flex: 0 1 auto; min-height: 0; max-height: 45%; overflow-y: auto; }
@@ -368,15 +368,35 @@
   #sectorDetail .dc-prog-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--on-surface-variant); }
   #sectorDetail .progress { width: 100%; height: 9px; background: var(--surface-high); border-radius: 999px; margin: 0; overflow: hidden; display: flex; }
   #sectorDetail .progress > i { display: block; height: 100%; }
-  #sectorDetail .d-actions { display: flex; gap: 6px; }
-  #sectorDetail .d-actions button {
-    flex: 1; padding: 7px 6px; font-size: 11.5px; font-weight: 600; border-radius: var(--r-md);
-    border: 1px solid var(--outline-variant); background: var(--surface-lowest); color: var(--on-surface);
-    cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-family: inherit;
+  #sectorDetail .dc-tools { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+  #sectorDetail .sd-iconbtn {
+    width: 30px; height: 30px; border: 1px solid var(--outline-variant); background: var(--surface-lowest);
+    color: var(--primary); border-radius: var(--r-md); cursor: pointer; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center; font-family: inherit;
   }
-  #sectorDetail .d-actions button:hover { background: var(--surface-high); }
-  #sectorDetail .d-actions button.danger-text { color: var(--error); border-color: rgba(186,26,26,.35); }
-  #sectorDetail .d-actions button.danger-text:hover { background: var(--error-container); }
+  #sectorDetail .sd-iconbtn:hover { background: var(--surface-high); }
+  #sectorDetail .sd-menu-wrap { position: relative; }
+  #sectorDetail .sd-menu-pop {
+    position: absolute; top: 34px; right: 0; z-index: 5;
+    background: var(--surface-lowest); border: 1px solid var(--outline-variant);
+    border-radius: var(--r-md); box-shadow: var(--shadow-2); padding: 4px;
+    display: none; flex-direction: column; gap: 2px; min-width: 150px;
+  }
+  #sectorDetail .sd-menu-pop.visible { display: flex; }
+  #sectorDetail .sd-menu-pop button {
+    display: flex; align-items: center; gap: 6px; border: 0; background: transparent;
+    color: var(--on-surface); font-size: 12.5px; font-weight: 600; padding: 8px 10px;
+    border-radius: var(--r-sm); cursor: pointer; text-align: left; font-family: inherit; white-space: nowrap;
+  }
+  #sectorDetail .sd-menu-pop button:hover { background: var(--surface-mid); }
+  #sectorDetail .sd-menu-pop button.danger-text { color: var(--error); }
+  #sectorDetail .sd-menu-pop button.danger-text:hover { background: var(--error-container); }
+  #sectorDetail .sd-palette {
+    display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px;
+    border-top: 1px dashed var(--outline-variant);
+  }
+  #sectorDetail .sd-palette .chip { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+  #sectorDetail .sd-palette .chip.selected { border-color: var(--on-surface); }
 
   .assign-panel { border: 1px solid var(--outline-variant); border-radius: var(--r-lg); padding: 10px; background: var(--surface-lowest); box-shadow: var(--shadow-1); }
   .assign-panel .a-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12px; font-weight: 700; color: var(--primary); }
@@ -714,11 +734,12 @@
   .map-fabs button:hover { background: var(--surface-mid); }
   .map-fabs button .ms { font-size: 20px; }
 
-  /* Acciones del panel → mapa abajo-derecha */
+  /* Acciones del panel → mapa abajo-derecha (L invertida: columna + fila) */
   .map-fabs.bottom {
-    top: auto; bottom: 16px; right: 16px; flex-direction: column; align-items: flex-end;
+    top: auto; bottom: 16px; right: 16px; flex-direction: column; align-items: flex-end; gap: 8px;
   }
   .map-fabs.bottom .fab-group { flex-direction: row; align-items: center; }
+  .map-fabs.bottom .fab-group.fab-col { flex-direction: column; }
   .map-fabs.bottom button.active { background: var(--secondary); color: var(--on-secondary); }
   #newPointFab {
     width: 44px; height: 44px; border-radius: 50%;
@@ -731,7 +752,7 @@
 
   /* ============ RIEL DE BORDE (toggle + lupa) ============ */
   #edgeRail {
-    position: absolute; top: 16px; left: calc(420px - 18px); z-index: 40;
+    position: absolute; top: 16px; left: calc(420px + 8px); z-index: 40;
     display: flex; flex-direction: column; gap: 8px; transition: left .25s;
   }
   #main.sb-collapsed #edgeRail { left: 0; }
@@ -744,11 +765,16 @@
   #edgeRail button:hover { background: var(--surface-mid); }
   #edgeRail button .ms { font-size: 18px; }
   #sidebar .comuna-row { display: flex; gap: 8px; align-items: center; }
+  #sidebar .comuna-row .row-label {
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--on-surface-variant); flex-shrink: 0;
+  }
+  #sidebar .comuna-row select { max-width: 240px; }
 
   /* Overlay de búsqueda unificada (sobre el mapa, a la derecha del riel) */
   #searchOverlay {
-    position: absolute; top: 16px; left: calc(420px + 26px); z-index: 39;
-    width: 380px; max-width: calc(100vw - 480px);
+    position: absolute; top: 16px; left: calc(420px + 52px); z-index: 39;
+    width: 380px; max-width: calc(100vw - 520px);
     display: none; align-items: center; gap: 8px;
     background: var(--surface-lowest); border: 1px solid var(--outline-variant);
     border-radius: var(--r-lg); padding: 6px 10px;
@@ -813,6 +839,7 @@
           <button id="logoutBtn" class="ghost icon" title="Cerrar sesión"><span class="ms ms-sm">logout</span></button>
         </div>
         <div class="comuna-row">
+          <label for="comunaSel" class="row-label">Comuna</label>
           <select id="comunaSel" aria-label="Elegir comuna">
             <option value="">Todas las comunas</option>
           </select>
@@ -883,19 +910,19 @@
       </div>
     </div>
 
-    <!-- Acciones del panel → mapa abajo-derecha -->
+    <!-- Acciones del panel → mapa abajo-derecha (L invertida) -->
     <div class="map-fabs bottom">
+      <div class="fab-group fab-col">
+        <button id="newPointFab" title="Nuevo punto"><span class="ms">add_location</span></button>
+        <button id="refBtn" title="Modo referencia"><span class="ms">target</span></button>
+        <button id="settingsBtn" title="Ajustes"><span class="ms">settings</span></button>
+      </div>
       <div class="fab-group">
         <div class="scope-seg" id="scopeSeg" title="Alcance de puntos en el mapa">
           <button id="scopeRegion" data-scope="region">Toda RM</button>
           <button id="scopeCommune" data-scope="comuna">Comuna</button>
           <button id="scopeSector" data-scope="sector">Sector</button>
         </div>
-      </div>
-      <div class="fab-group">
-        <button id="newPointFab" title="Nuevo punto"><span class="ms">add_location</span></button>
-        <button id="refBtn" title="Modo referencia"><span class="ms">target</span></button>
-        <button id="settingsBtn" title="Ajustes"><span class="ms">settings</span></button>
       </div>
     </div>
 
@@ -2478,6 +2505,12 @@ function renderSectorDetail() {
   if (!s) { box.innerHTML = ''; return; }
   const st = sectorBreakdown(s);
   const quien = asignaciones[s.id] ? emailDe(asignaciones[s.id]) : '';
+  const palette = isAdmin ? `
+      <div class="sd-palette" id="sdPalette" style="display:none">
+        ${SECTOR_COLORS.map((c) => `
+          <button class="chip${c === s.color ? ' selected' : ''}" data-color="${c}"
+                  style="background:${c}" title="Color"></button>`).join('')}
+      </div>` : '';
   box.innerHTML = `
     <div class="detail-card">
       <div class="dc-top">
@@ -2485,7 +2518,19 @@ function renderSectorDetail() {
           <span class="dc-comuna">${s.comuna ? escapeHtml(s.comuna) : '—'}</span>
           <h3><span class="dot" style="background:${escapeHtml(s.color || '#1d4ed8')}"></span>${escapeHtml(s.nombre)}</h3>
         </div>
-        <span class="who${quien ? '' : ' none'}">${escapeHtml(quien || 'Sin asignar')}</span>
+        <div class="dc-tools">
+          <span class="who${quien ? '' : ' none'}">${escapeHtml(quien || 'Sin asignar')}</span>
+          ${isAdmin ? `
+          <div class="sd-menu-wrap">
+            <button id="sdMenu" class="sd-iconbtn" title="Opciones del sector"><span class="ms ms-sm">more_vert</span></button>
+            <div class="sd-menu-pop" id="sdMenuPop">
+              <button id="sdRename"><span class="ms ms-sm">edit</span>Renombrar</button>
+              <button id="sdEdit"><span class="ms ms-sm">palette</span>Editar</button>
+              <button id="sdDel" class="danger-text"><span class="ms ms-sm">delete</span>Eliminar</button>
+            </div>
+          </div>` : ''}
+          <button id="sdFocus" class="sd-iconbtn" title="Ver en el mapa"><span class="ms ms-sm">center_focus_strong</span></button>
+        </div>
       </div>
       <div class="stats4">
         <div><span>Total</span><b>${st.total}</b></div>
@@ -2498,18 +2543,42 @@ function renderSectorDetail() {
         <span class="s-pct">${st.pct}% Completado</span>
       </div>
       ${progressBarHtml(st)}
-      <div class="d-actions">
-        <button id="sdFocus"><span class="ms ms-sm">center_focus_strong</span>Ver en mapa</button>
-        ${isAdmin ? '<button id="sdEdit"><span class="ms ms-sm">edit</span>Renombrar</button><button id="sdDel" class="danger-text"><span class="ms ms-sm">delete</span>Eliminar</button>' : ''}
-      </div>
+      ${palette}
     </div>`;
   const f = document.getElementById('sdFocus');
   if (f) f.addEventListener('click', () => focusSector(s.id));
-  const ed = document.getElementById('sdEdit');
-  if (ed) ed.addEventListener('click', () => renameSector(s.id));
-  const dl = document.getElementById('sdDel');
-  if (dl) dl.addEventListener('click', () => deleteSector(s.id));
+  const menuBtn = document.getElementById('sdMenu');
+  const menuPop = document.getElementById('sdMenuPop');
+  if (menuBtn && menuPop) {
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menuPop.classList.toggle('visible');
+    });
+    document.getElementById('sdRename').addEventListener('click', (e) => {
+      e.stopPropagation(); menuPop.classList.remove('visible'); renameSector(s.id);
+    });
+    document.getElementById('sdDel').addEventListener('click', (e) => {
+      e.stopPropagation(); menuPop.classList.remove('visible'); deleteSector(s.id);
+    });
+    const pal = document.getElementById('sdPalette');
+    document.getElementById('sdEdit').addEventListener('click', (e) => {
+      e.stopPropagation(); menuPop.classList.remove('visible');
+      pal.style.display = pal.style.display === 'none' ? 'flex' : 'none';
+    });
+    if (pal) {
+      pal.querySelectorAll('.chip').forEach((chip) => {
+        chip.addEventListener('click', (e) => { e.stopPropagation(); changeSectorColor(s.id, chip.dataset.color); });
+      });
+    }
+  }
 }
+
+// Cierra el menú de opciones del sector al hacer clic fuera
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.sd-menu-wrap')) {
+    document.querySelectorAll('.sd-menu-pop.visible').forEach((p) => p.classList.remove('visible'));
+  }
+});
 
 // Tabla de asignación de sectores a usuarios
 function renderAssign() {

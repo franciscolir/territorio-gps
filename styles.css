@@ -22,6 +22,11 @@
     --error: #ba1a1a; --error-container: #ffdad6; --on-error-container: #93000a;
     --green: #79db8d; --on-green: #005323;
     --green-strong: #95f8a7; --on-green-strong: #00210a; --tertiary-container: #003f19;
+    /* Semáforo de estados: pendiente azul · visitado verde · erróneo gris · no pasar rojo */
+    --est-pendiente: #4069f2; --est-pendiente-on: #ffffff;
+    --est-visitado: #95f8a7; --est-visitado-on: #00210a;
+    --est-erroneo: #73777f; --est-erroneo-on: #ffffff;
+    --est-no_pasar: #ba1a1a; --est-no_pasar-on: #ffffff;
     --inverse-surface: #233144; --inverse-on-surface: #eaf1ff; --inverse-primary: #a7caf3;
     --r-sm: 4px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px;
     --shadow-1: 0 1px 2px rgba(13,28,46,.07), 0 1px 3px rgba(13,28,46,.05);
@@ -217,10 +222,10 @@
 
   /* ============ ESTADO DEL PUNTO + DETALLE ============ */
   .estado-tag { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; }
-  .estado-pendiente { background: var(--surface-high); color: var(--on-surface-variant); }
-  .estado-visitado { background: rgba(121,219,141,.4); color: var(--on-green); }
-  .estado-erroneo { background: var(--error-container); color: var(--on-error-container); }
-  .estado-no_pasar { background: var(--primary-container); color: #fff; }
+  .estado-pendiente { background: var(--est-pendiente); color: var(--est-pendiente-on); }
+  .estado-visitado { background: var(--est-visitado); color: var(--est-visitado-on); }
+  .estado-erroneo { background: var(--est-erroneo); color: var(--est-erroneo-on); }
+  .estado-no_pasar { background: var(--est-no_pasar); color: var(--est-no_pasar-on); }
 
   /* Segmented control de estados */
   .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin-top: 9px; background: var(--surface-mid); border-radius: var(--r-md); padding: 3px; }
@@ -233,10 +238,10 @@
   .seg button .ic { font-size: 15px; line-height: 1; }
   .seg button:hover { color: var(--on-surface); }
   .seg button.active { box-shadow: var(--shadow-1); }
-  .seg button[data-estado="pendiente"].active { background: var(--surface-lowest); color: var(--primary); }
-  .seg button[data-estado="visitado"].active { background: var(--green); color: var(--on-green); }
-  .seg button[data-estado="erroneo"].active { background: var(--error); color: #fff; }
-  .seg button[data-estado="no_pasar"].active { background: var(--primary-container); color: #fff; }
+  .seg button[data-estado="pendiente"].active { background: var(--est-pendiente); color: var(--est-pendiente-on); }
+  .seg button[data-estado="visitado"].active { background: var(--est-visitado); color: var(--est-visitado-on); }
+  .seg button[data-estado="erroneo"].active { background: var(--est-erroneo); color: var(--est-erroneo-on); }
+  .seg button[data-estado="no_pasar"].active { background: var(--est-no_pasar); color: var(--est-no_pasar-on); }
 
   /* Chips de filtro por estado */
   .estado-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -251,9 +256,9 @@
   /* Barra de avance multicolor (paleta front) */
   .progress.multi { display: flex; }
   .progress.multi > i { height: 100%; display: block; }
-  .progress .seg-visited { background: var(--green); }
-  .progress .seg-erroneo { background: var(--error); }
-  .progress .seg-no_pasar { background: var(--primary-container); }
+  .progress .seg-visited { background: var(--est-visitado); }
+  .progress .seg-erroneo { background: var(--est-erroneo); }
+  .progress .seg-no_pasar { background: var(--est-no_pasar); }
 
   /* Toast con Deshacer (pill inferior-derecha, estilo front) */
   #undoToast {
@@ -697,10 +702,10 @@
   }
   .pin-wrap:active .pin { scale: 1.05; }
   .pin .pin-ic { font-size: 15px; line-height: 1; }
-  .pin[data-est="pendiente"] { background: var(--primary); color: var(--on-primary); }
-  .pin[data-est="visitado"] { background: var(--green); color: var(--on-green); }
-  .pin[data-est="erroneo"] { background: var(--error); color: #fff; }
-  .pin[data-est="no_pasar"] { background: var(--primary-container); color: #fff; }
+  .pin[data-est="pendiente"] { background: var(--est-pendiente); color: var(--est-pendiente-on); }
+  .pin[data-est="visitado"] { background: var(--est-visitado); color: var(--est-visitado-on); }
+  .pin[data-est="erroneo"] { background: var(--est-erroneo); color: var(--est-erroneo-on); }
+  .pin[data-est="no_pasar"] { background: var(--est-no_pasar); color: var(--est-no_pasar-on); }
   .pin[data-est="ref"] { background: #f59e0b; color: #422006; }
   .pin-wrap.is-ref .pin { outline: 3px solid #f59e0b; outline-offset: 2px; }
   .pin-wrap.pin-focus .pin { outline: 3px solid var(--secondary); outline-offset: 3px; }

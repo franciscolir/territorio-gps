@@ -161,6 +161,7 @@ producción**, aplica solo los cambios nuevos, en orden:
 | [`migrations/003_colaborador.sql`](migrations/003_colaborador.sql) | Ciclo de vida de asignaciones (activo/devuelto), RLS por sector activo, RPCs `devolver_sector` / `actualizar_punto_terreno` / `eliminar_punto_propio` |
 | [`migrations/004_grants_tablas.sql`](migrations/004_grants_tablas.sql) | Grants explícitos de `comunas_rm`/`profiles`/`puntos` para proyectos Supabase sin default privileges |
 | [`migrations/005_asignaciones_y_estado.sql`](migrations/005_asignaciones_y_estado.sql) | Clave surrogate en `sectores_asignaciones` (permite reasignar tras devolver), unicidad de activos y el colaborador ya puede cambiar estados |
+| [`migrations/006_grants_asignaciones.sql`](migrations/006_grants_asignaciones.sql) | Grants de `sectores` y `sectores_asignaciones` para `authenticated` (faltaban en la 004; sin ellos la app de terreno no carga el sector asignado) |
 
 Todas son idempotentes (se pueden re-ejecutar):
 

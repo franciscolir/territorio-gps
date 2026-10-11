@@ -18,8 +18,18 @@ const COLA_KEY = 'gps_movil_cola';
 // CLIENTE + ESTADO
 // ============================================================
 const { createClient } = supabase;
+// storageKey propio: la sesión del móvil no compite con la del escritorio
+// (misma URL, dos pestañas). El lock serializa refreshes entre pestañas.
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storageKey: 'gps-movil-session',
+    lock: (name, acquireTimeout, fn) =>
+      (typeof navigator !== 'undefined' && navigator.locks)
+        ? navigator.locks.request(name, () => fn())
+        : fn(),
+  },
 });
 
 let user = null;
@@ -874,6 +884,11 @@ setInterval(() => { if (cola.length && navigator.onLine) sincronizar(); }, 45000
 // ============================================================
 (async function boot() {
   pintarTabs();
-  const { data } = await db.auth.getSession();
-  if (data?.session?.user) await entrar(data.session.user);
+  try {
+    const { data } = await db.auth.getSession();
+    if (data?.session?.user) await entrar(data.session.user);
+  } catch (e) {
+    console.error(e);
+    toast('No se pudo recuperar la sesión: ' + e.message, { error: true });
+  }
 })();

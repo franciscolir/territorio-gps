@@ -13,8 +13,20 @@ const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 // CLIENTE SUPABASE
 // ============================================================
 const { createClient } = supabase;
+// Cada app (escritorio / móvil) usa su propia clave de sesión: así pueden
+// coexistir dos pestañas con usuarios distintos sin pisarse. El lock con
+// navigator.locks serializa el refresh del token entre pestañas de la MISMA
+// app (los refresh tokens son de un solo uso).
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storageKey: 'gps-desktop-session',
+    lock: (name, acquireTimeout, fn) =>
+      (typeof navigator !== 'undefined' && navigator.locks)
+        ? navigator.locks.request(name, () => fn())
+        : fn(),
+  },
 });
 
 // ============================================================
@@ -331,6 +343,7 @@ function onComunaChange() {
   const comuna = allComunas.find((c) => c.nombre === nombre);
   const hayCapas = map && map.getLayer('comunas-fill');
   snapRingsCache = null;
+  syncDrawBtn();
 
   if (hayCapas) {
     for (const layerId of ['comunas-fill', 'comunas-outline', 'comunas-labels']) {
@@ -2354,6 +2367,11 @@ document.getElementById('toggleSidebar').addEventListener('click', () => {
 // ARRANQUE
 // ============================================================
 (async () => {
-  const { data } = await db.auth.getSession();
-  if (data?.session?.user) await startApp(data.session.user);
+  try {
+    const { data } = await db.auth.getSession();
+    if (data?.session?.user) await startApp(data.session.user);
+  } catch (e) {
+    console.error(e);
+    toast('No se pudo recuperar la sesión: ' + e.message, true);
+  }
 })();

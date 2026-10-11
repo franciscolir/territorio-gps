@@ -163,7 +163,12 @@ async function cargarAsignacion() {
     .eq('user_id', user.id)
     .eq('estado', 'activa')
     .maybeSingle();
-  if (error) return; // red caída: conserva el sector en memoria
+  if (error) {
+    // red caída: conserva el sector en memoria; otro error (columna faltante,
+    // RLS) se avisa para no confundirlo con "sin sector asignado"
+    if (!esErrorDeRed(error)) toast('No se pudo cargar tu sector: ' + error.message, { error: true });
+    return;
+  }
   sector = data && data.sectores ? data : null;
 }
 
@@ -174,7 +179,10 @@ async function cargarPuntos() {
     .eq('sector_id', sector.sector_id)
     .is('deleted_at', null)
     .order('nombre');
-  if (error) return; // red caída: conserva los puntos en memoria
+  if (error) {
+    if (!esErrorDeRed(error)) toast('No se pudieron cargar los puntos: ' + error.message, { error: true });
+    return;
+  }
   puntos = data || [];
 }
 

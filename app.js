@@ -81,6 +81,17 @@ function toast(msg, isError = false) {
   setTimeout(() => (t.className = ''), 2600);
 }
 
+// Errores sin catch (red caída, WebGL, CDN) se muestran en pantalla:
+// sin esto, un fallo en el arranque deja la app "en nada" y la consola
+// puede quedar difícil de interpretar.
+window.addEventListener('error', (e) => {
+  if (e?.message) toast('Error: ' + e.message, true);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const m = e?.reason?.message || (typeof e?.reason === 'string' ? e.reason : '');
+  if (m) toast('Error: ' + m, true);
+});
+
 // ============================================================
 // LOGIN
 // ============================================================
@@ -134,7 +145,12 @@ async function afterLogin() {
   // encuadrar la cámara en Santiago sin tener que moverla después.
   await loadConfig();
   await loadComunas();
-  initMap();
+  try {
+    initMap();
+  } catch (e) {
+    console.error(e);
+    toast('No se pudo iniciar el mapa: ' + e.message, true);
+  }
 }
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
@@ -156,6 +172,10 @@ db.auth.onAuthStateChange((event, session) => {
 // MAPA
 // ============================================================
 function initMap() {
+  const gl = document.createElement('canvas').getContext('webgl2')
+    || document.createElement('canvas').getContext('webgl');
+  if (!gl) throw new Error('WebGL no está disponible (activa la aceleración de hardware del navegador)');
+
   const santiago = allComunas.find((c) => c.nombre === 'Santiago');
   const b = santiago ? boundsFromGeometry(santiago.geom) : null;
 

@@ -56,6 +56,15 @@ function toast(msg, { error = false, undo = null } = {}) {
   if (!undo) setTimeout(() => t.classList.add('hidden'), 2600);
 }
 
+// Errores sin catch visibles en pantalla (diagnóstico sin consola)
+window.addEventListener('error', (e) => {
+  if (e?.message) toast('Error: ' + e.message, { error: true });
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const m = e?.reason?.message || (typeof e?.reason === 'string' ? e.reason : '');
+  if (m) toast('Error: ' + m, { error: true });
+});
+
 $('toastUndo').addEventListener('click', () => {
   if (!undoInfo) return;
   const { id, prev } = undoInfo;
@@ -379,6 +388,12 @@ function bboxDeGeometria(geom) {
 
 function initMap() {
   if (map || !sector) return;
+  const gl = document.createElement('canvas').getContext('webgl2')
+    || document.createElement('canvas').getContext('webgl');
+  if (!gl) {
+    toast('WebGL no está disponible en este navegador', { error: true });
+    return;
+  }
   const geom = sector.sectores.geom;
   const bb = bboxDeGeometria(geom);
   const centro = bb ? [(bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2] : [-70.6483, -33.457];
@@ -749,8 +764,9 @@ function pintarTabs() {
     b.classList.toggle('text-on-surface-variant', !activo);
   });
   if (tabActual === 'mapa') {
-    if (!map && sector) initMap();
-    else if (map) { map.resize(); actualizarCapaPuntos(); }
+    if (!map && sector) {
+      try { initMap(); } catch (e) { console.error(e); toast('No se pudo iniciar el mapa: ' + e.message, { error: true }); }
+    } else if (map) { map.resize(); actualizarCapaPuntos(); }
   }
 }
 

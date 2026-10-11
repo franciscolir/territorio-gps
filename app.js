@@ -1335,7 +1335,15 @@ async function loadAsignaciones() {
   const { data, error } = await db
     .from('sectores_asignaciones')
     .select('sector_id, user_id, estado, assigned_at, devuelta_at');
-  if (error) { console.error('asignaciones:', error); asignaciones = {}; return; }
+  if (error) {
+    // Si falla (tabla/columna ausente, RLS), se avisa: con la lista vacía la
+    // UI no podría mostrar procesos en curso y el admin creería que el
+    // sector está libre
+    console.error('asignaciones:', error);
+    if (isAdmin) toast('No se pudo cargar el historial de asignaciones: ' + error.message, true);
+    asignaciones = {};
+    return;
+  }
   // Historial completo por sector: cada fila es un proceso de trabajo
   asignaciones = {};
   (data || []).forEach((r) => {
@@ -1628,6 +1636,17 @@ async function assignSector(sectorId, userId) {
     if (error) return toast(error.message, true);
     toast('Proceso cerrado: el sector quedó libre');
   } else {
+    // Revisión en el servidor: un sector con proceso en curso no se puede
+    // asignar a otro; tras devolverlo sí (el historial admite varios procesos)
+    const { data: act, error: errAct } = await db
+      .from('sectores_asignaciones')
+      .select('user_id')
+      .eq('sector_id', sectorId)
+      .eq('estado', 'activa')
+      .maybeSingle();
+    if (errAct) return toast(errAct.message, true);
+    if (act) return toast('El sector ya está asignado a ' + (emailDe(act.user_id) || 'otro usuario'), true);
+
     // Nuevo proceso: INSERT (el sector puede tener varios procesos en el
     // historial; los índices parciales garantizan 1 activo por sector/usuario)
     const { error } = await db.from('sectores_asignaciones').insert({

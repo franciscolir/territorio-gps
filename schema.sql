@@ -522,7 +522,8 @@ $$;
 --     desaparece de su app (RLS) y queda libre para reasignar. El historial
 --     se conserva con devuelta_at / devuelta_por.
 create table if not exists public.sectores_asignaciones (
-  sector_id uuid primary key references public.sectores(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),
+  sector_id uuid not null references public.sectores(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   assigned_by uuid references auth.users(id),
   assigned_at timestamptz default now(),
@@ -764,7 +765,8 @@ create policy "puntos_insert_colab" on public.puntos
   );
 
 --   UPDATE: colaborador sobre puntos de su sector activo; el trigger
---   puntos_bloquear_columnas impide tocar user_id/deleted_at/estado
+--   puntos_bloquear_columnas impide tocar user_id (y deleted_at ajeno),
+--   pero deja pasar cambios de estado dentro del sector
 drop policy if exists "puntos_update_colab" on public.puntos;
 create policy "puntos_update_colab" on public.puntos
   for update to authenticated
@@ -799,11 +801,18 @@ begin
   if public.is_admin() then
     return new;
   end if;
-  if new.user_id is distinct from old.user_id
-     or new.deleted_at is distinct from old.deleted_at
-     or new.estado is distinct from old.estado then
-    raise exception 'Sin permiso para modificar user_id, deleted_at o estado';
+  -- user_id: un no-admin nunca lo toca (no "robar" puntos)
+  if new.user_id is distinct from old.user_id then
+    raise exception 'Sin permiso para modificar user_id';
   end if;
+  -- deleted_at: solo sobre puntos propios (las RPCs security definer
+  -- validan lo mismo; esto cubre también actualizaciones directas)
+  if new.deleted_at is distinct from old.deleted_at
+     and old.user_id is distinct from auth.uid() then
+    raise exception 'Solo puedes eliminar puntos que tú creaste';
+  end if;
+  -- estado: el colaborador SÍ puede cambiarlo dentro de su sector
+  -- (lo validan RLS y la RPC marcar_estado)
   return new;
 end;
 $$;

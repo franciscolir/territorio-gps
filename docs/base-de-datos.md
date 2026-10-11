@@ -42,8 +42,9 @@ Ciclo de vida de la asignación de un sector a un colaborador.
 
 | Columna | Notas |
 |---|---|
-| `sector_id` | PK → `sectores`; un sector se asigna a una sola persona |
-| `user_id` | colaborador asignado |
+| `id` | PK surrogate (`gen_random_uuid()`) |
+| `sector_id` | → `sectores`; un sector solo con 1 proceso activo |
+| `user_id` | colaborador asignado; un usuario solo con 1 sector activo |
 | `assigned_by` / `assigned_at` | quién asignó y cuándo |
 | `estado` | `'activa'` \| `'devuelta'` (check + default `'activa'`) |
 | `devuelta_at` / `devuelta_por` | auditoría de la devolución |
@@ -90,9 +91,8 @@ Notas:
   policy consultan `sectores_asignaciones`, que tiene su propio RLS
   (círculo vicioso).
 - El trigger `puntos_bloquear_columnas` impide que un no-admin toque
-  `user_id`, `deleted_at` o `estado` en un UPDATE normal: el estado pasa
-  por `marcar_estado` y el borrado por `eliminar_punto` /
-  `eliminar_punto_propio`.
+  `user_id` (ni `deleted_at` ajeno); el `estado` sí lo puede cambiar dentro
+  de su sector: pasa por `marcar_estado` (o UPDATE directo bajo RLS).
 - Sin `grant` de tabla no basta con la policy: `sectores`, `app_config`,
   `sectores_asignaciones`, `comunas_rm`, `profiles` y `puntos` tienen grants
   explícitos (si no, PostgREST responde `permission denied for table …`).
@@ -128,7 +128,7 @@ porque son `security invoker` y ejecutan bajo RLS.
 | `on_auth_user_created` | INSERT en `auth.users` | Crea `profiles` (definer) |
 | `puntos_sync_sector` | INSERT o UPDATE de `geom` en `puntos` | Calcula `puntos.sector_id` con `st_covers` (sector más pequeño si hay empate) |
 | `sectores_resync_puntos` | INSERT o DELETE en `sectores` | Recalcula `sector_id` de los puntos vivos |
-| `puntos_bloquear_columnas` | UPDATE en `puntos` | Bloquea que un no-admin toque `user_id`, `deleted_at` o `estado` |
+| `puntos_bloquear_columnas` | UPDATE en `puntos` | Bloquea que un no-admin toque `user_id` ni `deleted_at` ajeno; deja pasar cambios de `estado` dentro del sector |
 
 `sectores_resync_puntos` solo escribe `sector_id` (nunca `geom`), así que no
 vuelve a disparar `puntos_sync_sector`: no hay bucle.
@@ -156,6 +156,8 @@ Aplicar en orden sobre una base existente (idempotentes, se pueden repetir):
 psql "$DATABASE_URL" -f migrations/001_seguridad_p0.sql   # T1–T3
 psql "$DATABASE_URL" -f migrations/002_rendimiento_t6.sql  # T6
 psql "$DATABASE_URL" -f migrations/003_colaborador.sql     # sector único + devolución
+psql "$DATABASE_URL" -f migrations/004_grants_tablas.sql   # grants (nuevos proyectos)
+psql "$DATABASE_URL" -f migrations/005_asignaciones_y_estado.sql  # reasignar + estado
 ```
 
 o vía SQL Editor de Supabase.
@@ -165,6 +167,8 @@ o vía SQL Editor de Supabase.
 | `001_seguridad_p0.sql` | policy `sectores_insert_admin` (reemplaza a `sectores_insert_auth`), `guardar_sector` con chequeo de admin + advisory lock, `usuarios_asignables` restringido, RPC `marcar_estado` + grants |
 | `002_rendimiento_t6.sql` | `puntos.sector_id` + backfill, índices por `estado`/`sector_id`, triggers `puntos_sync_sector` y `sectores_resync_puntos` |
 | `003_colaborador.sql` | ciclo de vida de asignaciones (`estado`/`devuelta_*` + unicidad parcial), helper `sector_activo_usuario`, RLS de `puntos`/`sectores` por sector activo, trigger `puntos_bloquear_columnas`, RPCs `devolver_sector` / `actualizar_punto_terreno` / `eliminar_punto_propio`, `marcar_estado` con validación de sector |
+| `004_grants_tablas.sql` | grants explícitos de `comunas_rm`, `profiles` y `puntos` (proyectos sin default privileges) |
+| `005_asignaciones_y_estado.sql` | clave surrogate en `sectores_asignaciones` (antes `sector_id` PK bloqueaba reasignar tras devolver), reasegura unicidad de activos y cierra duplicados; trigger deja pasar `estado` del colaborador |
 
 ### Verificación rápida tras migrar
 

@@ -34,10 +34,9 @@ try {
 } catch (_) {}
 let usuarios = [];           // [{id, email}] para asignar
 let asignaciones = {};       // sector_id -> { user_id, estado, devuelta_at }
-let assignOpen = false;      // muestra la tabla de asignación
+let assignOpen = false;      // vista de asignación/historial del sector elegido
 let estadoFiltro = '';       // chip de estado activo en la lista
 let lastEstadoUndo = null;   // {id, prev} para el toast "Deshacer"
-let mobileOpen = false;      // vista terreno (móvil)
 
 let tempMarker = null;       // marker temporal al hacer clic
 let refMarker = null;        // marker de referencia
@@ -133,10 +132,8 @@ async function afterLogin() {
   isAdmin = !!prof?.is_admin;
 
   // T2: dibujar/editar/asignar sectores es solo administración (también lo
-  // exige la DB): los botones que fallarían ni siquiera se muestran
-  for (const id of ['drawBtn', 'assignSectorsBtn']) {
-    document.getElementById(id).style.display = isAdmin ? '' : 'none';
-  }
+  // exige la DB): el botón de dibujar ni siquiera se muestra a los demás
+  if (!isAdmin) document.getElementById('drawBtn').style.display = 'none';
 
   // T8: en pantallas angostas el panel arranca colapsado (ver CSS responsive)
   applyInitialSidebarState();
@@ -320,6 +317,13 @@ function populateComunaFilter() {
     names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
   // Conserva la selección si sigue activa; si fue desactivada, vuelve a ""
   comunaSel.value = names.includes(prev) ? prev : '';
+  syncDrawBtn();
+}
+
+// El botón de dibujar vive en el riel del mapa y aparece solo con comuna elegida
+function syncDrawBtn() {
+  const b = document.getElementById('drawBtn');
+  if (b) b.style.display = (isAdmin && comunaSel.value) ? '' : 'none';
 }
 
 function onComunaChange() {
@@ -777,7 +781,7 @@ function setSectorSelected(id) {
   renderList();     // la lista muestra solo los puntos del sector seleccionado
   renderMarkers();  // en modo "sector" también cambian los marcadores del mapa
   renderSectorDetail();
-  if (mobileOpen) renderMobile();
+  renderAssign();   // al deselectar se cierra la vista de asignación
 }
 
 // Sector seleccionado (o null)
@@ -787,7 +791,7 @@ function sectorSelected() {
 
 function updateListScope() {
   const head = document.getElementById('puntosHead');
-  const btn = document.getElementById('clearSectorSel');
+  const btn = document.getElementById('allSectoresBtn');
   if (!head || !btn) return;
   const sec = sectorSelected();
   head.textContent = sec ? `Puntos · ${sec.nombre}` : 'Puntos';
@@ -800,13 +804,11 @@ function updateListScope() {
   const fw = document.getElementById('filterWrap');
   const chips = document.getElementById('estadoChips');
   if (listBox) listBox.style.display = sel ? 'none' : '';
-  if (detail) detail.style.display = sel ? '' : 'none';
+  if (detail) detail.style.display = (sel && !assignOpen) ? '' : 'none';
   if (fw) fw.style.display = sel ? '' : 'none';
   if (chips) chips.style.display = sel ? '' : 'none';
   if (!sel && assignOpen) {
     assignOpen = false;
-    const ab = document.getElementById('assignSectorsBtn');
-    if (ab) ab.classList.remove('active');
     renderAssign();
   }
 
@@ -1302,6 +1304,12 @@ function emailDe(userId) {
   return u ? u.email : '';
 }
 
+function fmtFecha(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d) ? '—' : d.toLocaleDateString('es-CL');
+}
+
 async function loadUsuarios() {
   // T3: la lista de correos solo la pide el admin (la RPC la niega a los demás)
   if (!isAdmin) { usuarios = []; return; }
@@ -1313,17 +1321,20 @@ async function loadUsuarios() {
 async function loadAsignaciones() {
   const { data, error } = await db
     .from('sectores_asignaciones')
-    .select('sector_id, user_id, estado, devuelta_at');
+    .select('sector_id, user_id, estado, assigned_at, devuelta_at');
   if (error) { console.error('asignaciones:', error); asignaciones = {}; return; }
+  // Historial completo por sector: cada fila es un proceso de trabajo
   asignaciones = {};
-  (data || []).forEach((r) => { asignaciones[r.sector_id] = r; });
+  (data || []).forEach((r) => {
+    (asignaciones[r.sector_id] = asignaciones[r.sector_id] || []).push(r);
+  });
 }
 
-// Asignación vigente de un sector (las devueltas no cuentan: el sector
-// queda libre para reasignar y desaparece de la app del colaborador)
+// Proceso en curso de un sector (las devueltos no cuentan: el sector queda
+// libre para un nuevo proceso y desaparece de la app del colaborador)
 function asigActiva(sectorId) {
-  const a = asignaciones[sectorId];
-  return a && a.estado === 'activa' ? a : null;
+  const arr = asignaciones[sectorId] || [];
+  return arr.find((a) => a.estado === 'activa') || null;
 }
 
 async function loadSectores() {
@@ -1459,6 +1470,7 @@ function renderSectorDetail() {
           <div class="sd-menu-wrap">
             <button id="sdMenu" class="sd-iconbtn" title="Opciones del sector"><span class="ms ms-sm">more_vert</span></button>
             <div class="sd-menu-pop" id="sdMenuPop">
+              <button id="sdAssign"><span class="ms ms-sm">group_add</span>Asignar</button>
               <button id="sdRename"><span class="ms ms-sm">edit</span>Renombrar</button>
               <button id="sdEdit"><span class="ms ms-sm">palette</span>Editar</button>
               <button id="sdDel" class="danger-text"><span class="ms ms-sm">delete</span>Eliminar</button>
@@ -1492,6 +1504,11 @@ function renderSectorDetail() {
     document.getElementById('sdRename').addEventListener('click', (e) => {
       e.stopPropagation(); menuPop.classList.remove('visible'); renameSector(s.id);
     });
+    document.getElementById('sdAssign').addEventListener('click', (e) => {
+      e.stopPropagation(); menuPop.classList.remove('visible');
+      assignOpen = true;
+      renderAssign();
+    });
     document.getElementById('sdDel').addEventListener('click', (e) => {
       e.stopPropagation(); menuPop.classList.remove('visible'); deleteSector(s.id);
     });
@@ -1515,85 +1532,110 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Tabla de asignación de sectores a usuarios
+// Vista de asignación del sector elegido: proceso en curso + historial.
+// Cada fila de sectores_asignaciones es un proceso de trabajo del sector
+// (asignado → devuelto); al devolver, el proceso se cierra y el sector
+// queda a la espera de un nuevo proceso.
 function renderAssign() {
   const panel = document.getElementById('assignPanel');
+  const detail = document.getElementById('sectorDetail');
   if (!panel) return;
-  if (!assignOpen) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
-  panel.style.display = '';
-  const visible = allSectores.filter(sectorsVisible);
-  const head = '<div class="a-head">Asignar sectores<button id="assignClose" type="button" title="Cerrar">✕</button></div>';
-  if (!visible.length) {
-    panel.innerHTML = `<div class="assign-panel">${head}<div class="empty">Sin sectores en esta comuna</div></div>`;
-  } else {
-    const opts = (sel) => '<option value="">— sin asignar —</option>' +
-      usuarios.map((u) => `<option value="${u.id}"${u.id === sel ? ' selected' : ''}>${escapeHtml(u.email)}</option>`).join('');
-    panel.innerHTML = `
-      <div class="assign-panel">
-        ${head}
-        <p class="assign-hint">Cada colaborador puede tener <b>un solo sector activo</b>. Si el sector fue devuelto queda libre para reasignar.</p>
-        <table>
-          <thead><tr><th>Sector</th><th>Usuario</th><th></th></tr></thead>
-          <tbody>
-            ${visible.map((s) => {
-              const act = asigActiva(s.id);
-              return `
-              <tr data-id="${s.id}">
-                <td>${escapeHtml(s.nombre)}</td>
-                <td><select class="asig-user">${opts(act ? act.user_id : '')}</select></td>
-                <td><button class="clear-assign" title="Devolver el sector al colaborador o liberarlo">Devolver</button></td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>`;
+  const s = sectorSelected();
+  if (!assignOpen || !s) {
+    panel.style.display = 'none';
+    panel.innerHTML = '';
+    if (detail) detail.style.display = '';
+    return;
   }
+  panel.style.display = '';
+  if (detail) detail.style.display = 'none';
+
+  const act = asigActiva(s.id);
+  const hist = (asignaciones[s.id] || [])
+    .slice()
+    .sort((a, b) => new Date(b.assigned_at || 0) - new Date(a.assigned_at || 0));
+  const opts = '<option value="">— elegir usuario —</option>' +
+    usuarios.map((u) => `<option value="${u.id}">${escapeHtml(u.email)}</option>`).join('');
+  const fila = (a) => `
+    <tr>
+      <td>${escapeHtml(emailDe(a.user_id) || '—')}</td>
+      <td>${fmtFecha(a.assigned_at)}</td>
+      <td>${a.estado === 'activa' ? '—' : fmtFecha(a.devuelta_at)}</td>
+      <td><span class="chip-est ${a.estado === 'activa' ? 'activa' : 'devuelta'}">${a.estado === 'activa' ? 'En curso' : 'Devuelto'}</span></td>
+    </tr>`;
+  panel.innerHTML = `
+    <div class="assign-panel">
+      <div class="a-head">
+        <span><button id="assignBack" class="sd-iconbtn" title="Volver a la ficha del sector"><span class="ms ms-sm">arrow_back</span></button>Asignación</span>
+        <button id="assignClose" type="button" title="Cerrar">✕</button>
+      </div>
+      <p class="a-sector">${s.comuna ? escapeHtml(s.comuna) + ' · ' : ''}<b>${escapeHtml(s.nombre)}</b></p>
+      ${act ? `
+        <div class="asig-actual">
+          <div class="asig-quien">
+            <b>${escapeHtml(emailDe(act.user_id) || '—')}</b>
+            <small>Asignado el ${fmtFecha(act.assigned_at)}</small>
+          </div>
+          <button id="asigDevolver" class="danger-text" title="Cerrar el proceso y liberar el sector">Devolver</button>
+        </div>` : `
+        <div class="asig-nueva">
+          <select id="asigUserSel">${opts}</select>
+          <button id="asigAsignar" class="primary">Asignar</button>
+        </div>`}
+      <p class="assign-hint">Cada fila es un proceso de trabajo sobre el sector: al devolverlo el proceso se cierra y el sector queda libre para un nuevo proceso.</p>
+      <table>
+        <thead><tr><th>Usuario</th><th>Asignado</th><th>Devuelto</th><th>Estado</th></tr></thead>
+        <tbody>${hist.length ? hist.map(fila).join('') : '<tr><td colspan="4">Sin procesos registrados</td></tr>'}</tbody>
+      </table>
+    </div>`;
+
+  const back = document.getElementById('assignBack');
+  if (back) back.addEventListener('click', () => { assignOpen = false; renderAssign(); });
   const close = document.getElementById('assignClose');
-  if (close) close.addEventListener('click', () => { assignOpen = false; document.getElementById('assignSectorsBtn').classList.remove('active'); renderAssign(); });
-  panel.querySelectorAll('tr[data-id]').forEach((tr) => {
-    const id = tr.dataset.id;
-    const sel = tr.querySelector('.asig-user');
-    if (sel) sel.addEventListener('change', (e) => assignSector(id, e.target.value));
-    const clr = tr.querySelector('.clear-assign');
-    if (clr) clr.addEventListener('click', () => assignSector(id, ''));
+  if (close) close.addEventListener('click', () => { assignOpen = false; setSectorSelected(null); });
+  const asignar = document.getElementById('asigAsignar');
+  if (asignar) asignar.addEventListener('click', () => {
+    const uid = document.getElementById('asigUserSel').value;
+    if (!uid) return toast('Elige un usuario para asignar el sector', true);
+    assignSector(s.id, uid);
   });
+  const dev = document.getElementById('asigDevolver');
+  if (dev) dev.addEventListener('click', () => assignSector(s.id, ''));
 }
 
 async function assignSector(sectorId, userId) {
   if (!isAdmin) return toast('Solo administradores pueden asignar sectores', true);
   if (!userId) {
-    // Devolver / liberar: se conserva la fila como historial
+    // Devolver: cierra el proceso en curso; la fila se conserva como historial
     const { error } = await db.from('sectores_asignaciones').update({
       estado: 'devuelta',
       devuelta_at: new Date().toISOString(),
       devuelta_por: currentUser ? currentUser.id : null,
-    }).eq('sector_id', sectorId);
+    }).eq('sector_id', sectorId).eq('estado', 'activa');
     if (error) return toast(error.message, true);
+    toast('Proceso cerrado: el sector quedó libre');
   } else {
-    const { error } = await db.from('sectores_asignaciones').upsert(
-      {
-        sector_id: sectorId,
-        user_id: userId,
-        assigned_by: currentUser ? currentUser.id : null,
-        assigned_at: new Date().toISOString(),
-        estado: 'activa',
-        devuelta_at: null,
-        devuelta_por: null,
-      },
-      { onConflict: 'sector_id' }
-    );
+    // Nuevo proceso: INSERT (el sector puede tener varios procesos en el
+    // historial; los índices parciales garantizan 1 activo por sector/usuario)
+    const { error } = await db.from('sectores_asignaciones').insert({
+      sector_id: sectorId,
+      user_id: userId,
+      assigned_by: currentUser ? currentUser.id : null,
+      assigned_at: new Date().toISOString(),
+      estado: 'activa',
+    });
     if (error) {
-      // 23505 = el usuario ya tiene otro sector activo (índice parcial)
       const msg = error.code === '23505'
-        ? 'Ese usuario ya tiene un sector activo: devuélvelo antes de asignar otro'
+        ? 'Ese usuario o ese sector ya tiene un proceso en curso'
         : error.message;
       return toast(msg, true);
     }
+    toast('Proceso de trabajo iniciado');
   }
   await loadAsignaciones();
-  toast('Asignación guardada');
   renderAssign();
   renderSectorList();
+  renderSectorDetail();
 }
 
 // ============================================================
@@ -1603,7 +1645,6 @@ function refreshAfterEstado() {
   renderList();
   renderSectorList();
   renderSectorDetail();
-  if (mobileOpen) renderMobile();
 }
 
 // T1: marcar estado vía RPC (security definer). Cualquier usuario autenticado
@@ -1650,68 +1691,8 @@ document.getElementById('undoBtn').addEventListener('click', () => {
 });
 
 // ============================================================
-// VISTA TERRENO (MÓVIL)
+// SECTORES: FOCO
 // ============================================================
-function renderMobile() {
-  const sec = sectorSelected();
-  const list = document.getElementById('mvList');
-  if (!sec) {
-    document.getElementById('mvComuna').textContent = '';
-    document.getElementById('mvSector').textContent = 'Selecciona un sector';
-    document.getElementById('mvCount').textContent = '0 / 0';
-    document.getElementById('mvPct').textContent = '0%';
-    document.getElementById('mvBar').style.width = '0%';
-    list.innerHTML = '<div class="mv-empty">Selecciona un sector en el panel para verlo en modo terreno.</div>';
-    return;
-  }
-  const b = sectorBreakdown(sec);
-  document.getElementById('mvComuna').textContent = sec.comuna || '—';
-  document.getElementById('mvSector').textContent = sec.nombre;
-  document.getElementById('mvCount').textContent = `${b.hechos} / ${b.total}`;
-  document.getElementById('mvPct').textContent = `${b.pct}%`;
-  document.getElementById('mvBar').style.width = `${b.pct}%`;
-  const pts = pointsInSector(sec);
-  if (!pts.length) { list.innerHTML = '<div class="mv-empty">Este sector no tiene puntos.</div>'; return; }
-  list.innerHTML = pts.map((p) => {
-    const e = p.estado || 'pendiente';
-    const nav = (p.lat != null && p.lng != null)
-      ? `<a class="mv-nav" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank" rel="noopener" title="Cómo llegar">➤</a>` : '';
-    const warn = (p.lat == null || p.lng == null) ? '<div class="mv-warn">Sin coordenadas GPS. Validar en terreno.</div>' : '';
-    const act = (v, l, ic) => `<button class="${e === v ? 'on-' + v : ''}" data-estado="${v}"><span>${ic}</span><span>${l}</span></button>`;
-    return `<div class="mv-card" data-id="${p.id}">
-      <div class="mv-row">
-        <div style="min-width:0">
-          <div class="mv-nombre">${escapeHtml(p.nombre)}</div>
-          <div class="mv-dir">${p.direccion ? escapeHtml(p.direccion) : '—'}</div>
-        </div>
-        ${nav}
-      </div>
-      ${warn}
-      <div class="mv-actions">
-        ${act('visitado', 'Visitado', '✔')}
-        ${act('erroneo', 'Erróneo', '⚠')}
-        ${act('no_pasar', 'No pasar', '⛔')}
-      </div>
-    </div>`;
-  }).join('');
-  list.querySelectorAll('.mv-card').forEach((card) => {
-    const id = card.dataset.id;
-    card.querySelectorAll('.mv-actions button').forEach((btn) => {
-      btn.addEventListener('click', () => setEstadoPunto(id, btn.dataset.estado));
-    });
-  });
-}
-
-document.getElementById('mobileViewBtn').addEventListener('click', () => {
-  mobileOpen = true;
-  document.getElementById('mobileView').classList.add('visible');
-  renderMobile();
-});
-document.getElementById('mvClose').addEventListener('click', () => {
-  mobileOpen = false;
-  document.getElementById('mobileView').classList.remove('visible');
-});
-
 function setSectorHover(id, on) {
   if (!map || !map.getSource('sectores') || !id) return;
   map.setFeatureState({ source: 'sectores', id }, { hover: on });
@@ -1764,6 +1745,7 @@ function startDraw() {
   if (drawActive) { stopDraw(); return; }
   // T2: la DB rechaza el insert si no es admin; se avisa antes de dibujar.
   if (!isAdmin) return toast('Solo administradores pueden dibujar sectores', true);
+  if (!comunaSel.value) return toast('Elige una comuna antes de dibujar un sector', true);
 
   drawActive = true;
   drawVerts = [];
@@ -2112,23 +2094,15 @@ document.getElementById('sectorCancelBtn').addEventListener('click', () => {
   document.getElementById('sectorModal').classList.remove('visible');
 });
 document.getElementById('sectorSaveBtn').addEventListener('click', saveSector);
-document.getElementById('clearSectorSel').addEventListener('click', () => setSectorSelected(null));
-
-document.getElementById('assignSectorsBtn').addEventListener('click', (e) => {
-  if (!isAdmin) return toast('Solo administradores pueden asignar sectores', true);
-  if (!sectorSelected()) return toast('Selecciona un sector primero', true);
-  assignOpen = !assignOpen;
-  e.currentTarget.classList.toggle('active', assignOpen);
-  renderAssign();
-});
+document.getElementById('allSectoresBtn').addEventListener('click', () => setSectorSelected(null));
 
 document.addEventListener('keydown', (e) => {
   const typing = e.target && e.target.matches && e.target.matches('input, textarea');
 
   if (e.key === 'Escape') {
-    if (mobileOpen) {
-      mobileOpen = false;
-      document.getElementById('mobileView').classList.remove('visible');
+    if (assignOpen) {
+      assignOpen = false;
+      renderAssign();
       return;
     }
     if (document.getElementById('pointDetail').classList.contains('visible')) {

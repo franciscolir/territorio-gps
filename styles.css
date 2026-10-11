@@ -272,53 +272,14 @@
   #undoToast #undoBtn:hover { background: rgba(255,255,255,.2); }
   #undoToast #undoBtn .ic { font-size: 15px; }
 
-  /* Vista terreno móvil */
-  #mobileView { position: fixed; inset: 0; z-index: 700; background: var(--surface); display: none; flex-direction: column; max-width: 460px; margin: 0 auto; box-shadow: 0 0 0 100vmax rgba(13,28,46,.5); }
-  #mobileView.visible { display: flex; }
-  #mobileView .mv-top { background: var(--primary-container); color: #fff; padding: 14px 16px; }
-  #mobileView .mv-head { display: flex; align-items: center; gap: 12px; }
-  #mobileView .mv-head > div:first-child { flex: 1; min-width: 0; }
-  #mobileView .mv-comuna { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--inverse-primary); }
-  #mobileView .mv-sector { font-size: 15px; font-weight: 700; }
-  #mobileView .mv-prog { text-align: right; }
-  #mobileView .mv-count { font-size: 20px; font-weight: 800; color: var(--green-strong); line-height: 1; }
-  #mobileView .mv-pct { font-size: 11px; color: var(--surface-highest); }
-  #mobileView #mvClose { background: rgba(255,255,255,.15); border: 0; color: #fff; width: 30px; height: 30px; border-radius: var(--r-md); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-  #mobileView .mv-bar { height: 8px; background: rgba(255,255,255,.2); border-radius: 5px; margin-top: 10px; overflow: hidden; }
-  #mobileView .mv-bar > i { display: block; height: 100%; background: var(--green-strong); }
-  #mobileView .mv-list { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-  #mobileView .mv-card { background: var(--surface-lowest); border-radius: var(--r-lg); padding: 12px; box-shadow: var(--shadow-1); }
-  #mobileView .mv-card .mv-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-  #mobileView .mv-card .mv-id { font-size: 11px; font-weight: 700; color: var(--secondary); }
-  #mobileView .mv-card .mv-nombre { font-size: 14px; font-weight: 700; color: var(--on-surface); }
-  #mobileView .mv-card .mv-dir { font-size: 12px; color: var(--on-surface-variant); }
-  #mobileView .mv-nav { width: 40px; height: 40px; border-radius: var(--r-lg); background: var(--surface-mid); color: var(--secondary); display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 20px; flex-shrink: 0; }
-  #mobileView .mv-nav:hover { background: var(--secondary); color: #fff; }
-  #mobileView .mv-warn { background: var(--error-container); color: var(--on-error-container); font-size: 11px; font-weight: 700; padding: 5px 8px; border-radius: var(--r-md); margin-top: 8px; }
-  #mobileView .mv-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
-  #mobileView .mv-actions button { border: 0; border-radius: var(--r-lg); padding: 12px 4px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; background: var(--surface-mid); color: var(--on-surface-variant); font-family: inherit; }
-  #mobileView .mv-actions button.on-visitado { background: var(--green); color: var(--on-green); }
-  #mobileView .mv-actions button.on-erroneo { background: var(--error); color: #fff; }
-  #mobileView .mv-actions button.on-no_pasar { background: var(--primary-container); color: #fff; }
-  #mobileView .mv-empty { text-align: center; color: var(--on-surface-variant); padding: 40px 16px; font-size: 13px; }
-
   /* ============ PANEL DE SECTORES (resumen / detalle / asignación) ============ */
   #detailBlock { display: flex; flex-direction: column; gap: 7px; }
-  .detail-top { display: flex; align-items: center; justify-content: space-between; }
   button.ghost.back {
     background: transparent; color: var(--on-surface-variant); border: 0;
     padding: 5px 7px; font-size: 12px; font-weight: 700;
     display: inline-flex; align-items: center; gap: 4px; border-radius: var(--r-md);
   }
   button.ghost.back:hover { background: var(--surface-mid); color: var(--secondary); }
-  #sidebar .sect-btns { display: flex; gap: 5px; flex-wrap: wrap; }
-  #sidebar .sect-btns button {
-    padding: 6px 9px; border: 1px solid transparent; background: var(--surface-mid);
-    color: var(--on-surface); border-radius: var(--r-md); font-size: 11.5px; font-weight: 600;
-    display: inline-flex; align-items: center; gap: 4px;
-  }
-  #sidebar .sect-btns button:hover { background: var(--surface-high); }
-  #sidebar .sect-btns button.active { background: var(--secondary); color: var(--on-secondary); }
 
   /* Chip de cuadrilla / sin asignar */
   .sector-card .who, #sectorDetail .who {
@@ -384,15 +345,41 @@
   #sectorDetail .sd-palette .chip.selected { border-color: var(--on-surface); }
 
   .assign-panel { border: 1px solid var(--outline-variant); border-radius: var(--r-lg); padding: 10px; background: var(--surface-lowest); box-shadow: var(--shadow-1); }
-  .assign-panel .a-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12px; font-weight: 700; color: var(--primary); }
+  .assign-panel .a-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; font-weight: 700; color: var(--primary); }
+  .assign-panel .a-head > span { display: inline-flex; align-items: center; gap: 4px; }
+  .assign-panel .sd-iconbtn {
+    width: 26px; height: 26px; border: 0; border-radius: var(--r-md); background: transparent;
+    color: var(--on-surface-variant); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .assign-panel .sd-iconbtn:hover { background: var(--surface-high); color: var(--secondary); }
+  .assign-panel .a-sector { margin: 0 0 8px; font-size: 11.5px; color: var(--on-surface-variant); }
+  .assign-panel .asig-actual {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    background: var(--surface-low); border: 1px solid var(--outline-variant);
+    border-radius: var(--r-md); padding: 8px 10px; margin-bottom: 8px;
+  }
+  .assign-panel .asig-actual .asig-quien { min-width: 0; }
+  .assign-panel .asig-actual b { display: block; font-size: 12px; color: var(--on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .assign-panel .asig-actual small { font-size: 10.5px; color: var(--on-surface-variant); }
+  .assign-panel .asig-actual button.danger-text {
+    border: 1px solid var(--error); background: transparent; color: var(--error);
+    padding: 5px 10px; border-radius: var(--r-md); font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; flex-shrink: 0;
+  }
+  .assign-panel .asig-actual button.danger-text:hover { background: var(--error); color: #fff; }
+  .assign-panel .asig-nueva { display: flex; gap: 6px; margin-bottom: 8px; }
+  .assign-panel .asig-nueva select { flex: 1; }
+  .assign-panel .asig-nueva button { white-space: nowrap; }
+  .assign-panel .chip-est {
+    display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  }
+  .assign-panel .chip-est.activa { background: rgba(121,219,141,.38); color: var(--on-green); }
+  .assign-panel .chip-est.devuelta { background: var(--surface-mid); color: var(--on-surface-variant); }
   .assign-panel table { width: 100%; border-collapse: collapse; font-size: 11px; }
   .assign-panel th, .assign-panel td { text-align: left; padding: 5px 4px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
   .assign-panel th { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--on-surface-variant); }
   .assign-panel select { width: 100%; font-size: 11px; padding: 4px; border: 1px solid var(--outline-variant); border-radius: var(--r-sm); font-family: inherit; background: var(--surface); }
   .assign-panel button { font-size: 11px; padding: 3px 7px; border-radius: var(--r-sm); border: 1px solid var(--secondary); background: rgba(29,78,216,.08); color: var(--secondary); cursor: pointer; font-family: inherit; }
   .assign-panel button:hover { background: var(--secondary); color: #fff; }
-  .assign-panel button.clear-assign { border-color: var(--outline-variant); background: var(--surface-lowest); color: var(--on-surface-variant); }
-  .assign-panel button.clear-assign:hover { background: var(--surface-high); color: var(--on-surface); }
   .assign-panel .assign-hint { margin: 0 0 8px; font-size: 10.5px; line-height: 1.4; color: var(--on-surface-variant); }
 
   /* ============ MODAL DETALLE DE PUNTO ============ */
@@ -765,6 +752,7 @@
     box-shadow: 0 4px 14px rgba(13,28,46,.18); transition: all .12s;
   }
   #edgeRail button:hover { background: var(--surface-mid); }
+  #edgeRail button.active { background: var(--secondary); border-color: var(--secondary); color: var(--on-secondary); }
   #edgeRail button .ms { font-size: 18px; }
   #sidebar .comuna-row { display: flex; gap: 8px; align-items: center; }
   #sidebar .comuna-row .row-label {

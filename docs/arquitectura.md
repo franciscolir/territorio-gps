@@ -45,12 +45,12 @@ Todo el estado vive en variables de módulo (`let` en el top level):
 | Grupo | Variables |
 |---|---|
 | Sesión | `currentUser`, `isAdmin` |
-| Datos | `allPoints`, `allComunas`, `allSectores`, `usuarios`, `asignaciones` |
+| Datos | `allPoints`, `allComunas`, `allSectores`, `usuarios`, `asignaciones` (historial: sector_id → filas de procesos) |
 | Mapa | `map`, `comunaFeatures`, `pointMarkers`, `tempMarker`, `refMarker` |
 | Alcance/selection | `puntosScope` (region·comuna·sector), `sectorSelectedId`, `sectorHoverId` |
 | Dibujo | `drawActive`, `drawVerts`, `drawColor`, `drawSnap`, `snapRingsCache`, `pendingSector` |
 | Referencia | `refMode`, `refRadius`, `refResultsIds` |
-| UI | `assignOpen`, `estadoFiltro`, `lastEstadoUndo`, `mobileOpen` |
+| UI | `assignOpen` (vista de asignación del sector), `estadoFiltro`, `lastEstadoUndo` |
 | Config | `comunasActivas`, `configError` |
 
 No hay store ni framework: la actualización es **imperativa + render manual**.
@@ -59,10 +59,15 @@ Cada mutación relevante llama a las funciones de repintado correspondientes:
 ```
 refreshPointsViews()   → renderList + renderMarkers + renderSectorList
 setSectorSelected()    → syncSelectedCard + renderList + renderMarkers
-                         + renderSectorDetail (+ renderMobile si está abierta)
+                         + renderSectorDetail + renderAssign (cierra si deselecta)
 refreshAfterEstado()   → renderList + renderSectorList + renderSectorDetail
-                         (+ renderMobile)
 ```
+
+La vista de asignación (menú ⋮ → Asignar) ocupa la zona de sectores y lista
+los **procesos de trabajo** del sector: filas de `sectores_asignaciones`
+(usuario, fecha de asignación, fecha de devolución, estado En curso/Devuelto).
+`asignaciones` guarda el historial completo por sector; `asigActiva()` devuelve
+el proceso en curso.
 
 ## Flujo de arranque
 
@@ -73,7 +78,7 @@ getSession() ─┬─ con sesión → startApp(user)
 
 startApp()  (guarda: solo una vez, evita mapa duplicado)
   ├─ profiles.is_admin → isAdmin
-  ├─ oculta ✏️ si no es admin
+  ├─ oculta ✏️ si no es admin (y aparece solo con comuna elegida)
   ├─ applyInitialSidebarState()   (móvil: panel colapsado)
   ├─ loadConfig()   (app_config.comunas_activas)
   ├─ loadComunas()  (comunas_rm → comunaFeatures)

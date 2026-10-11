@@ -54,12 +54,13 @@ sector queda resaltado y habilita:
 - el marcado de puntos nuevos dentro de él,
 - el botón **📍 encuadrar** para ajustar la vista a su polígono.
 
-**Esc** o el botón *«← Todos los Sectores»* deselecciona.
+**Esc** o el botón **Todos** (junto al título *Sectores*) deselecciona.
 
 ### Crear (solo administración)
 
-1. Pulsa **✏️** en la cabecera de Sectores.
-2. Elige un color en la paleta de la barra superior.
+1. Elige una comuna en el selector: en el riel del mapa, bajo la lupa 🔍,
+   aparece el botón **✏️**.
+2. Pulsa **✏️** y elige un color en la paleta de la barra superior.
 3. Haz clic en el mapa para agregar vértices. Hay **imán (snap)** a bordes de
    comunas y sectores vecinos, y un contador en vivo de cuántos puntos caen
    dentro del trazo.
@@ -77,20 +78,28 @@ Atajos durante el trazo: **Ctrl/Cmd + Z** quita el último vértice (o botón
 ### Editar / eliminar (solo administración)
 
 - Todo se maneja desde las **opciones ⋮** de la ficha del sector
-  (*Renombrar*, *Editar* → paleta de color, *Eliminar*). No hay botón de
-  edición en la cabecera de Sectores.
+  (*Asignar*, *Renombrar*, *Editar* → paleta de color, *Eliminar*).
 
-### Asignar a una cuadrilla (solo administración)
+### Asignar y procesos de trabajo (solo administración)
 
-1. Selecciona un sector.
-2. Pulsa **Asignar**.
-3. Elige el usuario en la tabla. *«— sin asignar —»* (o el botón
-   **Devolver**) devuelve el sector y lo deja libre.
+La asignación se gestiona **por sector**, desde su menú ⋮:
 
-Reglas: **un colaborador solo puede tener un sector activo a la vez** y un
-sector solo puede estar con una persona (si ya tiene uno, se avisa). El
-correo de quien tiene el sector aparece como chip en su tarjeta; si fue
-devuelto, el chip dice «Devuelta» con la fecha.
+1. Selecciona un sector → **⋮ → Asignar**. Se abre la vista de asignación
+   ocupando la zona de sectores.
+2. Si el sector no tiene proceso en curso: elige el usuario y pulsa
+   **Asignar**. Se inicia un **proceso de trabajo**.
+3. Cuando el colaborador devuelve el sector (o tú lo cierras con
+   **Devolver**), el proceso se marca **Devuelto** con su fecha y el sector
+   queda libre para iniciar otro proceso.
+
+La vista muestra el proceso **En curso** (usuario y fecha) y, debajo, el
+**historial**: cada fila es un proceso con su usuario, fecha de asignación,
+fecha de devolución y estado. Todo queda guardado en la base de datos.
+
+Reglas: **un colaborador solo puede tener un proceso en curso a la vez** y
+un sector solo puede tener uno activo (si ya existe, se avisa). El correo de
+quien tiene el sector aparece como chip en su tarjeta y en su lista de
+sectores.
 
 ---
 
@@ -120,7 +129,7 @@ de color.
 
 Cada tarjeta trae 4 botones: **Pendiente · Visitado · Erróneo · No pasar**.
 Tras marcar aparece un aviso con **Deshacer** (5 segundos). El mismo flujo
-existe en la vista terreno.
+existe en la app de terreno (`movil.html`).
 
 > Los estados los puede marcar cualquier usuario con acceso a la app: es la
 > operación de terreno. Editar nombre, dirección, notas, coordenadas o
@@ -166,16 +175,12 @@ Sirve para responder «¿qué direcciones tengo alrededor de esta esquina?».
 
 ---
 
-## 7. Vista terreno (celular)
+## 7. App de terreno (celular)
 
-Botón **📱** en la cabecera de Sectores:
-
-- Comuna y sector activos, contador `hechos / total`, porcentaje y barra.
-- Tarjetas con nombre, dirección, aviso si **no tiene GPS** y enlace
-  *«Cómo llegar»* (abre Google Maps).
-- Botones **✔ Visitado · ⚠ Erróneo · ⛔ No pasar** de un toque.
-
-Ideal para recorrer un sector asignado desde el teléfono.
+La app de terreno es **`movil.html`** (misma URL + `/movil.html`, ver
+sección 11): el colaborador ve su sector asignado, cambia estados y sincroniza
+incluso sin señal. El botón de vista terreno del panel de escritorio fue
+eliminado.
 
 ---
 
@@ -194,7 +199,7 @@ Botón **⚙️**:
 
 | Tecla | Acción |
 |---|---|
-| **Esc** | Cierra lo que esté encima (vista terreno → detalle → ajustes → modal de sector → modo dibujo → deselecciona sector) |
+| **Esc** | Cierra lo que esté encima (vista de asignación → detalle → ajustes → modal de sector → modo dibujo → deselecciona sector) |
 | **Ctrl/Cmd + Z** | Deshacer último vértice mientras dibujas |
 | **Enter** | Dispara la búsqueda / el login |
 

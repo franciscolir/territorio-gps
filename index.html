@@ -54,17 +54,10 @@
       <div class="sect-zone" id="sectZone">
         <div class="sect-head">
           <h2>Sectores</h2>
-          <div class="sect-btns">
-            <button id="drawBtn" title="Dibujar un sector a mano"><span class="ms ms-sm">draw</span></button>
-            <button id="assignSectorsBtn" title="Asignar sectores a usuarios"><span class="ms ms-sm">group_add</span>Asignar</button>
-            <button id="mobileViewBtn" title="Vista terreno (móvil)"><span class="ms ms-sm">smartphone</span></button>
-          </div>
+          <button id="allSectoresBtn" class="ghost back" style="display:none" title="Volver a la lista de sectores"><span class="ms ms-sm">list</span>Todos</button>
         </div>
         <div id="sectorList"><div class="empty">Aún no hay sectores</div></div>
         <div id="detailBlock" style="display:none">
-          <div class="detail-top">
-            <button id="clearSectorSel" class="ghost back" style="display:none" title="Volver a la lista de sectores"><span class="ms ms-sm">arrow_back</span>Todos los Sectores</button>
-          </div>
           <div id="sectorDetail"></div>
           <div id="assignPanel" style="display:none"></div>
         </div>
@@ -91,10 +84,11 @@
 
     <div id="map"></div>
 
-    <!-- Riel de borde: colapsar panel + buscador unificado -->
+    <!-- Riel de borde: colapsar panel, buscador unificado y dibujar sector -->
     <div id="edgeRail">
       <button id="toggleSidebar" title="Mostrar/ocultar panel"><span class="ms">menu</span></button>
       <button id="searchFab" title="Buscar dirección, coordenadas o link"><span class="ms">search</span></button>
+      <button id="drawBtn" title="Dibujar un sector a mano (elige una comuna)" style="display:none"><span class="ms">draw</span></button>
     </div>
     <div id="searchOverlay">
       <span class="ms ms-sm search-ic">search</span>
@@ -248,25 +242,6 @@
   <span class="ms ut-ic">check_circle</span>
   <span class="ut-msg" id="undoMsg">Estado actualizado</span>
   <button id="undoBtn"><span class="ms ic">undo</span>Deshacer</button>
-</div>
-
-<!-- ================= VISTA TERRENO (MÓVIL) ================= -->
-<div id="mobileView">
-  <div class="mv-top">
-    <div class="mv-head">
-      <div>
-        <div class="mv-comuna" id="mvComuna">—</div>
-        <div class="mv-sector" id="mvSector">Selecciona un sector</div>
-      </div>
-      <div class="mv-prog">
-        <div class="mv-count" id="mvCount">0 / 0</div>
-        <div class="mv-pct" id="mvPct">0%</div>
-      </div>
-      <button id="mvClose" title="Cerrar"><span class="ms" style="font-size:18px">close</span></button>
-    </div>
-    <div class="mv-bar"><i id="mvBar"></i></div>
-  </div>
-  <div class="mv-list" id="mvList"></div>
 </div>
 
 <script src="lib.js"></script>

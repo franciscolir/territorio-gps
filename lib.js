@@ -1,0 +1,176 @@
+// ============================================================
+// LIB — funciones puras (sin DOM ni estado global).           =
+// Se cargan antes de app.js y se prueban con Vitest (tests/). =
+// ============================================================
+
+const SEGMENTOS = [
+  ['pendiente', 'Pendiente', 'schedule'],
+  ['visitado', 'Visitado', 'check'],
+  ['erroneo', 'Erróneo', 'error'],
+  ['no_pasar', 'No pasar', 'block'],
+];
+
+const ESTADOS = [
+  ['pendiente', 'Pendiente'],
+  ['visitado', 'Visitado'],
+  ['erroneo', 'Erróneo'],
+  ['no_pasar', 'No pasar'],
+];
+// Icono Material del pin de mapa por estado (diseño front)
+const PIN_ICONS = { pendiente: 'schedule', visitado: 'check', erroneo: 'priority_high', no_pasar: 'block' };
+function estadoLabel(e) {
+  const x = ESTADOS.find((k) => k[0] === e);
+  return x ? x[1] : 'Pendiente';
+}
+function estadoClass(e) {
+  return 'estado-' + (ESTADOS.some((k) => k[0] === e) ? e : 'pendiente');
+}
+// ¿El punto (lng, lat) cae dentro del polígono/multipolígono de la comuna?
+function pointInGeometry(lng, lat, geom) {
+  if (!geom || !geom.coordinates) return false;
+  const polygons = geom.type === 'MultiPolygon' ? geom.coordinates : [geom.coordinates];
+  return polygons.some(
+    (poly) => inRing(lng, lat, poly[0]) && !poly.slice(1).some((hole) => inRing(lng, lat, hole))
+  );
+}
+
+function inRing(lng, lat, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+// PostGIS devuelve la columna `geography` como EWKB hexadecimal
+// (ej: "0101000020E6100000..." = byte order + type con flag SRID + 4326 + X + Y).
+// También acepta GeoJSON por si el backend cambia el formato.
+function pointFromGeom(geom) {
+  if (!geom) return null;
+
+  if (typeof geom === 'object' && Array.isArray(geom.coordinates)) {
+    const [lng, lat] = geom.coordinates;
+    return isFinite(lat) && isFinite(lng) ? { lat, lng } : null;
+  }
+
+  if (typeof geom !== 'string') return null;
+  const hex = geom.trim();
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length < 18 || hex.length % 2 !== 0) return null;
+
+  try {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+
+    const view = new DataView(bytes.buffer);
+    const little = bytes[0] === 1;
+    const type = view.getUint32(1, little);
+    const baseType = type & 0x1fffffff;          // quita flags EWKB (SRID/Z/M)
+    if (baseType !== 1) return null;             // solo Point
+
+    const offset = 5 + ((type & 0x20000000) ? 4 : 0);  // 4 bytes extra si hay SRID
+    if (bytes.length < offset + 16) return null;
+
+    const lng = view.getFloat64(offset, little);
+    const lat = view.getFloat64(offset + 8, little);
+    return isFinite(lat) && isFinite(lng) ? { lat, lng } : null;
+  } catch {
+    return null;
+  }
+}
+function ringArea(ring) {
+  let sum = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    sum += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
+  }
+  return sum / 2;
+}
+function ringToEwkt(ring) {
+  return 'SRID=4326;POLYGON((' + ring.map(([lng, lat]) => `${lng} ${lat}`).join(',') + '))';
+}
+function createCircle(lng, lat, radiusMeters) {
+  const points = 64;
+  const coords = [];
+  const distanceX = radiusMeters / (111320 * Math.cos((lat * Math.PI) / 180));
+  const distanceY = radiusMeters / 110540;
+  for (let i = 0; i < points; i++) {
+    const theta = (i / points) * (2 * Math.PI);
+    coords.push([lng + distanceX * Math.cos(theta), lat + distanceY * Math.sin(theta)]);
+  }
+  coords.push(coords[0]);
+  return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] }, properties: {} };
+}
+
+// Extrae {lat,lng} de un link de Google Maps (o null si no se puede).
+function coordsFromLink(url) {
+  if (!url) return null;
+  let m = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  m = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  m = url.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  return null;
+}
+
+// Coordenadas sueltas: "-33.45, -70.66" (coma, punto y coma o espacio).
+function parseCoordQuery(q) {
+  const m = (q || '').match(/^(-?\d{1,3}\.\d+)\s*[,; ]\s*(-?\d{1,3}\.\d+)$/);
+  if (!m) return null;
+  const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
+}
+
+// ============================================================
+// COLA OFFLINE (app móvil) — funciones puras e inmutables.
+// La cola vive en localStorage; el id y el timestamp los aporta el
+// caller para que estas funciones sean deterministas en los tests.
+// ============================================================
+
+// Operación pendiente: tipo ('estado' | 'crear' | 'editar' | 'borrar'),
+// clave (id del punto, o id local en 'crear') y datos de la operación.
+function nuevaOpCola(tipo, clave, datos, id, creadoEn) {
+  return { id, tipo, clave, datos: { ...datos }, creadoEn };
+}
+
+// Agrega reemplazando operaciones previas del mismo tipo sobre la misma
+// clave (p. ej. dos cambios de estado del mismo punto = solo el último).
+function colaAgregar(ops, op) {
+  const resto = ops.filter((o) => !(o.tipo === op.tipo && o.clave === op.clave));
+  return [...resto, op];
+}
+
+function colaQuitar(ops, opId) {
+  return ops.filter((o) => o.id !== opId);
+}
+
+// Conteo por tipo para el botón "Sincronizar ahora (N pendientes)".
+function colaResumen(ops) {
+  const r = { total: ops.length, estado: 0, crear: 0, editar: 0, borrar: 0 };
+  for (const o of ops) {
+    if (Object.prototype.hasOwnProperty.call(r, o.tipo)) r[o.tipo]++;
+  }
+  return r;
+}
+
+// Avance de un sector a partir de sus puntos (mismos estados que la app
+// de escritorio; pct = visitados sobre el total).
+function sectorAvance(puntos) {
+  const r = { total: puntos.length, pendiente: 0, visitado: 0, erroneo: 0, no_pasar: 0, pct: 0 };
+  for (const p of puntos) {
+    const e = p && p.estado && Object.prototype.hasOwnProperty.call(r, p.estado)
+      ? p.estado
+      : 'pendiente';
+    r[e]++;
+  }
+  r.pct = r.total ? Math.round((r.visitado / r.total) * 100) : 0;
+  return r;
+}

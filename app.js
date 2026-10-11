@@ -1411,6 +1411,11 @@ function updateSectorsSource() {
 function renderSectorList() {
   const box = document.getElementById('sectorList');
   if (!box) return;
+
+  // Sin comuna elegida: resumen de los sectores con proceso en curso, para
+  // abrir su comuna y el sector de un clic sin tener que elegir comuna antes.
+  if (!comunaSel.value) return renderSectorResumen(box);
+
   const visible = allSectores.filter(sectorsVisible);
 
   if (!visible.length) {
@@ -1458,6 +1463,63 @@ function renderSectorList() {
   syncSelectedCard();
   renderSectorDetail();
   renderAssign();
+}
+
+// Resumen sin comuna: tarjetas de los sectores con proceso (asignación)
+// activo, con su comuna; al pulsar uno se abre esa comuna y el sector.
+function renderSectorResumen(box) {
+  const asignados = allSectores.filter(
+    (s) => s.comuna && comunaActiva(s.comuna) && asigActiva(s.id)
+  );
+
+  if (!asignados.length) {
+    box.innerHTML = sectorListError
+      ? `<div class="empty">${escapeHtml(sectorListError)}</div>`
+      : '<div class="empty">Sin sectores asignados · elige una comuna para ver todos</div>';
+    renderSectorDetail();
+    renderAssign();
+    return;
+  }
+
+  box.innerHTML =
+    `<div class="sect-resumen-head"><span class="ms ms-sm">assignment_ind</span>` +
+    `${asignados.length} sector${asignados.length === 1 ? '' : 'es'} asignado${asignados.length === 1 ? '' : 's'}</div>` +
+    asignados.map((s) => {
+      const st = sectorBreakdown(s);
+      const act = asigActiva(s.id);
+      return `
+      <div class="sector-card" data-id="${escapeHtml(s.id)}" data-comuna="${escapeHtml(s.comuna)}">
+        <div class="s-top">
+          <span class="dot" style="background:${escapeHtml(s.color || '#1d4ed8')}"></span>
+          <b>${escapeHtml(s.nombre)}</b>
+          <span class="who">${escapeHtml(emailDe(act.user_id) || '—')}</span>
+        </div>
+        <small>${escapeHtml(s.comuna)} · ${st.total} punto${st.total === 1 ? '' : 's'}</small>
+        <div class="s-adv">
+          <span>Avance ${st.hechos} / ${st.total}</span>
+          <span class="s-pct">${st.pct}%</span>
+        </div>
+        ${progressBarHtml(st)}
+      </div>`;
+    }).join('');
+
+  box.querySelectorAll('.sector-card').forEach((el) => {
+    el.addEventListener('click', () => abrirComunaSector(el.dataset.comuna, el.dataset.id));
+  });
+
+  renderSectorDetail();
+  renderAssign();
+}
+
+// Desde el resumen: cambia el selector a la comuna del sector y lo enfoca.
+// onComunaChange() limpia la selección anterior y encuadra la comuna; luego
+// focusSector vuela al polígono y lo deja seleccionado.
+function abrirComunaSector(comuna, sectorId) {
+  if (comuna && comunaSel.value !== comuna) {
+    comunaSel.value = comuna;
+    onComunaChange();
+  }
+  focusSector(sectorId);
 }
 
 // Card completa del sector seleccionado

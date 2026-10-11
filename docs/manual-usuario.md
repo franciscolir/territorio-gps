@@ -32,8 +32,12 @@ para ver sus puntos»*.
 
 Usa el selector **Comuna** en la cabecera. Solo aparecen las comunas
 habilitadas (las desactiva un admin desde ⚙️ Ajustes). La vista salta a esa
-comuna y **solo se muestran sus sectores**; sin comuna elegida no hay
-sectores a la vista.
+comuna y **solo se muestran sus sectores**.
+
+Sin comuna elegida, el panel muestra un **resumen de los sectores
+asignados** (los que tienen un proceso de trabajo en curso) con su comuna,
+colaborador y avance; al pulsar uno se abre esa comuna y queda el sector
+seleccionado.
 
 ### Abrir / cerrar el panel
 

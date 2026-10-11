@@ -93,9 +93,11 @@ Notas:
   `user_id`, `deleted_at` o `estado` en un UPDATE normal: el estado pasa
   por `marcar_estado` y el borrado por `eliminar_punto` /
   `eliminar_punto_propio`.
-- Sin `grant` de tabla no basta con la policy: `sectores`,
-  `app_config` y `sectores_asignaciones` tienen grants explícitos (si no,
-  PostgREST responde `permission denied for table …`).
+- Sin `grant` de tabla no basta con la policy: `sectores`, `app_config`,
+  `sectores_asignaciones`, `comunas_rm`, `profiles` y `puntos` tienen grants
+  explícitos (si no, PostgREST responde `permission denied for table …`).
+  Los proyectos nuevos de Supabase ya no otorgan privilegios por defecto a
+  `anon`/`authenticated` en el esquema `public`; la migración `004` los aplica.
 
 ---
 

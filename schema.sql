@@ -55,9 +55,17 @@ create policy "profiles_select_self" on public.profiles
   for select to authenticated
   using (auth.uid() = id);
 
+grant select on public.profiles to authenticated;
+
 -- Comunas: lectura para todos los autenticados
 create policy "comunas_select_all" on public.comunas_rm
   for select to authenticated using (true);
+
+-- Proyectos nuevos de Supabase ya no otorgan privilegios por defecto a
+-- anon/authenticated en el esquema public: sin este grant, PostgREST
+-- responde "permission denied for table comunas_rm" y el selector de
+-- comunas queda vacío.
+grant select on public.comunas_rm to authenticated;
 
 -- PUNTOS — permisos por rol (el detalle vive en §12, porque las policies
 -- referencian la columna sector_id y la tabla de asignaciones, que se
@@ -768,6 +776,10 @@ create policy "puntos_update_colab" on public.puntos
     public.is_admin()
     or sector_id = public.sector_activo_usuario(auth.uid())
   );
+
+-- Grants de puntos: el front hoy solo lee la tabla (las escrituras van por
+-- RPCs), pero insert/update quedan por si se usan writes directos.
+grant select, insert, update on public.puntos to authenticated;
 
 -- Policy de sectores: admin ve todos; colaborador solo su sector activo
 drop policy if exists "sectores_select_colab" on public.sectores;

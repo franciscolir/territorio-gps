@@ -159,6 +159,7 @@ producción**, aplica solo los cambios nuevos, en orden:
 | [`migrations/001_seguridad_p0.sql`](migrations/001_seguridad_p0.sql) | Sectores solo-admin (policy + `guardar_sector` con advisory lock), `usuarios_asignables` solo-admin, RPC `marcar_estado` |
 | [`migrations/002_rendimiento_t6.sql`](migrations/002_rendimiento_t6.sql) | Índice parcial por `estado`, columna `puntos.sector_id` + backfill + triggers de sincronización |
 | [`migrations/003_colaborador.sql`](migrations/003_colaborador.sql) | Ciclo de vida de asignaciones (activo/devuelto), RLS por sector activo, RPCs `devolver_sector` / `actualizar_punto_terreno` / `eliminar_punto_propio` |
+| [`migrations/004_grants_tablas.sql`](migrations/004_grants_tablas.sql) | Grants explícitos de `comunas_rm`/`profiles`/`puntos` para proyectos Supabase sin default privileges |
 
 Todas son idempotentes (se pueden re-ejecutar):
 
@@ -166,6 +167,7 @@ Todas son idempotentes (se pueden re-ejecutar):
 psql "$DATABASE_URL" -f migrations/001_seguridad_p0.sql
 psql "$DATABASE_URL" -f migrations/002_rendimiento_t6.sql
 psql "$DATABASE_URL" -f migrations/003_colaborador.sql
+psql "$DATABASE_URL" -f migrations/004_grants_tablas.sql
 ```
 
 o pega su contenido en el SQL Editor de Supabase.

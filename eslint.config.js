@@ -91,7 +91,7 @@ export default [
 
   // Tests y scripts de Node (ESM)
   {
-    files: ['tests/**/*.js', 'seed-comunas.js', 'eslint.config.js'],
+    files: ['tests/**/*.js', 'seed-comunas.js', 'scripts/**/*.js', 'eslint.config.js'],
     ...recommended,
     languageOptions: {
       ecmaVersion: 2022,
@@ -101,6 +101,30 @@ export default [
     rules: {
       ...recommended.rules,
       'no-unused-vars': ['error', { args: 'none', varsIgnorePattern: '^_', caughtErrors: 'all', caughtErrorsIgnorePattern: '^_' }],
+    },
+  },
+
+  // Service worker: mundo de worker (self/caches), sin window ni document
+  {
+    files: ['sw.js'],
+    ...recommended,
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'script',
+      globals: {
+        self: 'readonly',
+        caches: 'readonly',
+        fetch: 'readonly',
+        Response: 'readonly',
+        Request: 'readonly',
+        URL: 'readonly',
+        console: 'readonly',
+      },
+    },
+    rules: {
+      ...recommended.rules,
+      'no-unused-vars': ['error', { args: 'none', varsIgnorePattern: '^_', caughtErrors: 'all', caughtErrorsIgnorePattern: '^_' }],
+      'no-empty': ['error', { allowEmptyCatch: true }],
     },
   },
 ];

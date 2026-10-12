@@ -37,6 +37,9 @@ cruce archivos.
 | `movil.js` | Lógica de terreno: territorio único, fichas de punto, estados, devolución y **cola offline**. |
 | `lib.js` | Funciones **puras**: escaping, geometría EWKB/GeoJSON, punto-en-polígono, EWKT, círculos, parseo de links/coordenadas, etiquetas de estado, cola offline y avance de territorio. Sin DOM ni estado. |
 | `app.js` | Estado global de escritorio, cliente Supabase, mapa, eventos, RPCs, UI y vistas (Historial/Usuarios). |
+| `sw.js` | Service worker de la app de terreno (PWA): precache del shell, red-primero para navegación y Supabase, *stale-while-revalidate* para CDN. |
+| `manifest.webmanifest` | Manifest PWA: nombre, `start_url: movil.html`, colores y iconos (se registra desde `movil.html`). |
+| `icons/` · `scripts/gen-icons.js` | Iconos PNG del manifest, generados sin dependencias (`node scripts/gen-icons.js`). |
 | `supabase/functions/` | Edge Functions (p. ej. `crear-usuario`, con `service_role`). |
 
 ## Estado global (`app.js`)

@@ -4,6 +4,15 @@
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport" />
   <title>Terreno · Gestión de Puntos RM</title>
+  <meta name="description" content="Puntos GPS y territorios en terreno: estados, notas y cola offline." />
+  <meta name="theme-color" content="#00223d" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Terreno" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
@@ -397,5 +406,22 @@
 
   <script src="lib.js"></script>
   <script src="movil.js"></script>
+  <script>
+    // PWA (T11): instala y cachea el shell para abrir sin señal.
+    // Solo se registra en http(s); el navegador descuenta localhost.
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker:', e));
+      });
+      // Tras una actualización del SW hay que recargar una vez para que la
+      // página nueva y los assets nuevos vayan juntos. En la primera visita no
+      // había controlador, así que no se recarga (evita el salto al abrir).
+      const yaEstabaControlada = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!yaEstabaControlada) return;
+        location.reload();
+      });
+    }
+  </script>
 </body>
 </html>

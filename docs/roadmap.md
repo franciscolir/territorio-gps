@@ -30,17 +30,30 @@ deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
 | T-H9 | Exportación CSV | Botón **Exportar CSV** en Historial (ambas pestañas), Usuarios y el modal de bitácora; `csvEscape` con BOM y anti-fórmula |
 | T-H10 | Lint y tests estrictos | `no-unused-vars: error` con `caughtErrors`; 44 tests sobre `lib.js` (`npm test`), lint a 0 |
 | T-H11 | Exportación del territorio | Menú **⋮** de la ficha: **Exportar GeoJSON** (polígono + puntos con estado/notas) y **Exportar puntos (CSV)**; items visibles para todos, acciones de admin reservadas (`territorioFeatureCollection` en `lib.js`) |
+| T-H12 | PWA de terreno | `manifest.webmanifest` + iconos PNG (`scripts/gen-icons.js`, sin dependencias) + `sw.js`: precache del shell, red-primero con caché para Supabase y *stale-while-revalidate* para los CDN. Registrada solo en `movil.html`, con recarga única al actualizar |
 
 ---
 
 ## P2 — pendiente
 
-### T11 · PWA para terreno
-La app de terreno ya tiene cola offline en `localStorage`; queda el lado
-instalable/cacheado del navegador:
-- Service worker que cachea `movil.html`, CSS, JS, fuentes y la última carga
-  de puntos/territorios.
-- Instalable (manifest + ícono), pantalla de «sin conexión».
+### T11 · PWA para terreno — ✅ hecha
+- `manifest.webmanifest` con `start_url: movil.html`, `display: standalone`,
+  colores del proyecto y 3 iconos (192, 512 y maskable) generados por
+  `scripts/gen-icons.js` **sin dependencias** (PNG escrito a mano con zlib).
+- `sw.js` precachea el shell (`movil.html`, `lib.js`, `movil.js`, manifest,
+  iconos) con `cache: 'reload'`; navegación y Supabase van **red primero**
+  con la caché como respaldo; los CDN (fuentes, maplibre, tailwind,
+  supabase-js) y los **tiles del mapa** usan *stale-while-revalidate*, con
+  respaldo de respuestas opacas —sin eso no habría offline real, porque
+  esos recursos se piden sin `crossorigin` y `resp.ok` sale `false`—.
+  Las escrituras (POST/PATCH) nunca pasan por el SW: siguen en la cola de
+  `localStorage`. Caché versionada (`terreno-v1`) que `activate` limpia.
+- Se registra **solo** desde `movil.html` (y solo en http/https): el
+  escritorio no cambia. Recarga única cuando hay un SW nuevo.
+- Ojo: `movil.html` carga todo desde CDN; sin la caché del SW no hay offline.
+
+Queda opcional: **push notifications** y pantalla de «sin conexión» propia
+(hoy el shell se abre directamente, que es lo que importa en terreno).
 
 ### T12 · Exportación del territorio — ✅ hecha
 Menú **⋮** de la ficha del territorio: **Exportar GeoJSON** (polígono +
@@ -76,9 +89,9 @@ La bitácora por punto y la vista Historial ya se exportan en CSV (T-H9).
   bloqueaba, así que era engañoso. Migración **012** revoca el privilegio
   para `authenticated` y lo deja en `service_role` (scripts).
 
-Quedan abiertas **T11** (PWA), **T14** (clustering/lista virtualizada) y
-**T15** (geocodificación); la exportación de la comuna visible queda como
-ampliación opcional de **T12**.
+Quedan abiertas **T14** (clustering/lista virtualizada) y **T15**
+(geocodificación); la exportación de la comuna visible queda como ampliación
+opcional de **T12**.
 
 ---
 
@@ -101,3 +114,9 @@ ampliación opcional de **T12**.
    clave/valor y la app solo lee y hace `upsert`. Tener el grant sin
    policy daba un falso «está permitido»; con `revoke` el privilegio queda
    solo en `service_role`, que es quien limpia filas desde scripts.
+7. **Un solo service worker, registrado solo por `movil.html`** (T11): su
+   scope es `/` porque `sw.js` vive en la raíz, así que también intercepta
+   navegaciones del escritorio. Por eso el handler es conservador — red
+   primero y, sin red, solo sirve `movil.html` para rutas que terminan en
+   `movil.html`; el escritorio nunca recibe el shell de terreno. No se
+   precachea nada del escritorio: no es el objetivo de la T11.

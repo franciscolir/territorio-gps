@@ -332,6 +332,15 @@ Es la app de la cuadrilla: se abre en el celular con la misma URL + `/movil.html
   de verlo al instante** (puntos incluidos). Pídele a tu jefe que te
   asigne otro.
 
+### Instalar en el celular (app instalable)
+
+- **Android / Chrome**: menú ⋮ → *Instalar aplicación* (o *Añadir a pantalla
+  de inicio*). **iPhone / Safari**: compartir → *Añadir a pantalla de inicio*.
+- Queda un ícono con el pin blanco sobre azul marino y la app abre a pantalla
+  completa, sin barra del navegador.
+- La primera vez que la abres se descarga una copia de la app (**service
+  worker**). A partir de ahí abre aunque no haya señal: ya está guardada.
+
 ### Sin señal (modo offline)
 
 - Los cambios (estado, nuevo punto, edición, borrado) se guardan en el
@@ -339,3 +348,6 @@ Es la app de la cuadrilla: se abre en el celular con la misma URL + `/movil.html
 - Al volver la señal se sincronizan solas cada cierto tiempo; si un
   cambio ya no aplica (p. ej. devolviste el territorio) se descarta con aviso.
 - La pestaña **Sync** muestra el detalle de lo pendiente.
+- Los datos que ves también se guardan: si abres la app sin conexión se
+  muestran los **últimos puntos y territorios cargados**. Con la cola de la
+  sección anterior, el trabajo de terreno no se detiene.

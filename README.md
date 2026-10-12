@@ -116,8 +116,12 @@ schema.sql            Esquema completo (instalación nueva)
 migrations/           Cambios incrementales para bases ya desplegadas
 seed-comunas.js       Seed de comunas RM (ArcGIS → Supabase)
 tests/lib.test.js     Tests unitarios de lib.js (Vitest)
-eslint.config.js      Configuración de lint (browser + node)
+eslint.config.js      Configuración de lint (browser + node + service worker)
 supabase/functions/   Edge Functions (crear-usuario)
+sw.js                 Service worker: cachea el shell de terreno (offline)
+manifest.webmanifest  Manifest PWA (app instalable)
+icons/                Iconos PWA (PNG generados por scripts/gen-icons.js)
+scripts/              Utilidades de mantenimiento (gen-icons.js)
 fonts/                Material Symbols (woff2 autoalojado)
 docs/                 Arquitectura, base de datos, manual y roadmap
 .env.example          Variables para el seed

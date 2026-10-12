@@ -21,6 +21,8 @@ const browser = {
   supabase: 'readonly',
   maplibregl: 'readonly',
   MutationObserver: 'readonly',
+  Blob: 'readonly',
+  URL: 'readonly',
 };
 
 // Lo que lib.js expone a app.js (script clásico, sin módulos)
@@ -30,7 +32,7 @@ const libGlobals = Object.fromEntries(
     'escapeHtml', 'pointFromGeom', 'pointInGeometry', 'inRing',
     'ringArea', 'ringToEwkt', 'createCircle', 'coordsFromLink', 'parseCoordQuery',
     'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'territorioAvance',
-    'distMeters', 'duplicadoCercano', 'DUP_METROS',
+    'distMeters', 'duplicadoCercano', 'DUP_METROS', 'csvEscape',
   ].map((k) => [k, 'readonly'])
 );
 

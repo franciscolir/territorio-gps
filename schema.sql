@@ -264,7 +264,9 @@ create table if not exists public.app_config (
 alter table public.app_config enable row level security;
 
 grant usage on schema public to anon, authenticated;
-grant select, insert, update, delete on public.app_config to authenticated;
+-- Sin `delete`: la app solo lee y hace upsert (insert + update). El DELETE
+-- queda para service_role (scripts). Migración 012 si la tabla ya existía.
+grant select, insert, update on public.app_config to authenticated;
 grant select on public.app_config to anon;
 -- service_role (scripts con SERVICE_ROLE_KEY) también necesita acceso,
 -- si no PostgREST responde "permission denied for table app_config"

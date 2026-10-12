@@ -2632,6 +2632,119 @@ function loadHistorial() {
   return histTab === 'territorios' ? loadHistorialTerritorios() : loadHistorialPuntos();
 }
 
+// ============================================================
+// EXPORTACIÓN CSV (Historial · Usuarios · modales)
+// ============================================================
+// El escapado (csvEscape) vive en lib.js: es puro y está testeado.
+
+// Descarga un CSV con BOM (para que Excel abra bien los acentos)
+function descargarCsv(nombreBase, cabeceras, filas) {
+  const csv = [cabeceras, ...filas]
+    .map((f) => f.map(csvEscape).join(','))
+    .join('\r\n');
+  const dia = new Date().toISOString().slice(0, 10);
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${nombreBase}-${dia}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Último dataset cargado en el modal (#phExport)
+let phCsv = null;
+
+async function exportarHistorialCsv() {
+  const esTerr = histTab === 'territorios';
+
+  if (esTerr) {
+    const [rt, ra] = await Promise.all([
+      db.from('territorios').select('id, nombre, comuna'),
+      db.from('territorios_asignaciones')
+        .select('territorio_id, user_id, assigned_at, estado, notas, devuelta_at, completado_at'),
+    ]);
+    const error = rt.error || ra.error;
+    if (error) return toast(error.message, true);
+
+    const porId = new Map((rt.data || []).map((t) => [t.id, t]));
+    const cabeceras = ['Comuna', 'Territorio', 'Proceso', 'Usuario', 'Asignado', 'Cierre', 'Estado', 'Notas'];
+
+    // Todos los procesos, agrupados por territorio y numerados cronológicamente
+    const porTerr = new Map();
+    for (const a of ra.data || []) {
+      if (!porTerr.has(a.territorio_id)) porTerr.set(a.territorio_id, []);
+      porTerr.get(a.territorio_id).push(a);
+    }
+
+    const filas = [];
+    for (const [tid, lista] of [...porTerr.entries()].sort(
+      (x, y) => {
+        const a = porId.get(x[0]), b = porId.get(y[0]);
+        return String(a?.comuna || '').localeCompare(String(b?.comuna || ''), 'es')
+          || String(a?.nombre || '').localeCompare(String(b?.nombre || ''), 'es');
+      },
+    )) {
+      const t = porId.get(tid) || {};
+      const orden = lista.slice().sort(
+        (a, b) => new Date(a.assigned_at || 0) - new Date(b.assigned_at || 0),
+      );
+      orden.forEach((a, i) => {
+        const est = ESTADO_ASIG[a.estado] ? a.estado : 'activa';
+        const cierre = est === 'completado' ? a.completado_at
+          : est === 'devuelta' ? a.devuelta_at : null;
+        filas.push([
+          t.comuna || '', t.nombre || '', i + 1, emailDe(a.user_id) || '',
+          a.assigned_at || '', cierre || '', ESTADO_ASIG[est], a.notas || '',
+        ]);
+      });
+    }
+    descargarCsv('historial-territorios', cabeceras, filas);
+    return;
+  }
+
+  // Pestaña Puntos
+  const { data, error } = await db
+    .from('puntos')
+    .select('nombre, estado, ultima_visita, notas, territorio_id, territorios(nombre, comuna)')
+    .is('deleted_at', null)
+    .order('nombre');
+  if (error) return toast(error.message, true);
+
+  const cabeceras = ['Comuna', 'Territorio', 'Punto', 'Última visita', 'Estado', 'No pasar', 'Erróneo', 'Activo', 'Notas'];
+  const filas = (data || []).map((p) => {
+    const t = p.territorios;
+    const est = p.estado || 'pendiente';
+    const activo = est !== 'erroneo' && est !== 'no_pasar';
+    return [
+      (t && t.comuna) || '', (t && t.nombre) || '', p.nombre || '',
+      p.ultima_visita || '', estadoLabel(est),
+      est === 'no_pasar' ? 'Sí' : '', est === 'erroneo' ? 'Sí' : '',
+      activo ? 'Sí' : 'No', p.notas || '',
+    ];
+  });
+  descargarCsv('historial-puntos', cabeceras, filas);
+}
+
+async function exportarUsuariosCsv() {
+  const { data, error } = await db.rpc('listar_usuarios');
+  if (error) return toast(error.message, true);
+  const cabeceras = ['Email', 'Rol', 'Territorio en curso', 'Desde'];
+  const filas = (data || []).map((u) => [
+    u.email || '', u.is_admin ? 'Administrador' : 'Usuario',
+    u.territorio || '', u.desde || '',
+  ]);
+  descargarCsv('usuarios', cabeceras, filas);
+}
+
+document.getElementById('histExportBtn').addEventListener('click', exportarHistorialCsv);
+document.getElementById('usuariosExportBtn').addEventListener('click', exportarUsuariosCsv);
+document.getElementById('phExport').addEventListener('click', () => {
+  if (phCsv) descargarCsv(phCsv.nombre, phCsv.cabeceras, phCsv.filas);
+});
+
 async function loadHistorialTerritorios() {
   const box = document.getElementById('histTerritorios');
   if (!box) return;
@@ -2796,6 +2909,8 @@ async function abrirHistorialPunto(puntoId, nombre) {
   const overlay = document.getElementById('puntoHistorial');
   const body = document.getElementById('phBody');
   document.getElementById('phTitle').textContent = 'Historial · ' + (nombre || 'punto');
+  document.getElementById('phExport').style.display = 'none';
+  phCsv = null;
   body.innerHTML = '<div class="empty">Cargando…</div>';
   overlay.classList.add('visible');
 
@@ -2814,6 +2929,15 @@ async function abrirHistorialPunto(puntoId, nombre) {
       <td>${escapeHtml(r.ev_actor || '—')}</td>
     </tr>`).join('')}</tbody>
   </table>`;
+
+  phCsv = {
+    nombre: 'bitacora-punto',
+    cabeceras: ['Fecha', 'Movimiento', 'Detalle', 'Usuario'],
+    filas: filas.map((r) => [
+      r.ev_at || '', TIPO_LOG[r.ev_tipo] || r.ev_tipo || '', r.ev_detalle || '', r.ev_actor || '',
+    ]),
+  };
+  document.getElementById('phExport').style.display = '';
 }
 
 function cerrarHistorialPunto() {
@@ -2826,6 +2950,8 @@ async function abrirHistorialTerritorio(territorioId, nombre) {
   const overlay = document.getElementById('puntoHistorial');
   const body = document.getElementById('phBody');
   document.getElementById('phTitle').textContent = 'Historial · ' + (nombre || 'territorio');
+  document.getElementById('phExport').style.display = 'none';
+  phCsv = null;
   body.innerHTML = '<div class="empty">Cargando…</div>';
   overlay.classList.add('visible');
 
@@ -2860,6 +2986,19 @@ async function abrirHistorialTerritorio(territorioId, nombre) {
     <tbody>${filas}</tbody>
   </table>
   <p class="ph-leyenda">${n} proceso${n === 1 ? '' : 's'} de trabajo sobre este territorio. El #${n} es el más reciente.</p>`;
+
+  phCsv = {
+    nombre: 'historial-territorio',
+    cabeceras: ['#', 'Asignado', 'Usuario', 'Cierre', 'Estado', 'Notas'],
+    filas: procesos.map((a, i) => {
+      const est = ESTADO_ASIG[a.estado] ? a.estado : 'activa';
+      const cierra = est === 'completado' ? a.completado_at
+        : est === 'devuelta' ? a.devuelta_at : null;
+      return [n - i, a.assigned_at || '', emailDe(a.user_id) || '',
+        cierra || '', ESTADO_ASIG[est], a.notas || ''];
+    }),
+  };
+  document.getElementById('phExport').style.display = '';
 }
 
 async function loadUsuariosView() {

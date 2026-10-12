@@ -171,6 +171,7 @@ producción**, aplica solo los cambios nuevos, en orden:
 | [`migrations/009_puntos_historial.sql`](migrations/009_puntos_historial.sql) | Bitácora `puntos_historial` (un log por movimiento del punto) y RPC `punto_historial` |
 | [`migrations/010_reinicio_visitados.sql`](migrations/010_reinicio_visitados.sql) | Al (re)asignar un territorio: `visitado` vuelve a `pendiente` (nuevo proceso de trabajo); `erroneo` y `no_pasar` se heredan |
 | [`migrations/011_cierre_inmediato.sql`](migrations/011_cierre_inmediato.sql) | Si tras el reinicio no queda ningún punto `pendiente`, el proceso recién abierto se cierra como `completado` (evita procesos eternos al 100 %) |
+| [`migrations/012_app_config_sin_delete.sql`](migrations/012_app_config_sin_delete.sql) | `app_config` deja de dar `DELETE` a `authenticated` (la app solo lee y hace `upsert`); el privilegio queda solo en `service_role` |
 
 Todas son idempotentes (se pueden re-ejecutar):
 
@@ -186,6 +187,7 @@ psql "$DATABASE_URL" -f migrations/008_historial_usuarios.sql
 psql "$DATABASE_URL" -f migrations/009_puntos_historial.sql
 psql "$DATABASE_URL" -f migrations/010_reinicio_visitados.sql
 psql "$DATABASE_URL" -f migrations/011_cierre_inmediato.sql
+psql "$DATABASE_URL" -f migrations/012_app_config_sin_delete.sql
 ```
 
 o pega su contenido en el SQL Editor de Supabase.

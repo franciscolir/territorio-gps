@@ -151,9 +151,12 @@
   <section id="viewHistorial" class="view-page">
     <div class="vp-head">
       <h2>Historial</h2>
-      <div class="vp-tabs" id="histTabs">
-        <button data-tab="territorios" class="active">Territorios</button>
-        <button data-tab="puntos">Puntos</button>
+      <div class="vp-head-tools">
+        <div class="vp-tabs" id="histTabs">
+          <button data-tab="territorios" class="active">Territorios</button>
+          <button data-tab="puntos">Puntos</button>
+        </div>
+        <button type="button" class="secondary" id="histExportBtn">Exportar CSV</button>
       </div>
     </div>
     <div class="vp-body" id="histTerritorios"></div>
@@ -162,7 +165,10 @@
 
   <!-- ================= VISTA: USUARIOS ================= -->
   <section id="viewUsuarios" class="view-page">
-    <div class="vp-head"><h2>Usuarios</h2></div>
+    <div class="vp-head">
+      <h2>Usuarios</h2>
+      <button type="button" class="secondary" id="usuariosExportBtn">Exportar CSV</button>
+    </div>
     <div class="vp-body">
       <form id="userForm" class="user-form">
         <div>
@@ -236,7 +242,10 @@
     <h2 id="phTitle">Historial del punto</h2>
     <div id="phBody"></div>
     <div class="buttons">
+      <div class="buttons">
       <button class="primary" id="phClose">Cerrar</button>
+      <button class="secondary" id="phExport">Exportar CSV</button>
+    </div>
     </div>
   </div>
 </div>

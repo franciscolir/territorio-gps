@@ -213,3 +213,17 @@ function duplicadoCercano(puntos, nombre, lat, lng, metros = 10, excluirId = nul
   }
   return mejor ? { punto: mejor, metros: Math.round(mejorD) } : null;
 }
+
+// ============================================================
+// EXPORTACIÓN CSV
+// ============================================================
+
+// Escapa un valor para una celda CSV. Las celdas que empiezan por = + @ o
+// tabulador se prefijan con ' para que Excel no las ejecute como fórmula
+// (CSV injection). El guion se deja estar: las coordenadas negativas
+// (-33.45) son números y deben seguir siéndolo.
+function csvEscape(v) {
+  let s = v == null ? '' : String(v);
+  if (/^[=+@\t\r]/.test(s)) s = "'" + s;
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}

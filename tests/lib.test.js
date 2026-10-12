@@ -17,7 +17,7 @@ const lib = new Function(
      escapeHtml, pointFromGeom, pointInGeometry, inRing,
      ringArea, ringToEwkt, createCircle, coordsFromLink, parseCoordQuery,
      nuevaOpCola, colaAgregar, colaQuitar, colaResumen, territorioAvance,
-     distMeters, duplicadoCercano, DUP_METROS,
+     distMeters, duplicadoCercano, DUP_METROS, csvEscape,
    };`
 )();
 
@@ -327,5 +327,30 @@ describe('duplicadoCercano', () => {
     // ~11 m de desplazamiento → fuera del umbral por defecto
     expect(lib.duplicadoCercano(enLimite, 'Z', -33.4501, -70.66)).toBeNull();
     expect(lib.duplicadoCercano(enLimite, 'Z', -33.4501, -70.66, 20)).not.toBeNull();
+  });
+});
+
+describe('csvEscape', () => {
+  it('deja lo simple y los números negativos tal cual', () => {
+    expect(lib.csvEscape('Punto A')).toBe('Punto A');
+    expect(lib.csvEscape(-33.457)).toBe('-33.457');
+    expect(lib.csvEscape(0)).toBe('0');
+    expect(lib.csvEscape(null)).toBe('');
+    expect(lib.csvEscape(undefined)).toBe('');
+  });
+
+  it('comilla lo que lleva comas, comillas o saltos de línea', () => {
+    expect(lib.csvEscape('a,b')).toBe('"a,b"');
+    expect(lib.csvEscape('dijo "hola"')).toBe('"dijo ""hola"""');
+    expect(lib.csvEscape('l1\nl2')).toBe('"l1\nl2"');
+    expect(lib.csvEscape('con "coma", y salto\n')).toBe('"con ""coma"", y salto\n"');
+  });
+
+  it('neutraliza las fórmulas de Excel (=, +, @, tab)', () => {
+    expect(lib.csvEscape('=1+1')).toBe("'=1+1");
+    expect(lib.csvEscape('@SUMA(A1)')).toBe("'@SUMA(A1)");
+    expect(lib.csvEscape('\t=cmd')).toBe("'\t=cmd");
+    // y siguen comillándose si además llevan coma
+    expect(lib.csvEscape('=1,2')).toBe("\"'=1,2\"");
   });
 });

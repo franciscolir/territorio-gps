@@ -46,6 +46,14 @@ Arriba hay una barra con tres vistas:
 - **Usuarios** (solo administración): lista del equipo con su rol, territorio en
   curso y fecha de asignación; y alta de **usuarios de terreno** (email +
   contraseña). Los usuarios creados nunca son administradores.
+- **Exportar CSV**: el botón a la derecha de las pestañas descarga la vista de
+  **Historial** en CSV — en *Territorios* exporta **todos** los procesos de cada
+  territorio (comuna, territorio, nº de proceso, usuario, asignación, cierre,
+  estado y notas); en *Puntos* exporta la tabla tal como se ve. En **Usuarios**
+  descarga la lista del equipo, y dentro de la bitácora (el **Ver**) hay otro
+  botón que descarga ese log. Los archivos se descargan con nombre
+  `historial-territorios-AAAA-MM-DD.csv` (o `historial-puntos`, `usuarios`,
+  `bitacora-punto`) y Excel los abre directamente con los acentos correctos.
 
 ---
 

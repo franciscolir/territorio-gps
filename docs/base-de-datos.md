@@ -95,7 +95,9 @@ ningún permiso directo sobre la tabla, solo puede consultarla vía la RPC.
 ### `public.app_config`
 
 Clave/valor JSON. Fila única relevante: `comunas_activas` (`null` = todas).
-Lectura para todos, escritura solo admin.
+Lectura para todos, escritura solo admin. **Sin `DELETE`**: la app solo hace
+`select` + `upsert` (insert+update); la 012 revoca el grant de `delete` para
+`authenticated` y lo deja en `service_role`, reservado a scripts.
 
 ---
 
@@ -197,6 +199,7 @@ psql "$DATABASE_URL" -f migrations/008_historial_usuarios.sql     # completado +
 psql "$DATABASE_URL" -f migrations/009_puntos_historial.sql       # bitácora de movimientos por punto
 psql "$DATABASE_URL" -f migrations/010_reinicio_visitados.sql     # visitado → pendiente al reasignar
 psql "$DATABASE_URL" -f migrations/011_cierre_inmediato.sql       # cierra el proceso si no queda nada pendiente
+psql "$DATABASE_URL" -f migrations/012_app_config_sin_delete.sql  # app_config sin DELETE para clientes
 ```
 
 o vía SQL Editor de Supabase.
@@ -214,6 +217,7 @@ o vía SQL Editor de Supabase.
 | `009_puntos_historial.sql` | tabla `puntos_historial` (bitácora), triggers `puntos_historial_ins`/`_upd`, RPC `punto_historial` |
 | `010_reinicio_visitados.sql` | trigger `territorios_asig_reiniciar` (`territorio_reiniciar_visitados`): al insertar una asignación `activa`, los puntos `visitado` del territorio vuelven a `pendiente` |
 | `011_cierre_inmediato.sql` | misma función, con el paso final: si no queda ningún punto `pendiente` tras el reinicio, la asignación recién creada se cierra como `completado` |
+| `012_app_config_sin_delete.sql` | `revoke delete on public.app_config from authenticated`: la app nunca borra filas de configuración; el privilegio queda solo en `service_role` |
 
 ### Verificación rápida tras migrar
 

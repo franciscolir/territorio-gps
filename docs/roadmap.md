@@ -21,6 +21,14 @@ deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
 | T10 | RLS por territorio | `territorio_activo_usuario`, policies de `puntos`/`territorios` por territorio activo, trigger `puntos_bloquear_columnas`, RPCs `devolver_territorio`/`actualizar_punto_terreno`/`eliminar_punto_propio` (migración 003) |
 | T-H | Vistas e historial | Rename `sectores` → `territorios` (007), barra **Territorios · Historial · Usuarios**, cierre de procesos (**auto al 100 %** + manual), `notas` por proceso, `puntos.ultima_visita`, `listar_usuarios` y alta de usuarios con Edge Function `crear-usuario` (008) |
 | T-H2 | Historial y bitácora | Pestaña *Territorios* con **todos** los territorios por comuna; pestaña *Puntos* agrupada por comuna/territorio con **texto vertical en filas combinadas** y botón **Ver**; tabla `puntos_historial` (log por movimiento, trigger security definer) + RPC `punto_historial` (009) |
+| T-H3 | Marco verde y cabeceras | «Territorios activos» enmarcado en verde con contador; cabecera `th` sticky de las tablas (`overflow: clip` en `.hist-table`) |
+| T-H4 | Filtros persistentes | `prefGet`/`prefSet` recuerdan comuna, territorio, estado, texto de búsqueda y alcance del mapa entre sesiones |
+| T-H5 | Historial navegable | Botón **Ver** en *Historial → Territorios*: abre la bitácora de procesos del territorio (nº, usuario, cierre, estado, notas) |
+| T-H6 | Ciclo de vida cerrado | `visitado` → `pendiente` al reasignar (010) y cierre **inmediato** como `completado` si no queda nada pendiente (011): ya no hay procesos eternos |
+| T-H7 | Duplicados | `duplicadoCercano` avisa al crear un punto con el mismo nombre a <10 m (web y móvil) |
+| T-H8 | Accesibilidad | `aria-label` en 16 botones de solo ícono, foco atrapado en modales + foco devuelto al cerrar, `--outline`/`--est-erroneo` a `#6e727a` (4,8:1 WCAG AA) |
+| T-H9 | Exportación CSV | Botón **Exportar CSV** en Historial (ambas pestañas), Usuarios y el modal de bitácora; `csvEscape` con BOM y anti-fórmula |
+| T-H10 | Lint y tests estrictos | `no-unused-vars: error` con `caughtErrors`; 41 tests sobre `lib.js` (`npm test`), lint a 0 |
 
 ---
 
@@ -38,9 +46,8 @@ instalable/cacheado del navegador:
   polígono del territorio.
 - Botón en la ficha del territorio; para compartir con quien no usa la app.
 
-### T13 · Exportación del historial
-- La **bitácora por punto** (`puntos_historial`, 009) ya registra cada
-  movimiento; queda exportarla junto con la vista Historial (CSV).
+### T13 · Exportación del historial — ✅ hecha
+La bitácora por punto y la vista Historial ya se exportan en CSV (T-H9).
 
 ### T14 · Marcadores y lista con muchos datos
 - Clustering de marcadores (`supercluster`) cuando el alcance es «Toda RM».
@@ -53,15 +60,20 @@ instalable/cacheado del navegador:
   (identificación de la app, ≤1 req/s).
 - Alternativa: proxy propio o MapLibre/Photon; sin clave no hay SLA.
 
-### Mejoras menores abiertas
-- Exportar el historial (CSV) desde las vistas Historial/Usuarios.
-- Filtros persistentes (estado/territorio) entre sesiones.
-- Detección de puntos duplicados al crear (mismo nombre a <10 m).
-- Auditar accesibilidad: `aria-label` en botones de solo ícono, foco
-  atrapado en modales, contraste de chips.
-- Quedan 3 warnings de lint (`catch (_)` / `catch (_err)` sin usar);
-  se resuelven al pasar a `no-unused-vars: error` con `caughtErrors`.
-- Decidir si `app_config` debe permitir `DELETE` (hoy no hay policy).
+### Mejoras menores — ✅ cerradas (ronda 1)
+- Exportar el historial (CSV) desde Historial (Territorios/Puntos), Usuarios
+  y el modal de bitácora → **T-H9**.
+- Filtros persistentes (comuna/territorio/estado/texto/alcance) → **T-H4**.
+- Duplicados <10 m al crear → **T-H7**.
+- Accesibilidad (aria-label, foco en modales, contraste) → **T-H8**.
+- Lint `no-unused-vars: error` con `caughtErrors` (0 warnings) → **T-H10**.
+- **`app_config` y `DELETE`: decisión — no.** La app solo hace `select` +
+  `upsert` (insert+update); el grant de `delete` no tenía policy y RLS lo
+  bloqueaba, así que era engañoso. Migración **012** revoca el privilegio
+  para `authenticated` y lo deja en `service_role` (scripts).
+
+Quedan abiertas **T12** (exportar territorio/comuna visible, GeoJSON),
+**T14**, **T15** y la PWA (**T11**).
 
 ---
 
@@ -80,3 +92,7 @@ instalable/cacheado del navegador:
 5. **Render imperativo sin framework**: funciona bien al tamaño actual
    (~2.300 líneas de JS). Si el estado crece, migrar a módulos + bundler es
    el momento de replantearlo (ver T5).
+6. **`app_config` sin `DELETE` para clientes** (012): la tabla es
+   clave/valor y la app solo lee y hace `upsert`. Tener el grant sin
+   policy daba un falso «está permitido»; con `revoke` el privilegio queda
+   solo en `service_role`, que es quien limpia filas desde scripts.

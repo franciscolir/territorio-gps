@@ -586,6 +586,14 @@ async function guardarFicha() {
   if (isNaN(lat) || isNaN(lng)) { err.textContent = 'Latitud/longitud inválidas'; return; }
   if (!dentroDelTerritorio(lat, lng)) { err.textContent = 'Las coordenadas quedan fuera de tu territorio'; return; }
 
+  // Mismo nombre a menos de 10 m: casi seguro un punto repetido
+  const dupId = sheetPunto.esNuevo ? null : sheetPunto.id;
+  const dup = duplicadoCercano(puntos, nombre, lat, lng, DUP_METROS, dupId);
+  if (dup && !confirm(`Ya existe "${dup.punto.nombre}" a ${dup.metros} m de este punto.\n\n¿Guardar el duplicado de todos modos?`)) {
+    err.textContent = 'Posible duplicado: ' + (dup.punto.nombre || '');
+    return;
+  }
+
   if (sheetPunto.esNuevo) {
     // Intenta contra el servidor; sin señal, encola la creación
     const { error } = await db.rpc('guardar_punto', {

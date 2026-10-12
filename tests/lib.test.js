@@ -17,6 +17,7 @@ const lib = new Function(
      escapeHtml, pointFromGeom, pointInGeometry, inRing,
      ringArea, ringToEwkt, createCircle, coordsFromLink, parseCoordQuery,
      nuevaOpCola, colaAgregar, colaQuitar, colaResumen, territorioAvance,
+     distMeters, duplicadoCercano, DUP_METROS,
    };`
 )();
 
@@ -266,5 +267,65 @@ describe('territorioAvance', () => {
     const r = lib.territorioAvance([{}, { estado: 'raro' }]);
     expect(r.pendiente).toBe(2);
     expect(r.pct).toBe(0);
+  });
+});
+
+describe('distMeters', () => {
+  it('da 0 en el mismo punto', () => {
+    expect(lib.distMeters(-33.45, -70.66, -33.45, -70.66)).toBe(0);
+  });
+  it('mide ~8,8 m para 0,00008° de latitud', () => {
+    const d = lib.distMeters(-33.45, -70.66, -33.45008, -70.66);
+    expect(d).toBeGreaterThan(8);
+    expect(d).toBeLessThan(10);
+  });
+  it('es simétrica', () => {
+    const a = lib.distMeters(-33.45, -70.66, -33.451, -70.661);
+    const b = lib.distMeters(-33.451, -70.661, -33.45, -70.66);
+    expect(Math.abs(a - b)).toBeLessThan(1e-6);
+  });
+});
+
+describe('duplicadoCercano', () => {
+  const puntos = [
+    { id: 'a', nombre: 'Farmacia', lat: -33.45, lng: -70.66 },
+    { id: 'b', nombre: 'Farmacia Los Andes', lat: -33.45, lng: -70.66 },
+    { id: 'c', nombre: ' farmacia ', lat: -33.45005, lng: -70.66 },
+    { id: 'd', nombre: 'Almacén', lat: -33.46, lng: -70.66 },
+    { id: 'e', nombre: 'Sin GPS', lat: null, lng: null },
+    { id: 'f', nombre: 'Farmacia', lat: -33.45, lng: -70.66, deleted_at: '2026-01-01' },
+  ];
+
+  it('detecta el mismo nombre a menos de 10 m (mayúsculas y espacios aparte)', () => {
+    const r = lib.duplicadoCercano(puntos, '  FARMACIA ', -33.45001, -70.66);
+    expect(r).not.toBeNull();
+    expect(r.punto.id).toBe('a');
+    expect(r.metros).toBeLessThan(10);
+  });
+
+  it('devuelve null con nombre distinto', () => {
+    expect(lib.duplicadoCercano(puntos, 'Cafetería', -33.45, -70.66)).toBeNull();
+  });
+
+  it('devuelve null si el nombre coincide pero está a más de 10 m', () => {
+    expect(lib.duplicadoCercano(puntos, 'Almacén', -33.45, -70.66)).toBeNull();
+  });
+
+  it('ignora borrados, puntos sin GPS y el propio punto al editar', () => {
+    const solo = [{ id: 'x', nombre: 'Solo', lat: -33.45, lng: -70.66 }];
+    expect(lib.duplicadoCercano(solo, 'Solo', -33.45, -70.66)?.punto.id).toBe('x');
+    expect(lib.duplicadoCercano(solo, 'Solo', -33.45, -70.66, 10, 'x')).toBeNull();
+    expect(lib.duplicadoCercano(puntos, 'Farmacia', null, -70.66)).toBeNull();
+    expect(lib.duplicadoCercano(puntos, '', -33.45, -70.66)).toBeNull();
+    expect(lib.duplicadoCercano(puntos, 'Sin GPS', -33.45, -70.66)).toBeNull();
+    expect(lib.duplicadoCercano(puntos, 'Farmacia', -33.45, -70.66, 10, 'f').punto.id)
+      .not.toBe('f');
+  });
+
+  it('el umbral es estricto: a 10 m exactos no cuenta', () => {
+    const enLimite = [{ id: 'z', nombre: 'Z', lat: -33.45, lng: -70.66 }];
+    // ~11 m de desplazamiento → fuera del umbral por defecto
+    expect(lib.duplicadoCercano(enLimite, 'Z', -33.4501, -70.66)).toBeNull();
+    expect(lib.duplicadoCercano(enLimite, 'Z', -33.4501, -70.66, 20)).not.toBeNull();
   });
 });

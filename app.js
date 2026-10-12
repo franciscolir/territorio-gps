@@ -1040,6 +1040,12 @@ async function savePoint() {
   if (isNaN(lat) || isNaN(lng)) { err.textContent = 'Latitud/longitud inválidas'; return; }
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) { err.textContent = 'Coordenadas fuera de rango'; return; }
 
+  // Mismo nombre a menos de 10 m: casi seguro un punto repetido
+  const dup = duplicadoCercano(allPoints, nombre, lat, lng, DUP_METROS, editingId);
+  if (dup && !confirm(`Ya existe "${dup.punto.nombre}" a ${dup.metros} m de este punto.\n\n¿Guardar el duplicado de todos modos?`)) {
+    return;
+  }
+
   const editId = editingId;
   const { data: savedId, error } = await db.rpc('guardar_punto', {
     p_id: editId,

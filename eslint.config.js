@@ -29,6 +29,7 @@ const libGlobals = Object.fromEntries(
     'escapeHtml', 'pointFromGeom', 'pointInGeometry', 'inRing',
     'ringArea', 'ringToEwkt', 'createCircle', 'coordsFromLink', 'parseCoordQuery',
     'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'territorioAvance',
+    'distMeters', 'duplicadoCercano', 'DUP_METROS',
   ].map((k) => [k, 'readonly'])
 );
 

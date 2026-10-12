@@ -174,3 +174,42 @@ function territorioAvance(puntos) {
   r.pct = r.total ? Math.round((r.visitado / r.total) * 100) : 0;
   return r;
 }
+
+// ============================================================
+// DUPLICADOS AL CREAR UN PUNTO
+// ============================================================
+
+// Radio (m) por debajo del cual dos puntos con el mismo nombre se consideran
+// duplicados al crearlos.
+const DUP_METROS = 10;
+
+// Distancia en metros entre dos coordenadas (haversine).
+function distMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// ¿Existe ya un punto vivo con el MISMO nombre a menos de `metros`?
+// Devuelve { punto, metros } del más cercano, o null. `excluirId` deja fuera
+// el propio punto cuando se está editando.
+function duplicadoCercano(puntos, nombre, lat, lng, metros = 10, excluirId = null) {
+  const clave = String(nombre == null ? '' : nombre).trim().toLowerCase();
+  if (!clave || lat == null || lng == null || isNaN(lat) || isNaN(lng)) return null;
+
+  let mejor = null;
+  let mejorD = metros;
+  for (const p of puntos || []) {
+    if (!p || p.deleted_at) continue;
+    if (excluirId && p.id === excluirId) continue;
+    if (p.lat == null || p.lng == null) continue;
+    if (String(p.nombre == null ? '' : p.nombre).trim().toLowerCase() !== clave) continue;
+    const d = distMeters(lat, lng, p.lat, p.lng);
+    if (d < mejorD) { mejorD = d; mejor = p; }
+  }
+  return mejor ? { punto: mejor, metros: Math.round(mejorD) } : null;
+}

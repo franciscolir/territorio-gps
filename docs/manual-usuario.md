@@ -126,6 +126,20 @@ Atajos durante el trazo: **Ctrl/Cmd + Z** quita el último vértice (o botón
 - Todo se maneja desde las **opciones ⋮** de la ficha del territorio
   (*Asignar*, *Renombrar*, *Editar* → paleta de color, *Eliminar*).
 
+### Exportar el territorio
+
+El menú **⋮** de la ficha tiene dos exportaciones, visibles para cualquier
+usuario que pueda ver el territorio:
+
+- **Exportar GeoJSON** — un archivo con el **polígono del territorio** y
+  **todos sus puntos**, cada uno con su estado, dirección, notas y última
+  visita. Se abre en QGIS, [geojson.io](https://geojson.io) o Google Earth:
+  es lo que compartes con quien no usa la app. Nombre:
+  `territorio-comuna-nombre-AAAA-MM-DD.geojson`.
+- **Exportar puntos (CSV)** — los mismos puntos en planilla, con columnas
+  *Punto, Dirección, Estado, Última visita, Notas, Lat, Lng*. Se abre
+  directo en Excel. Nombre: `territorio-comuna-nombre-AAAA-MM-DD.csv`.
+
 ### Asignar y procesos de trabajo (solo administración)
 
 La asignación se gestiona **por territorio**, desde su menú ⋮:

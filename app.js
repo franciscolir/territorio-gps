@@ -1604,16 +1604,19 @@ function renderTerritorioDetail() {
         </div>
         <div class="dc-tools">
           <span class="who${quien ? '' : ' none'}"${asigTitle}>${escapeHtml(quien || (asigTitle ? 'Devuelta' : 'Sin asignar'))}</span>
-          ${isAdmin ? `
           <div class="sd-menu-wrap">
             <button id="sdMenu" class="sd-iconbtn" title="Opciones del territorio" aria-label="Opciones del territorio"><span class="ms ms-sm">more_vert</span></button>
             <div class="sd-menu-pop" id="sdMenuPop">
+              <button id="sdExportGeo"><span class="ms ms-sm">map</span>Exportar GeoJSON</button>
+              <button id="sdExportCsv"><span class="ms ms-sm">list</span>Exportar puntos (CSV)</button>
+              ${isAdmin ? `
+              <div class="sd-menu-sep"></div>
               <button id="sdAssign"><span class="ms ms-sm">group_add</span>Asignar</button>
               <button id="sdRename"><span class="ms ms-sm">edit</span>Renombrar</button>
               <button id="sdEdit"><span class="ms ms-sm">palette</span>Editar</button>
-              <button id="sdDel" class="danger-text"><span class="ms ms-sm">delete</span>Eliminar</button>
+              <button id="sdDel" class="danger-text"><span class="ms ms-sm">delete</span>Eliminar</button>` : ''}
             </div>
-          </div>` : ''}
+          </div>
           <button id="sdFocus" class="sd-iconbtn" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">center_focus_strong</span></button>
         </div>
       </div>
@@ -1635,26 +1638,31 @@ function renderTerritorioDetail() {
   const menuBtn = document.getElementById('sdMenu');
   const menuPop = document.getElementById('sdMenuPop');
   if (menuBtn && menuPop) {
+    // Los items dependen del rol (solo admin aparecen Asignar/Renombrar/…),
+    // así que se enganchan por id y se ignora el que no esté en el DOM.
+    const onItem = (id, fn) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menuPop.classList.remove('visible');
+        fn();
+      });
+    };
     menuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       menuPop.classList.toggle('visible');
     });
-    document.getElementById('sdRename').addEventListener('click', (e) => {
-      e.stopPropagation(); menuPop.classList.remove('visible'); renameTerritorio(s.id);
-    });
-    document.getElementById('sdAssign').addEventListener('click', (e) => {
-      e.stopPropagation(); menuPop.classList.remove('visible');
-      assignOpen = true;
-      renderAssign();
-    });
-    document.getElementById('sdDel').addEventListener('click', (e) => {
-      e.stopPropagation(); menuPop.classList.remove('visible'); deleteTerritorio(s.id);
+    onItem('sdExportGeo', () => exportarTerritorioGeojson(s));
+    onItem('sdExportCsv', () => exportarTerritorioCsv(s));
+    onItem('sdAssign', () => { assignOpen = true; renderAssign(); });
+    onItem('sdRename', () => renameTerritorio(s.id));
+    onItem('sdDel', () => deleteTerritorio(s.id));
+    onItem('sdEdit', () => {
+      const pal = document.getElementById('sdPalette');
+      if (pal) pal.style.display = pal.style.display === 'none' ? 'flex' : 'none';
     });
     const pal = document.getElementById('sdPalette');
-    document.getElementById('sdEdit').addEventListener('click', (e) => {
-      e.stopPropagation(); menuPop.classList.remove('visible');
-      pal.style.display = pal.style.display === 'none' ? 'flex' : 'none';
-    });
     if (pal) {
       pal.querySelectorAll('.chip').forEach((chip) => {
         chip.addEventListener('click', (e) => { e.stopPropagation(); changeTerritorioColor(s.id, chip.dataset.color); });
@@ -2633,25 +2641,38 @@ function loadHistorial() {
 }
 
 // ============================================================
-// EXPORTACIÓN CSV (Historial · Usuarios · modales)
+// EXPORTACIÓN (Historial · Usuarios · modales · territorio)
 // ============================================================
-// El escapado (csvEscape) vive en lib.js: es puro y está testeado.
+// El escapado (csvEscape) y el armado del GeoJSON viven en lib.js: son puros
+// y están testeados. Aquí solo está el disparo de la descarga.
 
-// Descarga un CSV con BOM (para que Excel abra bien los acentos)
-function descargarCsv(nombreBase, cabeceras, filas) {
-  const csv = [cabeceras, ...filas]
-    .map((f) => f.map(csvEscape).join(','))
-    .join('\r\n');
-  const dia = new Date().toISOString().slice(0, 10);
-  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+function descargarBlob(nombre, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${nombreBase}-${dia}.csv`;
+  a.download = nombre;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// CSV con BOM, para que Excel abra bien los acentos
+function descargarCsv(nombreBase, cabeceras, filas) {
+  const csv = [cabeceras, ...filas]
+    .map((f) => f.map(csvEscape).join(','))
+    .join('\r\n');
+  descargarBlob(
+    `${nombreBase}-${new Date().toISOString().slice(0, 10)}.csv`,
+    new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }),
+  );
+}
+
+function descargarJson(nombreBase, objeto) {
+  descargarBlob(
+    `${nombreBase}-${new Date().toISOString().slice(0, 10)}.geojson`,
+    new Blob([JSON.stringify(objeto, null, 2)], { type: 'application/geo+json;' }),
+  );
 }
 
 // Último dataset cargado en el modal (#phExport)
@@ -2737,6 +2758,42 @@ async function exportarUsuariosCsv() {
     u.territorio || '', u.desde || '',
   ]);
   descargarCsv('usuarios', cabeceras, filas);
+}
+
+// --- Territorio seleccionado: polígono + puntos (T12) -------------------
+// Los puntos salen de allPoints (ya tienen lat/lng calculados de geom) y el
+// polígono de s.geom, que PostGIS devuelve como GeoJSON.
+function puntosDelTerritorio(id) {
+  return allPoints.filter((p) => p.territorio_id === id);
+}
+
+function slugNombre(v) {
+  return String(v || '').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'sin-nombre';
+}
+
+function baseTerritorioExport(s) {
+  return `territorio-${slugNombre(s.comuna)}-${slugNombre(s.nombre)}`;
+}
+
+function exportarTerritorioGeojson(s) {
+  const pts = puntosDelTerritorio(s.id);
+  descargarJson(baseTerritorioExport(s), territorioFeatureCollection(s, pts));
+  toast(`GeoJSON: polígono + ${pts.length} punto${pts.length === 1 ? '' : 's'}`);
+}
+
+function exportarTerritorioCsv(s) {
+  const pts = puntosDelTerritorio(s.id);
+  const cabeceras = ['Punto', 'Dirección', 'Estado', 'Última visita', 'Notas', 'Lat', 'Lng'];
+  const filas = pts.map((p) => [
+    p.nombre || '', p.direccion || '', estadoLabel(p.estado),
+    p.ultima_visita || '', p.notas || '',
+    p.lat == null ? '' : p.lat, p.lng == null ? '' : p.lng,
+  ]);
+  descargarCsv(baseTerritorioExport(s), cabeceras, filas);
+  toast(`${filas.length} punto${filas.length === 1 ? '' : 's'} exportado${filas.length === 1 ? '' : 's'}`);
 }
 
 document.getElementById('histExportBtn').addEventListener('click', exportarHistorialCsv);

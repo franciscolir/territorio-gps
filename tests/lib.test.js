@@ -18,6 +18,7 @@ const lib = new Function(
      ringArea, ringToEwkt, createCircle, coordsFromLink, parseCoordQuery,
      nuevaOpCola, colaAgregar, colaQuitar, colaResumen, territorioAvance,
      distMeters, duplicadoCercano, DUP_METROS, csvEscape,
+     territorioFeatureCollection,
    };`
 )();
 
@@ -352,5 +353,53 @@ describe('csvEscape', () => {
     expect(lib.csvEscape('\t=cmd')).toBe("'\t=cmd");
     // y siguen comillándose si además llevan coma
     expect(lib.csvEscape('=1,2')).toBe("\"'=1,2\"");
+  });
+});
+
+describe('territorioFeatureCollection', () => {
+  const territorio = {
+    id: 't1', nombre: 'Lota 1', comuna: 'Lota', color: '#1d4ed8',
+    geom: { type: 'Polygon', coordinates: [[[-73.2, -37.1], [-73.1, -37.1], [-73.1, -37.0], [-73.2, -37.1]]] },
+  };
+  const puntos = [
+    { id: 'p1', nombre: 'A', estado: 'visitado', notas: 'ok', lat: -37.05, lng: -73.15 },
+    { id: 'p2', nombre: 'B', estado: 'no_pasar', lat: -37.06, lng: -73.16 },
+    { id: 'p3', nombre: 'Sin coords', lat: null, lng: null },
+    { id: 'p4', nombre: 'Sin estado', lat: -37.07, lng: -73.17 },
+  ];
+
+  it('pone el polígono primero y luego los puntos', () => {
+    const fc = lib.territorioFeatureCollection(territorio, puntos);
+    expect(fc.type).toBe('FeatureCollection');
+    expect(fc.features).toHaveLength(4); // polígono + 3 con coords
+    expect(fc.features[0].geometry.type).toBe('Polygon');
+    expect(fc.features[0].properties.tipo).toBe('territorio');
+    expect(fc.features[0].properties.nombre).toBe('Lota 1');
+    expect(fc.features[1].geometry.type).toBe('Point');
+    expect(fc.features[1].geometry.coordinates).toEqual([-73.15, -37.05]); // [lng, lat]
+  });
+
+  it('arrastra estado, notas y última visita en las propiedades', () => {
+    const fc = lib.territorioFeatureCollection(territorio, puntos);
+    expect(fc.features[1].properties).toMatchObject({
+      tipo: 'punto', nombre: 'A', estado: 'visitado', notas: 'ok',
+    });
+    expect(fc.features[2].properties.estado).toBe('no_pasar');
+    expect(fc.features[3].properties.estado).toBe('pendiente'); // default
+  });
+
+  it('salta los puntos sin coordenadas y tolera entradas sin geom', () => {
+    const fc = lib.territorioFeatureCollection(territorio, puntos);
+    const nombres = fc.features.filter((f) => f.properties.tipo === 'punto')
+      .map((f) => f.properties.nombre);
+    expect(nombres).toEqual(['A', 'B', 'Sin estado']);
+
+    const sinPoligono = lib.territorioFeatureCollection(
+      { id: 't2', nombre: 'Sin geom' }, puntos,
+    );
+    expect(sinPoligono.features.every((f) => f.properties.tipo === 'punto')).toBe(true);
+
+    const vacio = lib.territorioFeatureCollection(null, null);
+    expect(vacio).toEqual({ type: 'FeatureCollection', features: [] });
   });
 });

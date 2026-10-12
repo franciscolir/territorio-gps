@@ -33,6 +33,7 @@ const libGlobals = Object.fromEntries(
     'ringArea', 'ringToEwkt', 'createCircle', 'coordsFromLink', 'parseCoordQuery',
     'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'territorioAvance',
     'distMeters', 'duplicadoCercano', 'DUP_METROS', 'csvEscape',
+    'territorioFeatureCollection',
   ].map((k) => [k, 'readonly'])
 );
 

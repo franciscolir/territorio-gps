@@ -28,7 +28,8 @@ deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
 | T-H7 | Duplicados | `duplicadoCercano` avisa al crear un punto con el mismo nombre a <10 m (web y móvil) |
 | T-H8 | Accesibilidad | `aria-label` en 16 botones de solo ícono, foco atrapado en modales + foco devuelto al cerrar, `--outline`/`--est-erroneo` a `#6e727a` (4,8:1 WCAG AA) |
 | T-H9 | Exportación CSV | Botón **Exportar CSV** en Historial (ambas pestañas), Usuarios y el modal de bitácora; `csvEscape` con BOM y anti-fórmula |
-| T-H10 | Lint y tests estrictos | `no-unused-vars: error` con `caughtErrors`; 41 tests sobre `lib.js` (`npm test`), lint a 0 |
+| T-H10 | Lint y tests estrictos | `no-unused-vars: error` con `caughtErrors`; 44 tests sobre `lib.js` (`npm test`), lint a 0 |
+| T-H11 | Exportación del territorio | Menú **⋮** de la ficha: **Exportar GeoJSON** (polígono + puntos con estado/notas) y **Exportar puntos (CSV)**; items visibles para todos, acciones de admin reservadas (`territorioFeatureCollection` en `lib.js`) |
 
 ---
 
@@ -41,10 +42,13 @@ instalable/cacheado del navegador:
   de puntos/territorios.
 - Instalable (manifest + ícono), pantalla de «sin conexión».
 
-### T12 · Exportación CSV / GeoJSON
-- Exportar el territorio o la comuna visible: puntos (con estado y notas) y el
-  polígono del territorio.
-- Botón en la ficha del territorio; para compartir con quien no usa la app.
+### T12 · Exportación del territorio — ✅ hecha
+Menú **⋮** de la ficha del territorio: **Exportar GeoJSON** (polígono +
+puntos con estado/notas/última visita, para QGIS/geojson.io/Google Earth) y
+**Exportar puntos (CSV)**. Ambos items están visibles para cualquier usuario
+que vea el territorio; las acciones de administración siguen reservadas.
+Ver `territorioFeatureCollection` en `lib.js` (3 tests).
+Queda opcional exportar la **comuna visible** (varios polígonos juntos).
 
 ### T13 · Exportación del historial — ✅ hecha
 La bitácora por punto y la vista Historial ya se exportan en CSV (T-H9).
@@ -72,8 +76,9 @@ La bitácora por punto y la vista Historial ya se exportan en CSV (T-H9).
   bloqueaba, así que era engañoso. Migración **012** revoca el privilegio
   para `authenticated` y lo deja en `service_role` (scripts).
 
-Quedan abiertas **T12** (exportar territorio/comuna visible, GeoJSON),
-**T14**, **T15** y la PWA (**T11**).
+Quedan abiertas **T11** (PWA), **T14** (clustering/lista virtualizada) y
+**T15** (geocodificación); la exportación de la comuna visible queda como
+ampliación opcional de **T12**.
 
 ---
 

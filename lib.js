@@ -227,3 +227,45 @@ function csvEscape(v) {
   if (/^[=+@\t\r]/.test(s)) s = "'" + s;
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
+
+// FeatureCollection GeoJSON con el polígono del territorio y sus puntos
+// (estado, notas, última visita) para compartir con quien no usa la app:
+// se abre en QGIS, geojson.io o Google Earth sin nada más.
+// El polígono va primero para que un visor simple muestre el contorno.
+function territorioFeatureCollection(territorio, puntos) {
+  const t = territorio || {};
+  const features = [];
+
+  if (t.geom && t.geom.type && t.geom.coordinates) {
+    features.push({
+      type: 'Feature',
+      properties: {
+        tipo: 'territorio',
+        id: t.id || null,
+        nombre: t.nombre || '',
+        comuna: t.comuna || '',
+        color: t.color || null,
+      },
+      geometry: { type: t.geom.type, coordinates: t.geom.coordinates },
+    });
+  }
+
+  for (const p of puntos || []) {
+    if (p == null || p.lat == null || p.lng == null) continue;
+    features.push({
+      type: 'Feature',
+      properties: {
+        tipo: 'punto',
+        id: p.id || null,
+        nombre: p.nombre || '',
+        direccion: p.direccion || null,
+        estado: p.estado || 'pendiente',
+        notas: p.notas || null,
+        ultima_visita: p.ultima_visita || null,
+      },
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+    });
+  }
+
+  return { type: 'FeatureCollection', features };
+}

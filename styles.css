@@ -474,6 +474,7 @@
     border-radius: var(--r-sm); cursor: pointer; text-align: left; font-family: inherit; white-space: nowrap;
   }
   #territorioDetail .sd-menu-pop button:hover { background: var(--surface-mid); }
+  #territorioDetail .sd-menu-sep { height: 1px; background: var(--outline-variant); margin: 4px 2px; }
   #territorioDetail .sd-menu-pop button.danger-text { color: var(--error); }
   #territorioDetail .sd-menu-pop button.danger-text:hover { background: var(--error-container); }
   #territorioDetail .sd-palette {

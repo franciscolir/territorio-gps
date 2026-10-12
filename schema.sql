@@ -943,6 +943,37 @@ $$;
 revoke execute on function public.eliminar_punto_propio(uuid) from public, anon;
 grant execute on function public.eliminar_punto_propio(uuid) to authenticated;
 
+-- 12.x Reinicio al (re)asignar: cada asignación activa inicia un proceso
+--      nuevo. Los puntos 'visitado' vuelven a 'pendiente'; 'erroneo' y
+--      'no_pasar' se heredan tal cual.
+create or replace function public.territorio_reiniciar_visitados()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.estado <> 'activa' then
+    return new;
+  end if;
+
+  update public.puntos
+  set estado = 'pendiente',
+      updated_at = now()
+  where territorio_id = new.territorio_id
+    and deleted_at is null
+    and estado = 'visitado';
+
+  return new;
+end;
+$$;
+
+drop trigger if exists territorios_asig_reiniciar on public.territorios_asignaciones;
+create trigger territorios_asig_reiniciar
+  after insert on public.territorios_asignaciones
+  for each row
+  execute function public.territorio_reiniciar_visitados();
+
 -- ============================================================
 -- 13. CIERRE DE TERRITORIOS E HISTORIAL (T-historial)
 -- ============================================================

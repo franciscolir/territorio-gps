@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 007 — Nuevo proceso de trabajo al (re)asignar un territorio
+-- Migración 010 — Nuevo proceso de trabajo al (re)asignar un territorio
 --
 -- Regla de negocio: cada asignación activa inicia un proceso nuevo.
 --   · puntos 'visitado'   → vuelven a 'pendiente'
@@ -11,7 +11,7 @@
 -- La creación de puntos nunca trae 'visitado', y los borrados
 -- (deleted_at) no se tocan.
 -- Idempotente: create or replace + drop if exists.
---   psql <connection> -f migrations/007_reinicio_visitados.sql
+--   psql <connection> -f migrations/010_reinicio_visitados.sql
 --   (o pegar en el SQL Editor de Supabase)
 -- ============================================================
 

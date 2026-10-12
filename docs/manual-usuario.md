@@ -121,7 +121,8 @@ La asignación se gestiona **por territorio**, desde su menú ⋮:
 1. Selecciona un territorio → **⋮ → Asignar**. Se abre la vista de asignación
    ocupando la zona de territorios.
 2. Si el territorio no tiene proceso en curso: elige el usuario y pulsa
-   **Asignar**. Se inicia un **proceso de trabajo**.
+   **Asignar**. Se inicia un **proceso de trabajo**: los puntos visitados
+   vuelven a `pendiente` (los marcados como erróneo o no pasar se conservan).
 3. El proceso se cierra de una de estas formas:
    - **Automática**: cuando ya no quedan puntos `pendiente` en el territorio.
    - **Completar** (manual): tú cierras el proceso, con notas opcionales.

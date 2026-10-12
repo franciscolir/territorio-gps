@@ -945,7 +945,11 @@ grant execute on function public.eliminar_punto_propio(uuid) to authenticated;
 
 -- 12.x Reinicio al (re)asignar: cada asignación activa inicia un proceso
 --      nuevo. Los puntos 'visitado' vuelven a 'pendiente'; 'erroneo' y
---      'no_pasar' se heredan tal cual.
+--      'no_pasar' se heredan tal cual. Si tras eso no queda ningún punto
+--      por visitar, el proceso recién abierto se cierra como 'completado'
+--      (sin esto, un territorio 100 % erróneo/no_pasar o vacío quedaría
+--      'En proceso' para siempre: el UPDATE de arriba no tocaría ninguna
+--      fila y territorios_autocompletar no llegaría a dispararse).
 create or replace function public.territorio_reiniciar_visitados()
 returns trigger
 language plpgsql
@@ -963,6 +967,19 @@ begin
   where territorio_id = new.territorio_id
     and deleted_at is null
     and estado = 'visitado';
+
+  if not exists (
+    select 1
+    from public.puntos p
+    where p.territorio_id = new.territorio_id
+      and p.deleted_at is null
+      and p.estado = 'pendiente'
+  ) then
+    update public.territorios_asignaciones
+    set estado = 'completado',
+        completado_at = coalesce(completado_at, now())
+    where id = new.id;
+  end if;
 
   return new;
 end;

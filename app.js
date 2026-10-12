@@ -2609,6 +2609,7 @@ async function loadHistorialTerritorios() {
       <td>${a ? `<span class="chip-est ${est}">${ESTADO_ASIG[est]}</span>` : '<span class="muted">Libre</span>'}</td>
       <td>${cierre ? fmtFecha(cierre) : '—'}</td>
       <td class="notas">${a ? escapeHtml(a.notas || '') : ''}</td>
+      <td class="col-ver"><button type="button" class="ver-btn" data-territorio="${escapeHtml(t.id)}" data-nombre="${escapeHtml(t.nombre || '')}">Ver</button></td>
     </tr>`;
   }).join('');
 
@@ -2616,6 +2617,7 @@ async function loadHistorialTerritorios() {
     <thead><tr>
       <th>Comuna</th><th>Territorio</th><th>Usuario</th><th>Asignado</th>
       <th>Estado</th><th>Cierre</th><th>Notas</th>
+      <th class="col-ver-h"></th>
     </tr></thead>
     <tbody>${filas}</tbody>
   </table>`;
@@ -2750,6 +2752,48 @@ function cerrarHistorialPunto() {
   document.getElementById('puntoHistorial').classList.remove('visible');
 }
 
+// Historial completo de un territorio: cada proceso de asignación como una
+// entrada de log (fecha de asignación, usuario, cierre y notas).
+async function abrirHistorialTerritorio(territorioId, nombre) {
+  const overlay = document.getElementById('puntoHistorial');
+  const body = document.getElementById('phBody');
+  document.getElementById('phTitle').textContent = 'Historial · ' + (nombre || 'territorio');
+  body.innerHTML = '<div class="empty">Cargando…</div>';
+  overlay.classList.add('visible');
+
+  const { data, error } = await db
+    .from('territorios_asignaciones')
+    .select('user_id, assigned_at, estado, notas, devuelta_at, completado_at')
+    .eq('territorio_id', territorioId)
+    .order('assigned_at', { ascending: false });
+
+  if (error) { body.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+  const procesos = data || [];
+  if (!procesos.length) { body.innerHTML = '<div class="empty">Sin procesos registrados</div>'; return; }
+
+  const n = procesos.length;
+  const filas = procesos.map((a, i) => {
+    const est = ESTADO_ASIG[a.estado] ? a.estado : 'activa';
+    const cierre = est === 'completado' ? a.completado_at : est === 'devuelta' ? a.devuelta_at : null;
+    return `<tr>
+      <td class="log-num">${n - i}</td>
+      <td>${fmtFechaHora(a.assigned_at)}</td>
+      <td>${escapeHtml(emailDe(a.user_id) || '—')}</td>
+      <td>${cierre ? fmtFechaHora(cierre) : '<span class="muted">—</span>'}</td>
+      <td><span class="chip-est ${est}">${ESTADO_ASIG[est]}</span></td>
+      <td class="notas">${escapeHtml(a.notas || '')}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `<table class="hist-table log-table">
+    <thead><tr>
+      <th>#</th><th>Asignado</th><th>Usuario</th><th>Cierre</th><th>Estado</th><th>Notas</th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table>
+  <p class="ph-leyenda">${n} proceso${n === 1 ? '' : 's'} de trabajo sobre este territorio. El #${n} es el más reciente.</p>`;
+}
+
 async function loadUsuariosView() {
   const box = document.getElementById('usuariosList');
   if (!box) return;
@@ -2824,6 +2868,12 @@ document.getElementById('histPuntos').addEventListener('click', (ev) => {
   const b = ev.target.closest('button.ver-btn');
   if (!b) return;
   abrirHistorialPunto(b.dataset.punto, b.dataset.nombre);
+});
+// Historial de un territorio: botón "Ver" de la pestaña Territorios
+document.getElementById('histTerritorios').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button.ver-btn');
+  if (!b) return;
+  abrirHistorialTerritorio(b.dataset.territorio, b.dataset.nombre);
 });
 document.getElementById('phClose').addEventListener('click', cerrarHistorialPunto);
 document.getElementById('puntoHistorial').addEventListener('click', (ev) => {

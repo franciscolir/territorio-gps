@@ -60,7 +60,10 @@ de verlo (RLS) y el territorio queda libre para reasignar. El proceso se cierra
 solo cuando no quedan puntos `pendiente` (trigger `territorios_autocompletar`) o
 manualmente con `completar_territorio()` (admin). Al iniciar un proceso nuevo
 (trigger `territorios_asig_reiniciar`) los puntos `visitado` vuelven a
-`pendiente`; `erroneo` y `no_pasar` se heredan tal cual.
+`pendiente`; `erroneo` y `no_pasar` se heredan tal cual. Si tras ese reinicio
+no queda ningún punto `pendiente`, la asignación se cierra en el mismo
+instante (migración 011), porque el trigger de autocompletar no llegaría a
+dispararse sin un `UPDATE` de puntos.
 
 ### `public.puntos_historial`
 
@@ -156,7 +159,7 @@ porque son `security invoker` y ejecutan bajo RLS.
 | `puntos_sync_territorio` | INSERT o UPDATE de `geom` en `puntos` | Calcula `puntos.territorio_id` con `st_covers` (territorio más pequeño si hay empate) |
 | `territorios_resync_puntos` | INSERT o DELETE en `territorios` | Recalcula `territorio_id` de los puntos vivos |
 | `puntos_bloquear_columnas` | UPDATE en `puntos` | Bloquea que un no-admin toque `user_id` ni `deleted_at` ajeno; deja pasar cambios de `estado` dentro del territorio |
-| `territorios_asig_reiniciar` | INSERT en `territorios_asignaciones` | Si la asignación nace `activa`, los puntos `visitado` del territorio vuelven a `pendiente` (nuevo proceso); `erroneo` y `no_pasar` se heredan |
+| `territorios_asig_reiniciar` | INSERT en `territorios_asignaciones` | Si la asignación nace `activa`: los puntos `visitado` del territorio vuelven a `pendiente` (nuevo proceso); `erroneo` y `no_pasar` se heredan. Si tras eso no queda ningún punto `pendiente`, cierra la asignación recién creada como `completado` (011) |
 | `territorios_autocompletar` | UPDATE de `estado` en `puntos` | Si al territorio no le quedan puntos `pendiente`, cierra su proceso activo como `completado` |
 | `puntos_historial_ins` / `puntos_historial_upd` | INSERT o UPDATE en `puntos` | Escribe una fila en `puntos_historial` por cada movimiento (creación, cambio de estado/territorio, borrado/restauración, edición de notas). **definer**, así que el cliente no necesita permisos sobre la bitácora. |
 
@@ -193,6 +196,7 @@ psql "$DATABASE_URL" -f migrations/007_rename_territorios.sql     # sectores →
 psql "$DATABASE_URL" -f migrations/008_historial_usuarios.sql     # completado + historial + usuarios
 psql "$DATABASE_URL" -f migrations/009_puntos_historial.sql       # bitácora de movimientos por punto
 psql "$DATABASE_URL" -f migrations/010_reinicio_visitados.sql     # visitado → pendiente al reasignar
+psql "$DATABASE_URL" -f migrations/011_cierre_inmediato.sql       # cierra el proceso si no queda nada pendiente
 ```
 
 o vía SQL Editor de Supabase.
@@ -209,6 +213,7 @@ o vía SQL Editor de Supabase.
 | `008_historial_usuarios.sql` | estado `completado`, `notas`/`completado_*`, `puntos.ultima_visita`, trigger `territorios_autocompletar`, RPCs `completar_territorio` y `listar_usuarios` |
 | `009_puntos_historial.sql` | tabla `puntos_historial` (bitácora), triggers `puntos_historial_ins`/`_upd`, RPC `punto_historial` |
 | `010_reinicio_visitados.sql` | trigger `territorios_asig_reiniciar` (`territorio_reiniciar_visitados`): al insertar una asignación `activa`, los puntos `visitado` del territorio vuelven a `pendiente` |
+| `011_cierre_inmediato.sql` | misma función, con el paso final: si no queda ningún punto `pendiente` tras el reinicio, la asignación recién creada se cierra como `completado` |
 
 ### Verificación rápida tras migrar
 

@@ -25,7 +25,11 @@ Arriba hay una barra con tres vistas:
   - Pestaña **Territorios**: **todos** los territorios, ordenados por comuna.
     Una fila por territorio — comuna, territorio, usuario (o *Sin asignar*),
     fecha de asignación, estado (**En proceso / Devuelto / Completado / Libre**),
-    fecha de cierre y notas.
+    fecha de cierre y notas, más un botón **Ver**.
+    **Ver** abre el **historial completo del territorio**: cada proceso de
+    asignación como una entrada de log, con su número de orden, fecha de
+    asignación, usuario, fecha de cierre, estado y notas. El número más alto
+    es el proceso más reciente; si está *En proceso* aún no tiene cierre.
   - Pestaña **Puntos**: una fila por punto, **agrupado por comuna y territorio**.
     Las columnas de la izquierda muestran la comuna y el territorio en **texto
     vertical**, abarcando todas las filas del grupo; los puntos sin territorio
@@ -34,11 +38,11 @@ Arriba hay una barra con tres vistas:
     pasar) y notas. Los bloques de territorio **alternan fondo** (uno con color,
     el siguiente sin color) para separarlos visualmente. El **encabezado de la
     tabla queda fijo** al hacer scroll.
-  - Botón **Ver** (columna final): abre la **bitácora** del punto, con un log por
-    fila — fecha, tipo de movimiento, detalle y quién lo hizo. Registra la
-    creación, cada cambio de estado, cambio de territorio, borrado/restauración,
-    edición de notas, y las **asignaciones / devoluciones / cierres** del
-    territorio en que está el punto.
+  - Botón **Ver** (columna final de *Puntos*): abre la **bitácora** del punto,
+    con un log por fila — fecha, tipo de movimiento, detalle y quién lo hizo.
+    Registra la creación, cada cambio de estado, cambio de territorio,
+    borrado/restauración, edición de notas, y las **asignaciones / devoluciones
+    / cierres** del territorio en que está el punto.
 - **Usuarios** (solo administración): lista del equipo con su rol, territorio en
   curso y fecha de asignación; y alta de **usuarios de terreno** (email +
   contraseña). Los usuarios creados nunca son administradores.
@@ -124,10 +128,12 @@ La asignación se gestiona **por territorio**, desde su menú ⋮:
    **Asignar**. Se inicia un **proceso de trabajo**: los puntos visitados
    vuelven a `pendiente` (los marcados como erróneo o no pasar se conservan).
 3. El proceso se cierra de una de estas formas:
-   - **Automática**: cuando ya no quedan puntos `pendiente` en el territorio.
+   - **Automática**: cuando ya no quedan puntos `pendiente` en el territorio,
+     también al abrirlo si ya no quedaba nada por visitar (un territorio cuyos
+     puntos estén todos en *Erróneo* o *No pasar* ya está cubierto).
    - **Completar** (manual): tú cierras el proceso, con notas opcionales.
    - **Devolver**: el colaborador lo devuelve (o tú lo devuelves) y el proceso
-     queda **Devuelto**.
+      queda **Devuelto**.
 
 En todos los casos el territorio queda libre para iniciar un proceso nuevo.
 

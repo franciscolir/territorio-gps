@@ -49,6 +49,8 @@ let asignaciones = {};       // territorio_id -> { user_id, estado, devuelta_at 
 let assignOpen = false;      // vista de asignación/historial del territorio elegido
 let estadoFiltro = '';       // chip de estado activo en la lista
 let lastEstadoUndo = null;   // {id, prev} para el toast "Deshacer"
+let currentView = 'territorios'; // vista activa: territorios | historial | usuarios
+let histTab = 'territorios';     // pestaña del historial: territorios | puntos
 
 let tempMarker = null;       // marker temporal al hacer clic
 let refMarker = null;        // marker de referencia
@@ -146,6 +148,13 @@ async function afterLogin() {
   // T2: dibujar/editar/asignar territorios es solo administración (también lo
   // exige la DB): el botón de dibujar ni siquiera se muestra a los demás
   if (!isAdmin) document.getElementById('drawBtn').style.display = 'none';
+
+  // Historial y Usuarios son solo de administración
+  if (!isAdmin) {
+    document
+      .querySelectorAll('#mainNav button[data-view="historial"], #mainNav button[data-view="usuarios"]')
+      .forEach((b) => { b.style.display = 'none'; });
+  }
 
   // T8: en pantallas angostas el panel arranca colapsado (ver CSS responsive)
   applyInitialSidebarState();
@@ -1334,7 +1343,7 @@ async function loadUsuarios() {
 async function loadAsignaciones() {
   const { data, error } = await db
     .from('territorios_asignaciones')
-    .select('territorio_id, user_id, estado, assigned_at, devuelta_at');
+    .select('territorio_id, user_id, estado, assigned_at, devuelta_at, completado_at, notas');
   if (error) {
     // Si falla (tabla/columna ausente, RLS), se avisa: con la lista vacía la
     // UI no podría mostrar procesos en curso y el admin creería que el
@@ -1639,13 +1648,17 @@ function renderAssign() {
     .sort((a, b) => new Date(b.assigned_at || 0) - new Date(a.assigned_at || 0));
   const opts = '<option value="">— elegir usuario —</option>' +
     usuarios.map((u) => `<option value="${u.id}">${escapeHtml(u.email)}</option>`).join('');
-  const fila = (a) => `
+  const fila = (a) => {
+    const est = ESTADO_ASIG[a.estado] ? a.estado : 'activa';
+    const cierre = est === 'completado' ? a.completado_at : est === 'devuelta' ? a.devuelta_at : null;
+    return `
     <tr>
       <td>${escapeHtml(emailDe(a.user_id) || '—')}</td>
       <td>${fmtFecha(a.assigned_at)}</td>
-      <td>${a.estado === 'activa' ? '—' : fmtFecha(a.devuelta_at)}</td>
-      <td><span class="chip-est ${a.estado === 'activa' ? 'activa' : 'devuelta'}">${a.estado === 'activa' ? 'En curso' : 'Devuelto'}</span></td>
+      <td>${cierre ? fmtFecha(cierre) : '—'}</td>
+      <td><span class="chip-est ${est}">${ESTADO_ASIG[est]}</span></td>
     </tr>`;
+  };
   panel.innerHTML = `
     <div class="assign-panel">
       <div class="a-head">
@@ -1659,7 +1672,10 @@ function renderAssign() {
             <b>${escapeHtml(emailDe(act.user_id) || '—')}</b>
             <small>Asignado el ${fmtFecha(act.assigned_at)}</small>
           </div>
-          <button id="asigDevolver" class="danger-text" title="Cerrar el proceso y liberar el territorio">Devolver</button>
+          <div class="asig-actions">
+            <button id="asigCompletar" class="primary" title="Cerrar el proceso como completado">Completar</button>
+            <button id="asigDevolver" class="danger-text" title="Cerrar el proceso y liberar el territorio">Devolver</button>
+          </div>
         </div>` : `
         <div class="asig-nueva">
           <select id="asigUserSel">${opts}</select>
@@ -1684,6 +1700,25 @@ function renderAssign() {
   });
   const dev = document.getElementById('asigDevolver');
   if (dev) dev.addEventListener('click', () => assignTerritorio(s.id, ''));
+  const comp = document.getElementById('asigCompletar');
+  if (comp) comp.addEventListener('click', () => completarTerritorio(s.id));
+}
+
+// Cierre manual del proceso (admin): RPC completar_territorio + notas
+async function completarTerritorio(territorioId) {
+  if (!isAdmin) return toast('Solo administradores pueden completar territorios', true);
+  const notas = prompt('Notas del proceso (opcional):', '');
+  if (notas === null) return;
+  const { error } = await db.rpc('completar_territorio', {
+    p_territorio: territorioId,
+    p_notas: notas.trim() || null,
+  });
+  if (error) return toast(error.message, true);
+  toast('Proceso completado');
+  await loadAsignaciones();
+  renderAssign();
+  renderTerritorioList();
+  renderTerritorioDetail();
 }
 
 async function assignTerritorio(territorioId, userId) {
@@ -2443,6 +2478,192 @@ function applyInitialSidebarState() {
 document.getElementById('toggleSidebar').addEventListener('click', () => {
   setSidebarCollapsed(!document.getElementById('sidebar').classList.contains('collapsed'));
 });
+
+// ============================================================
+// VISTAS: TERRITORIOS · HISTORIAL · USUARIOS
+// ============================================================
+function setView(name) {
+  const views = { territorios: 'main', historial: 'viewHistorial', usuarios: 'viewUsuarios' };
+  if (!views[name]) return;
+  const cambio = currentView !== name;
+  currentView = name;
+
+  document.querySelectorAll('#mainNav button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.view === name);
+  });
+  document.getElementById('main').style.display = name === 'territorios' ? 'flex' : 'none';
+  document.getElementById('viewHistorial').style.display = name === 'historial' ? 'flex' : 'none';
+  document.getElementById('viewUsuarios').style.display = name === 'usuarios' ? 'flex' : 'none';
+
+  if (name === 'territorios') {
+    if (map && cambio) map.resize();   // el contenedor estaba oculto
+  } else if (name === 'historial') {
+    loadHistorial();
+  } else if (name === 'usuarios') {
+    loadUsuariosView();
+  }
+}
+
+function fmtFechaHora(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d)
+    ? '—'
+    : d.toLocaleDateString('es-CL') + ' · ' +
+      d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Etiquetas del ciclo de vida de una asignación (En proceso / Devuelto / Completado)
+const ESTADO_ASIG = { activa: 'En proceso', devuelta: 'Devuelto', completado: 'Completado' };
+
+function loadHistorial() {
+  return histTab === 'territorios' ? loadHistorialTerritorios() : loadHistorialPuntos();
+}
+
+async function loadHistorialTerritorios() {
+  const box = document.getElementById('histTerritorios');
+  if (!box) return;
+  box.innerHTML = '<div class="empty">Cargando…</div>';
+
+  const { data, error } = await db
+    .from('territorios_asignaciones')
+    .select('territorio_id, user_id, assigned_at, estado, notas, devuelta_at, completado_at, territorios(nombre, comuna)')
+    .order('assigned_at', { ascending: false });
+
+  if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+  if (!data || !data.length) { box.innerHTML = '<div class="empty">Sin registros de asignación</div>'; return; }
+
+  const filas = data.map((r) => {
+    const t = r.territorios || {};
+    const est = ESTADO_ASIG[r.estado] ? r.estado : 'activa';
+    const cierre = est === 'completado' ? r.completado_at : est === 'devuelta' ? r.devuelta_at : null;
+    return `<tr>
+      <td><b>${escapeHtml(t.nombre || '—')}</b></td>
+      <td>${escapeHtml(t.comuna || '—')}</td>
+      <td>${escapeHtml(emailDe(r.user_id) || '—')}</td>
+      <td>${fmtFecha(r.assigned_at)}</td>
+      <td><span class="chip-est ${est}">${ESTADO_ASIG[est]}</span></td>
+      <td>${cierre ? fmtFecha(cierre) : '—'}</td>
+      <td class="notas">${escapeHtml(r.notas || '')}</td>
+    </tr>`;
+  }).join('');
+
+  box.innerHTML = `<table class="hist-table">
+    <thead><tr>
+      <th>Territorio</th><th>Comuna</th><th>Usuario</th><th>Asignado</th>
+      <th>Estado</th><th>Cierre</th><th>Notas</th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table>`;
+}
+
+async function loadHistorialPuntos() {
+  const box = document.getElementById('histPuntos');
+  if (!box) return;
+  box.innerHTML = '<div class="empty">Cargando…</div>';
+
+  const { data, error } = await db
+    .from('puntos')
+    .select('nombre, estado, ultima_visita, notas')
+    .is('deleted_at', null)
+    .order('nombre');
+
+  if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+  if (!data || !data.length) { box.innerHTML = '<div class="empty">Sin puntos</div>'; return; }
+
+  const si = '<span class="mark yes">✓</span>';
+  const no = '<span class="mark no">—</span>';
+  const filas = data.map((p) => {
+    const est = p.estado || 'pendiente';
+    const activo = est !== 'erroneo' && est !== 'no_pasar';   // "activo" = no erróneo ni no pasar
+    return `<tr>
+      <td><b>${escapeHtml(p.nombre || '—')}</b></td>
+      <td>${p.ultima_visita ? fmtFechaHora(p.ultima_visita) : '—'}</td>
+      <td><span class="estado-tag ${estadoClass(est)}">${estadoLabel(est)}</span></td>
+      <td>${est === 'no_pasar' ? si : no}</td>
+      <td>${est === 'erroneo' ? si : no}</td>
+      <td>${activo ? si : no}</td>
+      <td class="notas">${escapeHtml(p.notas || '')}</td>
+    </tr>`;
+  }).join('');
+
+  box.innerHTML = `<table class="hist-table">
+    <thead><tr>
+      <th>Punto</th><th>Última visita</th><th>Estado</th>
+      <th>No pasar</th><th>Erróneo</th><th>Activo</th><th>Notas</th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table>`;
+}
+
+async function loadUsuariosView() {
+  const box = document.getElementById('usuariosList');
+  if (!box) return;
+  box.innerHTML = '<div class="empty">Cargando…</div>';
+
+  const { data, error } = await db.rpc('listar_usuarios');
+  if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+  const lista = data || [];
+  if (!lista.length) { box.innerHTML = '<div class="empty">Sin usuarios</div>'; return; }
+
+  const filas = lista.map((u) => `
+    <tr>
+      <td>${escapeHtml(u.email || '—')}</td>
+      <td>${u.is_admin ? 'Administrador' : 'Usuario'}</td>
+      <td>${u.territorio ? escapeHtml(u.territorio) : '<span class="muted">Libre</span>'}</td>
+      <td>${u.desde ? fmtFecha(u.desde) : '—'}</td>
+    </tr>`).join('');
+
+  box.innerHTML = `<table class="hist-table">
+    <thead><tr><th>Email</th><th>Rol</th><th>Territorio en curso</th><th>Desde</th></tr></thead>
+    <tbody>${filas}</tbody>
+  </table>`;
+}
+
+// Alta de usuarios de terreno (nunca admin) vía Edge Function con service_role
+async function crearUsuario(ev) {
+  ev.preventDefault();
+  const email = document.getElementById('newUserEmail').value.trim();
+  const pass = document.getElementById('newUserPass').value;
+  const errEl = document.getElementById('userFormErr');
+  const btn = document.getElementById('newUserBtn');
+  errEl.textContent = '';
+  if (!email || pass.length < 6) {
+    errEl.textContent = 'Email válido y contraseña de al menos 6 caracteres';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Creando…';
+  try {
+    const { data, error } = await db.functions.invoke('crear-usuario', { body: { email, password: pass } });
+    if (error) throw error;
+    if (data && data.error) throw new Error(data.error);
+    toast('Usuario creado');
+    document.getElementById('userForm').reset();
+    await loadUsuarios();       // refresca los correos para la asignación
+    await loadUsuariosView();
+  } catch (ex) {
+    errEl.textContent = (ex && ex.message) || 'No se pudo crear el usuario';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Crear usuario';
+  }
+}
+
+document.querySelectorAll('#mainNav button').forEach((b) => {
+  b.addEventListener('click', () => setView(b.dataset.view));
+});
+document.getElementById('histTabs').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-tab]');
+  if (!b) return;
+  histTab = b.dataset.tab;
+  document.querySelectorAll('#histTabs button').forEach((x) => x.classList.toggle('active', x === b));
+  document.getElementById('histTerritorios').style.display = histTab === 'territorios' ? '' : 'none';
+  document.getElementById('histPuntos').style.display = histTab === 'puntos' ? '' : 'none';
+  loadHistorial();
+});
+document.getElementById('userForm').addEventListener('submit', crearUsuario);
 
 // ============================================================
 // ARRANQUE

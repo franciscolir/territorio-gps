@@ -32,17 +32,21 @@
 
 <!-- ================= APP ================= -->
 <div id="appView">
+  <header id="topbar">
+    <div class="tb-brand"><span class="ms ms-lg">tune</span><b>Puntos RM</b></div>
+    <nav id="mainNav" aria-label="Secciones">
+      <button data-view="territorios" class="active"><span class="ms ms-sm">map</span>Territorios</button>
+      <button data-view="historial"><span class="ms ms-sm">history</span>Historial</button>
+      <button data-view="usuarios"><span class="ms ms-sm">group</span>Usuarios</button>
+    </nav>
+    <div class="tb-user">
+      <span class="user" id="userInfo"></span>
+      <button id="logoutBtn" class="ghost icon" title="Cerrar sesión"><span class="ms ms-sm">logout</span></button>
+    </div>
+  </header>
   <div id="main">
     <aside id="sidebar">
       <div class="panel-head">
-        <div class="panel-brand">
-          <span class="ms ms-lg">tune</span>
-          <div class="brand-txt">
-            <b>Puntos RM</b>
-            <span class="user" id="userInfo"></span>
-          </div>
-          <button id="logoutBtn" class="ghost icon" title="Cerrar sesión"><span class="ms ms-sm">logout</span></button>
-        </div>
         <div class="comuna-row">
           <label for="comunaSel" class="row-label">Comuna</label>
           <select id="comunaSel" aria-label="Elegir comuna">
@@ -142,6 +146,40 @@
       <button id="drawClose" class="primary">Cerrar territorio</button>
     </div>
   </div>
+
+  <!-- ================= VISTA: HISTORIAL ================= -->
+  <section id="viewHistorial" class="view-page">
+    <div class="vp-head">
+      <h2>Historial</h2>
+      <div class="vp-tabs" id="histTabs">
+        <button data-tab="territorios" class="active">Territorios</button>
+        <button data-tab="puntos">Puntos</button>
+      </div>
+    </div>
+    <div class="vp-body" id="histTerritorios"></div>
+    <div class="vp-body" id="histPuntos" style="display:none"></div>
+  </section>
+
+  <!-- ================= VISTA: USUARIOS ================= -->
+  <section id="viewUsuarios" class="view-page">
+    <div class="vp-head"><h2>Usuarios</h2></div>
+    <div class="vp-body">
+      <form id="userForm" class="user-form">
+        <div>
+          <label for="newUserEmail">Email</label>
+          <input id="newUserEmail" type="email" autocomplete="off" required />
+        </div>
+        <div>
+          <label for="newUserPass">Contraseña</label>
+          <input id="newUserPass" type="text" autocomplete="off" required minlength="6" />
+        </div>
+        <button type="submit" class="primary" id="newUserBtn">Crear usuario</button>
+      </form>
+      <div class="err" id="userFormErr"></div>
+      <div class="note" id="userFormNote">Los usuarios creados son de terreno (nunca administradores).</div>
+      <div id="usuariosList"></div>
+    </div>
+  </section>
 </div>
 
 <!-- ================= MODAL ================= -->

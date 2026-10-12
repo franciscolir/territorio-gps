@@ -19,6 +19,7 @@ deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
 | T8 | Responsive | `@media 860px/480px`, panel como overlay en móvil, arranque colapsado, clic en mapa para cerrar |
 | T9 | App de terreno | `movil.html`/`movil.js`: territorio único asignado, lista/mapa/fichas de punto, alta y edición dentro del polígono, estados con deshacer, **devolución de territorio** y **cola offline** en `localStorage` con auto-sync. Falta solo PWA (service worker + manifest) |
 | T10 | RLS por territorio | `territorio_activo_usuario`, policies de `puntos`/`territorios` por territorio activo, trigger `puntos_bloquear_columnas`, RPCs `devolver_territorio`/`actualizar_punto_terreno`/`eliminar_punto_propio` (migración 003) |
+| T-H | Vistas e historial | Rename `sectores` → `territorios` (007), barra **Territorios · Historial · Usuarios**, cierre de procesos (**auto al 100 %** + manual), `notas` por proceso, `puntos.ultima_visita`, `listar_usuarios` y alta de usuarios con Edge Function `crear-usuario` (008) |
 
 ---
 
@@ -36,10 +37,14 @@ instalable/cacheado del navegador:
   polígono del territorio.
 - Botón en la ficha del territorio; para compartir con quien no usa la app.
 
-### T13 · Historial de cambios de estado
-- Tabla `puntos_historial (punto_id, estado_anterior, estado_nuevo, user_id, at)`
+### T13 · Bitácora de cambios de estado
+- La vista **Historial** ya trae el **registro vivo** por punto (última visita y
+  estado) y el historial de procesos por territorio. Queda pendiente la
+  **bitácora append-only** por cada cambio de estado
+  (`puntos_historial (punto_id, estado_anterior, estado_nuevo, user_id, at)`),
   poblada por trigger desde `marcar_estado`.
-- Quién visitó qué y cuándo → auditoría y productividad por cuadrilla.
+- Sirve para auditoría fina y productividad por cuadrilla (quién visitó qué y
+  cuándo, no solo el último estado).
 
 ### T14 · Marcadores y lista con muchos datos
 - Clustering de marcadores (`supercluster`) cuando el alcance es «Toda RM».
@@ -53,8 +58,7 @@ instalable/cacheado del navegador:
 - Alternativa: proxy propio o MapLibre/Photon; sin clave no hay SLA.
 
 ### Mejoras menores abiertas
-- Historial visible de devoluciones/reasignaciones (hoy solo `estado` y
-  auditoría mínima en `territorios_asignaciones`).
+- Exportar el historial (CSV) desde las vistas Historial/Usuarios.
 - Filtros persistentes (estado/territorio) entre sesiones.
 - Detección de puntos duplicados al crear (mismo nombre a <10 m).
 - Auditar accesibilidad: `aria-label` en botones de solo ícono, foco

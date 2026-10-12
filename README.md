@@ -6,7 +6,8 @@ Aplicación web de trabajo en terreno para levantar, clasificar y agrupar
 - Mapa interactivo (MapLibre GL) con polígonos de comunas y territorios dibujados a mano.
 - Alta de puntos con clic en el mapa, buscador unificado (dirección · coordenadas · link de Google Maps) y búsqueda por radio de referencia.
 - Estados por punto (`pendiente`, `visitado`, `erróneo`, `no_pasar`) con barra de avance y deshacer.
-- Asignación de territorios a cuadrillas con ciclo de vida **activo/devuelto** (un colaborador, un territorio a la vez).
+- Asignación de territorios a cuadrillas con ciclo de vida **en proceso / devuelto / completado** (un colaborador, un territorio a la vez; se cierra al 100 % o manualmente).
+- **Vistas de escritorio**: *Territorios* (mapa + panel), *Historial* (registro de asignaciones y de puntos) y *Usuarios* (alta y estado del equipo de terreno).
 - **App de terreno** (`movil.html`) para el colaborador: ve solo su territorio, crea/edita puntos, cambia estados, **devuelve el territorio** y opera con **cola offline**.
 - Backend en Supabase (PostgreSQL + PostGIS + RLS).
 
@@ -58,8 +59,10 @@ No hay build ni bundler: el front son archivos estáticos que se sirven tal cual
 
 ### 2. Usuarios
 
-- Los usuarios se crean en **Supabase → Authentication → Users** (o con
-  `signUp`). El trigger `handle_new_user` crea su fila en `profiles`.
+- Los usuarios de terreno se crean desde la vista **Usuarios** de la app
+  (Edge Function `crear-usuario`; ver [Despliegue](#despliegue)), o en
+  **Supabase → Authentication → Users**. El trigger `handle_new_user` crea su
+  fila en `profiles` (siempre `is_admin = false`).
 - Para dar permisos de administrador:
 
   ```sql
@@ -114,6 +117,7 @@ migrations/           Cambios incrementales para bases ya desplegadas
 seed-comunas.js       Seed de comunas RM (ArcGIS → Supabase)
 tests/lib.test.js     Tests unitarios de lib.js (Vitest)
 eslint.config.js      Configuración de lint (browser + node)
+supabase/functions/   Edge Functions (crear-usuario)
 fonts/                Material Symbols (woff2 autoalojado)
 docs/                 Arquitectura, base de datos, manual y roadmap
 .env.example          Variables para el seed
@@ -162,6 +166,8 @@ producción**, aplica solo los cambios nuevos, en orden:
 | [`migrations/004_grants_tablas.sql`](migrations/004_grants_tablas.sql) | Grants explícitos de `comunas_rm`/`profiles`/`puntos` para proyectos Supabase sin default privileges |
 | [`migrations/005_asignaciones_y_estado.sql`](migrations/005_asignaciones_y_estado.sql) | Clave surrogate en `territorios_asignaciones` (permite reasignar tras devolver), unicidad de activos y el colaborador ya puede cambiar estados |
 | [`migrations/006_grants_asignaciones.sql`](migrations/006_grants_asignaciones.sql) | Grants de `territorios` y `territorios_asignaciones` para `authenticated` (faltaban en la 004; sin ellos la app de terreno no carga el territorio asignado) |
+| [`migrations/007_rename_territorios.sql`](migrations/007_rename_territorios.sql) | Rename `sectores` → `territorios` (tablas, columna `territorio_id`, RPCs, triggers y policies) |
+| [`migrations/008_historial_usuarios.sql`](migrations/008_historial_usuarios.sql) | Estado `completado` (auto al 100 % + manual), `notas` por proceso, `puntos.ultima_visita` y RPC `listar_usuarios` |
 
 Todas son idempotentes (se pueden re-ejecutar):
 
@@ -171,6 +177,9 @@ psql "$DATABASE_URL" -f migrations/002_rendimiento_t6.sql
 psql "$DATABASE_URL" -f migrations/003_colaborador.sql
 psql "$DATABASE_URL" -f migrations/004_grants_tablas.sql
 psql "$DATABASE_URL" -f migrations/005_asignaciones_y_estado.sql
+psql "$DATABASE_URL" -f migrations/006_grants_asignaciones.sql
+psql "$DATABASE_URL" -f migrations/007_rename_territorios.sql
+psql "$DATABASE_URL" -f migrations/008_historial_usuarios.sql
 ```
 
 o pega su contenido en el SQL Editor de Supabase.
@@ -200,6 +209,17 @@ Es un sitio 100% estático. Opciones:
 
 No se sube `.env` (está en `.gitignore`); la clave anon/publicable del front
 no es secreta: la protección real la da RLS.
+
+### Edge Functions
+
+La vista **Usuarios** crea usuarios de terreno con la función `crear-usuario`
+(usa `service_role` y valida que quien llama sea admin). Despliégala una vez:
+
+```bash
+supabase functions deploy crear-usuario
+```
+
+Detalle en [`supabase/functions/crear-usuario/README.md`](supabase/functions/crear-usuario/README.md).
 
 ---
 

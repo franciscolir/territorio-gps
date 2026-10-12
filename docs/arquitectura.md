@@ -31,12 +31,13 @@ cruce archivos.
 
 | Archivo | Responsabilidad |
 |---|---|
-| `index.html` | Estructura semántica de la app de escritorio: login, panel lateral, mapa, modales, toasts. Sin lógica. |
+| `index.html` | Estructura semántica de la app de escritorio: login, barra de vistas (**Territorios · Historial · Usuarios**), panel lateral, mapa, modales, toasts. Sin lógica. |
 | `styles.css` | Todo el estilo de la app de escritorio. Tokens Material-3 al inicio; responsive al final (`@media 860px`, `480px`). |
 | `movil.html` | Shell de la app de terreno: login, tarjeta del territorio, lista/mapa/sync, bottom sheets. Estilo con Tailwind CDN + tokens del mockup. |
 | `movil.js` | Lógica de terreno: territorio único, fichas de punto, estados, devolución y **cola offline**. |
 | `lib.js` | Funciones **puras**: escaping, geometría EWKB/GeoJSON, punto-en-polígono, EWKT, círculos, parseo de links/coordenadas, etiquetas de estado, cola offline y avance de territorio. Sin DOM ni estado. |
-| `app.js` | Estado global de escritorio, cliente Supabase, mapa, eventos, RPCs, UI. |
+| `app.js` | Estado global de escritorio, cliente Supabase, mapa, eventos, RPCs, UI y vistas (Historial/Usuarios). |
+| `supabase/functions/` | Edge Functions (p. ej. `crear-usuario`, con `service_role`). |
 
 ## Estado global (`app.js`)
 
@@ -50,7 +51,7 @@ Todo el estado vive en variables de módulo (`let` en el top level):
 | Alcance/selection | `puntosScope` (region·comuna·territorio), `territorioSelectedId`, `territorioHoverId` |
 | Dibujo | `drawActive`, `drawVerts`, `drawColor`, `drawSnap`, `snapRingsCache`, `pendingTerritorio` |
 | Referencia | `refMode`, `refRadius`, `refResultsIds` |
-| UI | `assignOpen` (vista de asignación del territorio), `estadoFiltro`, `lastEstadoUndo` |
+| UI | `currentView` (territorios · historial · usuarios), `assignOpen` (vista de asignación del territorio), `histTab`, `estadoFiltro`, `lastEstadoUndo` |
 | Config | `comunasActivas`, `configError` |
 
 No hay store ni framework: la actualización es **imperativa + render manual**.
@@ -62,6 +63,12 @@ setTerritorioSelected()    → syncSelectedCard + renderList + renderMarkers
                          + renderTerritorioDetail + renderAssign (cierra si deselecta)
 refreshAfterEstado()   → renderList + renderTerritorioList + renderTerritorioDetail
 ```
+
+Las **vistas** (barra superior) las cambia `setView()`: oculta/muestra `#main`
+(mapa + panel) o las secciones `#viewHistorial` / `#viewUsuarios`, y al volver a
+*Territorios* reajusta el mapa (`map.resize()`). *Historial* consulta
+`territorios_asignaciones` y `puntos`; *Usuarios* usa la RPC `listar_usuarios` y
+la Edge Function `crear-usuario` para el alta.
 
 La vista de asignación (menú ⋮ → Asignar) ocupa la zona de territorios y lista
 los **procesos de trabajo** del territorio: filas de `territorios_asignaciones`

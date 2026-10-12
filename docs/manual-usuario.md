@@ -16,7 +16,25 @@ Arriba a la izquierda verás la marca, tu correo y el botón de **salir**.
 
 ---
 
-## 2. El panel lateral
+## 2. Vistas de la aplicación
+
+Arriba hay una barra con tres vistas:
+
+- **Territorios**: el mapa y el panel lateral (todo lo que describe este manual).
+- **Historial** (solo administración): registro de trabajo.
+  - Pestaña **Territorios**: una fila por proceso de asignación — territorio,
+    comuna, usuario, fecha de asignación, estado (**En proceso / Devuelto /
+    Completado**), fecha de cierre y notas.
+  - Pestaña **Puntos**: una fila por punto — nombre, **última visita**, estado,
+    marcas de *No pasar* / *Erróneo* / *Activo* (activo = ni erróneo ni no
+    pasar) y notas.
+- **Usuarios** (solo administración): lista del equipo con su rol, territorio en
+  curso y fecha de asignación; y alta de **usuarios de terreno** (email +
+  contraseña). Los usuarios creados nunca son administradores.
+
+---
+
+## 3. El panel lateral
 
 El panel tiene dos zonas:
 
@@ -47,7 +65,7 @@ seleccionado.
 
 ---
 
-## 3. Territorios
+## 4. Territorios
 
 ### Seleccionar
 
@@ -92,13 +110,18 @@ La asignación se gestiona **por territorio**, desde su menú ⋮:
    ocupando la zona de territorios.
 2. Si el territorio no tiene proceso en curso: elige el usuario y pulsa
    **Asignar**. Se inicia un **proceso de trabajo**.
-3. Cuando el colaborador devuelve el territorio (o tú lo cierras con
-   **Devolver**), el proceso se marca **Devuelto** con su fecha y el territorio
-   queda libre para iniciar otro proceso.
+3. El proceso se cierra de una de estas formas:
+   - **Automática**: cuando ya no quedan puntos `pendiente` en el territorio.
+   - **Completar** (manual): tú cierras el proceso, con notas opcionales.
+   - **Devolver**: el colaborador lo devuelve (o tú lo devuelves) y el proceso
+     queda **Devuelto**.
 
-La vista muestra el proceso **En curso** (usuario y fecha) y, debajo, el
+En todos los casos el territorio queda libre para iniciar un proceso nuevo.
+
+La vista muestra el proceso **En proceso** (usuario y fecha) y, debajo, el
 **historial**: cada fila es un proceso con su usuario, fecha de asignación,
-fecha de devolución y estado. Todo queda guardado en la base de datos.
+fecha de cierre y estado (**En proceso / Devuelto / Completado**). Todo queda
+guardado en la base de datos (y también en la vista **Historial**).
 
 Reglas: **un colaborador solo puede tener un proceso en curso a la vez** y
 un territorio solo puede tener uno activo (si ya existe, se avisa). El correo de
@@ -107,7 +130,7 @@ territorios.
 
 ---
 
-## 4. Puntos
+## 5. Puntos
 
 ### Crear
 
@@ -154,7 +177,7 @@ navegador (⚙️ Ajustes).
 
 ---
 
-## 5. Buscar
+## 6. Buscar
 
 Botón **🔍** en el riel. Acepta tres tipos de entrada:
 
@@ -168,7 +191,7 @@ guardar el punto ahí.
 
 ---
 
-## 6. Modo referencia (búsqueda por radio)
+## 7. Modo referencia (búsqueda por radio)
 
 1. Pulsa **◎** (barra inferior).
 2. Haz clic en el mapa para fijar la referencia.
@@ -179,7 +202,7 @@ Sirve para responder «¿qué direcciones tengo alrededor de esta esquina?».
 
 ---
 
-## 7. App de terreno (celular)
+## 8. App de terreno (celular)
 
 La app de terreno es **`movil.html`** (misma URL + `/movil.html`, ver
 sección 11): el colaborador ve su territorio asignado, cambia estados y sincroniza
@@ -188,7 +211,7 @@ eliminado.
 
 ---
 
-## 8. Ajustes (solo administración)
+## 9. Ajustes (solo administración)
 
 Botón **⚙️**:
 
@@ -199,7 +222,7 @@ Botón **⚙️**:
 
 ---
 
-## 9. Atajos de teclado
+## 10. Atajos de teclado
 
 | Tecla | Acción |
 |---|---|
@@ -209,7 +232,7 @@ Botón **⚙️**:
 
 ---
 
-## 10. Problemas frecuentes
+## 11. Problemas frecuentes
 
 | Síntoma | Causa y solución |
 |---|---|
@@ -222,7 +245,7 @@ Botón **⚙️**:
 
 ---
 
-## 11. App de terreno (colaboradores) — `movil.html`
+## 12. App de terreno (colaboradores) — `movil.html`
 
 Es la app de la cuadrilla: se abre en el celular con la misma URL + `/movil.html`
 (mismo hosting que la de escritorio). Ve **solo su territorio asignado y sus puntos**.

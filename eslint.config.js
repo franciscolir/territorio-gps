@@ -28,7 +28,7 @@ const libGlobals = Object.fromEntries(
     'SEGMENTOS', 'ESTADOS', 'PIN_ICONS', 'estadoLabel', 'estadoClass',
     'escapeHtml', 'pointFromGeom', 'pointInGeometry', 'inRing',
     'ringArea', 'ringToEwkt', 'createCircle', 'coordsFromLink', 'parseCoordQuery',
-    'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'sectorAvance',
+    'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'territorioAvance',
   ].map((k) => [k, 'readonly'])
 );
 

@@ -76,6 +76,69 @@
   /* ============ APP ============ */
   #appView { display: none; flex-direction: column; height: 100%; }
 
+  /* ============ BARRA SUPERIOR / VISTAS ============ */
+  #topbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 8px 14px; background: var(--primary); color: #fff;
+    box-shadow: var(--shadow-1); z-index: 60; flex-shrink: 0;
+  }
+  #topbar .tb-brand { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  #topbar .tb-brand .ms { font-size: 20px; }
+  #mainNav { display: flex; gap: 4px; flex: 1; }
+  #mainNav button {
+    border: 0; background: transparent; color: var(--inverse-primary);
+    font-family: inherit; font-weight: 600; font-size: 13px; cursor: pointer;
+    padding: 7px 12px; border-radius: var(--r-md); display: inline-flex; align-items: center; gap: 5px;
+  }
+  #mainNav button .ms { font-size: 16px; }
+  #mainNav button:hover { background: rgba(255,255,255,.12); color: #fff; }
+  #mainNav button.active { background: #fff; color: var(--primary); }
+  #topbar .tb-user { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  #topbar .tb-user .user { color: var(--inverse-primary); }
+  #topbar #logoutBtn { background: rgba(255,255,255,.14); color: #fff; }
+  #topbar #logoutBtn:hover { background: rgba(255,255,255,.28); }
+
+  .view-page {
+    display: none; flex: 1; flex-direction: column; min-height: 0;
+    padding: 16px; overflow: hidden; background: var(--surface);
+  }
+  .vp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .vp-head h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .07em; color: var(--on-surface-variant); }
+  .vp-tabs { display: flex; gap: 4px; background: var(--surface-mid); padding: 3px; border-radius: var(--r-md); }
+  .vp-tabs button {
+    border: 0; background: transparent; font-family: inherit; font-weight: 700;
+    font-size: 12.5px; color: var(--on-surface-variant); padding: 6px 14px; border-radius: var(--r-sm); cursor: pointer;
+  }
+  .vp-tabs button.active { background: var(--surface-lowest); color: var(--primary); box-shadow: var(--shadow-1); }
+  .vp-body { flex: 1; min-height: 0; overflow: auto; }
+  .vp-body .empty { color: var(--outline); padding: 24px 4px; font-size: 13px; }
+
+  .hist-table {
+    width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--surface-lowest);
+    border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-1);
+  }
+  .hist-table th, .hist-table td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
+  .hist-table th { position: sticky; top: 0; background: var(--surface-mid); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--on-surface-variant); }
+  .hist-table tr:hover td { background: var(--surface-low); }
+  .hist-table .notas { max-width: 300px; color: var(--on-surface-variant); }
+  .hist-table .chip-est { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .hist-table .chip-est.activa { background: var(--est-pendiente); color: #fff; }
+  .hist-table .chip-est.devuelta { background: var(--surface-high); color: var(--on-surface-variant); }
+  .hist-table .chip-est.completado { background: var(--est-visitado); color: var(--est-visitado-on); }
+  .hist-table .mark.yes { color: var(--est-visitado); font-weight: 800; }
+  .hist-table .mark.no { color: var(--outline); }
+  .muted { color: var(--outline); }
+
+  .user-form {
+    display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;
+    background: var(--surface-lowest); padding: 12px; border-radius: var(--r-lg);
+    box-shadow: var(--shadow-1); margin-bottom: 8px;
+  }
+  .user-form label { display: block; font-size: 11px; font-weight: 700; color: var(--on-surface-variant); margin-bottom: 4px; }
+  .user-form input { padding: 8px 10px; border: 1px solid var(--outline-variant); border-radius: var(--r-md); font-family: inherit; font-size: 13px; background: var(--surface); }
+  #userFormErr { color: var(--error); font-size: 12px; margin: 0 0 8px; }
+  #userFormNote { color: var(--outline); font-size: 11.5px; margin-bottom: 10px; }
+
   /* ============ PANEL LATERAL ============ */
   button { font-family: inherit; cursor: pointer; }
   button.primary { background: var(--primary); color: var(--on-primary); border: 0; padding: 8px 12px; border-radius: var(--r-md); font-size: 13px; font-weight: 600; }
@@ -104,14 +167,14 @@
   #sidebar .panel-head > * { flex-shrink: 0; }
   #sidebar .panel-head h2 { font-size: 12px; margin: 4px 0 2px; text-transform: uppercase; letter-spacing: .07em; color: var(--on-surface-variant); font-weight: 700; }
 
-  /* Zona de sectores: crece para llenar el panel cuando no hay sector elegido */
+  /* Zona de territorios: crece para llenar el panel cuando no hay territorio elegido */
   #sidebar .sect-zone {
     flex: 1; min-height: 0; overflow-y: auto;
     padding: 8px 14px; display: flex; flex-direction: column; gap: 7px;
   }
   #sidebar .sect-zone.compact { flex: 0 1 auto; min-height: 0; max-height: 58%; overflow-y: auto; }
 
-  /* Zona de puntos: fondo con mayor contraste para distinguirla de los sectores */
+  /* Zona de puntos: fondo con mayor contraste para distinguirla de los territorios */
   #sidebar .pts-zone {
     flex: 1; min-height: 0; overflow-y: auto;
     background: var(--surface-high); border-top: 2px solid var(--secondary);
@@ -277,7 +340,7 @@
   #undoToast #undoBtn:hover { background: rgba(255,255,255,.2); }
   #undoToast #undoBtn .ic { font-size: 15px; }
 
-  /* ============ PANEL DE SECTORES (resumen / detalle / asignación) ============ */
+  /* ============ PANEL DE TERRITORIOS (resumen / detalle / asignación) ============ */
   #detailBlock { display: flex; flex-direction: column; gap: 7px; }
   button.ghost.back {
     background: transparent; color: var(--on-surface-variant); border: 0;
@@ -287,67 +350,67 @@
   button.ghost.back:hover { background: var(--surface-mid); color: var(--secondary); }
 
   /* Chip de cuadrilla / sin asignar */
-  .sector-card .who, #sectorDetail .who {
+  .territorio-card .who, #territorioDetail .who {
     display: inline-flex; align-items: center; gap: 3px;
     font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
     background: rgba(121,219,141,.38); color: var(--on-green);
     max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;
   }
-  .sector-card .who.none, #sectorDetail .who.none { background: var(--error-container); color: var(--on-error-container); }
-  .sector-card .s-adv { display: flex; justify-content: space-between; font-size: 11px; color: var(--on-surface-variant); }
+  .territorio-card .who.none, #territorioDetail .who.none { background: var(--error-container); color: var(--on-error-container); }
+  .territorio-card .s-adv { display: flex; justify-content: space-between; font-size: 11px; color: var(--on-surface-variant); }
   .s-pct { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 700; color: var(--primary); }
 
-  /* Detalle del sector (estilo front) */
-  #sectorDetail .detail-card {
+  /* Detalle del territorio (estilo front) */
+  #territorioDetail .detail-card {
     background: var(--surface-low); border: 1px solid transparent; border-radius: var(--r-lg);
     padding: 12px; display: flex; flex-direction: column; gap: 9px; box-shadow: var(--shadow-1);
   }
-  #sectorDetail .dc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-  #sectorDetail .dc-names { min-width: 0; }
-  #sectorDetail .dc-comuna { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--secondary); font-weight: 700; }
-  #sectorDetail .detail-card h3 { font-size: 14.5px; display: flex; align-items: center; gap: 7px; color: var(--primary); line-height: 1.25; margin-top: 2px; }
-  #sectorDetail .dot { width: 13px; height: 13px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-  #sectorDetail .stats4 {
+  #territorioDetail .dc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  #territorioDetail .dc-names { min-width: 0; }
+  #territorioDetail .dc-comuna { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--secondary); font-weight: 700; }
+  #territorioDetail .detail-card h3 { font-size: 14.5px; display: flex; align-items: center; gap: 7px; color: var(--primary); line-height: 1.25; margin-top: 2px; }
+  #territorioDetail .dot { width: 13px; height: 13px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  #territorioDetail .stats4 {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;
     background: var(--surface-lowest); border-radius: var(--r-md); padding: 8px 5px; text-align: center;
   }
-  #sectorDetail .stats4 span { display: block; font-size: 10px; color: var(--on-surface-variant); }
-  #sectorDetail .stats4 b { font-size: 16px; color: var(--primary); }
-  #sectorDetail .stats4 .st-v b { color: var(--tertiary-container); }
-  #sectorDetail .stats4 .st-e b { color: var(--error); }
-  #sectorDetail .stats4 .st-b b { color: var(--secondary); }
-  #sectorDetail .dc-prog-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--on-surface-variant); }
-  #sectorDetail .progress { width: 100%; height: 9px; background: var(--surface-high); border-radius: 999px; margin: 0; overflow: hidden; display: flex; }
-  #sectorDetail .progress > i { display: block; height: 100%; }
-  #sectorDetail .dc-tools { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-  #sectorDetail .sd-iconbtn {
+  #territorioDetail .stats4 span { display: block; font-size: 10px; color: var(--on-surface-variant); }
+  #territorioDetail .stats4 b { font-size: 16px; color: var(--primary); }
+  #territorioDetail .stats4 .st-v b { color: var(--tertiary-container); }
+  #territorioDetail .stats4 .st-e b { color: var(--error); }
+  #territorioDetail .stats4 .st-b b { color: var(--secondary); }
+  #territorioDetail .dc-prog-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--on-surface-variant); }
+  #territorioDetail .progress { width: 100%; height: 9px; background: var(--surface-high); border-radius: 999px; margin: 0; overflow: hidden; display: flex; }
+  #territorioDetail .progress > i { display: block; height: 100%; }
+  #territorioDetail .dc-tools { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+  #territorioDetail .sd-iconbtn {
     width: 30px; height: 30px; border: 1px solid var(--outline-variant); background: var(--surface-lowest);
     color: var(--primary); border-radius: var(--r-md); cursor: pointer; flex-shrink: 0;
     display: inline-flex; align-items: center; justify-content: center; font-family: inherit;
   }
-  #sectorDetail .sd-iconbtn:hover { background: var(--surface-high); }
-  #sectorDetail .sd-menu-wrap { position: relative; }
-  #sectorDetail .sd-menu-pop {
+  #territorioDetail .sd-iconbtn:hover { background: var(--surface-high); }
+  #territorioDetail .sd-menu-wrap { position: relative; }
+  #territorioDetail .sd-menu-pop {
     position: absolute; top: 34px; right: 0; z-index: 5;
     background: var(--surface-lowest); border: 1px solid var(--outline-variant);
     border-radius: var(--r-md); box-shadow: var(--shadow-2); padding: 4px;
     display: none; flex-direction: column; gap: 2px; min-width: 150px;
   }
-  #sectorDetail .sd-menu-pop.visible { display: flex; }
-  #sectorDetail .sd-menu-pop button {
+  #territorioDetail .sd-menu-pop.visible { display: flex; }
+  #territorioDetail .sd-menu-pop button {
     display: flex; align-items: center; gap: 6px; border: 0; background: transparent;
     color: var(--on-surface); font-size: 12.5px; font-weight: 600; padding: 8px 10px;
     border-radius: var(--r-sm); cursor: pointer; text-align: left; font-family: inherit; white-space: nowrap;
   }
-  #sectorDetail .sd-menu-pop button:hover { background: var(--surface-mid); }
-  #sectorDetail .sd-menu-pop button.danger-text { color: var(--error); }
-  #sectorDetail .sd-menu-pop button.danger-text:hover { background: var(--error-container); }
-  #sectorDetail .sd-palette {
+  #territorioDetail .sd-menu-pop button:hover { background: var(--surface-mid); }
+  #territorioDetail .sd-menu-pop button.danger-text { color: var(--error); }
+  #territorioDetail .sd-menu-pop button.danger-text:hover { background: var(--error-container); }
+  #territorioDetail .sd-palette {
     display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px;
     border-top: 1px dashed var(--outline-variant);
   }
-  #sectorDetail .sd-palette .chip { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
-  #sectorDetail .sd-palette .chip.selected { border-color: var(--on-surface); }
+  #territorioDetail .sd-palette .chip { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+  #territorioDetail .sd-palette .chip.selected { border-color: var(--on-surface); }
 
   .assign-panel { border: 1px solid var(--outline-variant); border-radius: var(--r-lg); padding: 10px; background: var(--surface-lowest); box-shadow: var(--shadow-1); }
   .assign-panel .a-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; font-weight: 700; color: var(--primary); }
@@ -357,7 +420,7 @@
     color: var(--on-surface-variant); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
   }
   .assign-panel .sd-iconbtn:hover { background: var(--surface-high); color: var(--secondary); }
-  .assign-panel .a-sector { margin: 0 0 8px; font-size: 11.5px; color: var(--on-surface-variant); }
+  .assign-panel .a-territorio { margin: 0 0 8px; font-size: 11.5px; color: var(--on-surface-variant); }
   .assign-panel .asig-actual {
     display: flex; justify-content: space-between; align-items: center; gap: 8px;
     background: var(--surface-low); border: 1px solid var(--outline-variant);
@@ -371,14 +434,16 @@
     padding: 5px 10px; border-radius: var(--r-md); font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; flex-shrink: 0;
   }
   .assign-panel .asig-actual button.danger-text:hover { background: var(--error); color: #fff; }
+  .assign-panel .asig-actual .asig-actions { display: flex; gap: 6px; flex-shrink: 0; }
   .assign-panel .asig-nueva { display: flex; gap: 6px; margin-bottom: 8px; }
   .assign-panel .asig-nueva select { flex: 1; }
   .assign-panel .asig-nueva button { white-space: nowrap; }
   .assign-panel .chip-est {
     display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
   }
-  .assign-panel .chip-est.activa { background: rgba(121,219,141,.38); color: var(--on-green); }
-  .assign-panel .chip-est.devuelta { background: var(--surface-mid); color: var(--on-surface-variant); }
+  .assign-panel .chip-est.activa { background: var(--est-pendiente); color: #fff; }
+  .assign-panel .chip-est.devuelta { background: var(--surface-high); color: var(--on-surface-variant); }
+  .assign-panel .chip-est.completado { background: var(--est-visitado); color: var(--est-visitado-on); }
   .assign-panel table { width: 100%; border-collapse: collapse; font-size: 11px; }
   .assign-panel th, .assign-panel td { text-align: left; padding: 5px 4px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
   .assign-panel th { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--on-surface-variant); }
@@ -428,53 +493,53 @@
 
   #sidebar .empty { padding: 30px 16px; text-align: center; color: #94a3b8; font-size: 13px; }
 
-  /* ============ SECTORES (lista lateral) ============ */
+  /* ============ TERRITORIOS (lista lateral) ============ */
   #sidebar .sect-head {
     display: flex; justify-content: space-between; align-items: center;
     margin-top: 8px; gap: 6px;
   }
   #sidebar .sect-head h2 { margin: 0; }
-  #sectorList {
+  #territorioList {
     flex: 1; min-height: 0; margin-top: 2px;
     display: flex; flex-direction: column; gap: 8px; padding-right: 2px;
   }
-  #sectorList .empty { font-size: 12px; color: var(--outline); padding: 10px 4px; }
-  #sectorList .sect-resumen-head {
+  #territorioList .empty { font-size: 12px; color: var(--outline); padding: 10px 4px; }
+  #territorioList .sect-resumen-head {
     display: flex; align-items: center; gap: 5px; padding: 2px 4px 0;
     font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
     color: var(--on-surface-variant);
   }
-  #sectorList .sect-resumen-head .ms { font-size: 15px; color: var(--primary); }
-  .sector-card {
+  #territorioList .sect-resumen-head .ms { font-size: 15px; color: var(--primary); }
+  .territorio-card {
     background: var(--surface-low); border: 1px solid transparent; border-radius: var(--r-lg);
     padding: 11px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 6px;
     box-shadow: var(--shadow-1); transition: all .15s;
   }
-  .sector-card:hover { background: var(--surface-mid); }
-  .sector-card.selected {
+  .territorio-card:hover { background: var(--surface-mid); }
+  .territorio-card.selected {
     border-color: var(--secondary); background: var(--surface-lowest);
     box-shadow: 0 0 0 2px rgba(29,78,216,.25);
   }
-  .sector-card .s-top { display: flex; align-items: center; gap: 7px; }
-  .sector-card .dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 2px var(--surface-lowest); }
-  .sector-card .s-top b {
+  .territorio-card .s-top { display: flex; align-items: center; gap: 7px; }
+  .territorio-card .dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 2px var(--surface-lowest); }
+  .territorio-card .s-top b {
     flex: 1; min-width: 0; font-size: 13px; color: var(--primary);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .sector-card > small { font-size: 11px; color: var(--on-surface-variant); }
-  .sector-card .progress {
+  .territorio-card > small { font-size: 11px; color: var(--on-surface-variant); }
+  .territorio-card .progress {
     width: 100%; height: 7px; background: var(--surface-high);
     border-radius: 999px; overflow: hidden; display: flex; margin-top: 1px;
   }
-  .sector-card .progress > i { display: block; height: 100%; }
-  .sector-card .s-actions { display: flex; gap: 4px; justify-content: flex-end; }
-  .sector-card .s-actions button {
+  .territorio-card .progress > i { display: block; height: 100%; }
+  .territorio-card .s-actions { display: flex; gap: 4px; justify-content: flex-end; }
+  .territorio-card .s-actions button {
     border: none; background: var(--surface-mid); cursor: pointer; padding: 4px 7px;
     border-radius: var(--r-md); color: var(--on-surface-variant); display: inline-flex;
   }
-  .sector-card .s-actions button:hover { background: var(--surface-high); color: var(--primary); }
-  .sector-card .palette-row { display: none; gap: 6px; flex-wrap: wrap; }
-  .sector-card.editing .palette-row { display: flex; }
+  .territorio-card .s-actions button:hover { background: var(--surface-high); color: var(--primary); }
+  .territorio-card .palette-row { display: none; gap: 6px; flex-wrap: wrap; }
+  .territorio-card.editing .palette-row { display: flex; }
   .chip {
     width: 20px; height: 20px; padding: 0; border-radius: 50%;
     border: 2px solid #fff; box-shadow: 0 0 0 1px var(--outline-variant); cursor: pointer;
@@ -595,42 +660,42 @@
   }
   #settingsModal button.primary:hover { background: #003050; }
 
-  /* ============ MODAL NUEVO SECTOR ============ */
-  #sectorModal {
+  /* ============ MODAL NUEVO TERRITORIO ============ */
+  #territorioModal {
     position: fixed; inset: 0; z-index: 520; background: rgba(13,28,46,.55);
     display: none; align-items: center; justify-content: center; padding: 20px;
   }
-  #sectorModal.visible { display: flex; }
-  #sectorModal .box {
+  #territorioModal.visible { display: flex; }
+  #territorioModal .box {
     background: var(--surface-lowest); border-radius: var(--r-xl); padding: 24px;
     width: 100%; max-width: 360px; box-shadow: var(--shadow-2);
   }
-  #sectorModal h2 { font-size: 16px; margin-bottom: 12px; color: var(--on-surface); }
-  #sectorModal .count-badge {
+  #territorioModal h2 { font-size: 16px; margin-bottom: 12px; color: var(--on-surface); }
+  #territorioModal .count-badge {
     display: flex; align-items: center; gap: 8px;
     background: var(--surface-mid); border: 1px solid var(--surface-high); color: var(--secondary);
     font-size: 13px; font-weight: 700; padding: 10px 12px; border-radius: var(--r-md);
   }
-  #sectorModal .swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
-  #sectorModal label {
+  #territorioModal .swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  #territorioModal label {
     display: block; font-size: 12px; font-weight: 600; color: var(--on-surface-variant);
     margin: 12px 0 4px; text-transform: uppercase;
   }
-  #sectorModal input {
+  #territorioModal input {
     width: 100%; padding: 9px 12px; border: 1px solid var(--outline-variant);
     border-radius: var(--r-md); font-size: 14px; font-family: inherit; background: var(--surface-lowest);
   }
-  #sectorModal input:focus { outline: 2px solid var(--secondary); }
-  #sectorModal .err { color: var(--error); font-size: 13px; min-height: 18px; margin-top: 8px; }
-  #sectorModal .buttons { display: flex; gap: 10px; margin-top: 16px; }
-  #sectorModal button {
+  #territorioModal input:focus { outline: 2px solid var(--secondary); }
+  #territorioModal .err { color: var(--error); font-size: 13px; min-height: 18px; margin-top: 8px; }
+  #territorioModal .buttons { display: flex; gap: 10px; margin-top: 16px; }
+  #territorioModal button {
     flex: 1; padding: 11px; border-radius: var(--r-md); font-size: 14px;
     font-weight: 600; cursor: pointer; border: none; font-family: inherit;
   }
-  #sectorModal button.primary { background: var(--primary); color: #fff; }
-  #sectorModal button.primary:hover { background: #003050; }
-  #sectorModal button.secondary { background: transparent; color: var(--primary); border: 1px solid var(--outline-variant); }
-  #sectorModal button.secondary:hover { background: var(--surface-mid); }
+  #territorioModal button.primary { background: var(--primary); color: #fff; }
+  #territorioModal button.primary:hover { background: #003050; }
+  #territorioModal button.secondary { background: transparent; color: var(--primary); border: 1px solid var(--outline-variant); }
+  #territorioModal button.secondary:hover { background: var(--surface-mid); }
 
   /* ============ MODAL ============ */
   #modal {
@@ -840,8 +905,8 @@
   }
 
   @media (max-width: 480px) {
-    #modal, #pointDetail, #sectorModal, #settingsModal { padding: 10px; }
-    #modal .box, #pointDetail .box, #sectorModal .box, #settingsModal .box { padding: 16px; }
+    #modal, #pointDetail, #territorioModal, #settingsModal { padding: 10px; }
+    #modal .box, #pointDetail .box, #territorioModal .box, #settingsModal .box { padding: 16px; }
     .map-fabs.bottom .scope-seg button { padding: 6px 7px; font-size: 10px; }
     #refPanel { bottom: 118px; }
   }

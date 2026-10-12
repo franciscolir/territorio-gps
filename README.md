@@ -1,13 +1,14 @@
 # Territorio GPS — Gestión de Puntos · RM Chile
 
 Aplicación web de trabajo en terreno para levantar, clasificar y agrupar
-**puntos GPS en sectores** de la Región Metropolitana de Chile.
+**puntos GPS en territorios** de la Región Metropolitana de Chile.
 
-- Mapa interactivo (MapLibre GL) con polígonos de comunas y sectores dibujados a mano.
+- Mapa interactivo (MapLibre GL) con polígonos de comunas y territorios dibujados a mano.
 - Alta de puntos con clic en el mapa, buscador unificado (dirección · coordenadas · link de Google Maps) y búsqueda por radio de referencia.
 - Estados por punto (`pendiente`, `visitado`, `erróneo`, `no_pasar`) con barra de avance y deshacer.
-- Asignación de sectores a cuadrillas con ciclo de vida **activo/devuelto** (un colaborador, un sector a la vez).
-- **App de terreno** (`movil.html`) para el colaborador: ve solo su sector, crea/edita puntos, cambia estados, **devuelve el sector** y opera con **cola offline**.
+- Asignación de territorios a cuadrillas con ciclo de vida **en proceso / devuelto / completado** (un colaborador, un territorio a la vez; se cierra al 100 % o manualmente).
+- **Vistas de escritorio**: *Territorios* (mapa + panel), *Historial* (registro de asignaciones y de puntos) y *Usuarios* (alta y estado del equipo de terreno).
+- **App de terreno** (`movil.html`) para el colaborador: ve solo su territorio, crea/edita puntos, cambia estados, **devuelve el territorio** y opera con **cola offline**.
 - Backend en Supabase (PostgreSQL + PostGIS + RLS).
 
 ---
@@ -58,8 +59,10 @@ No hay build ni bundler: el front son archivos estáticos que se sirven tal cual
 
 ### 2. Usuarios
 
-- Los usuarios se crean en **Supabase → Authentication → Users** (o con
-  `signUp`). El trigger `handle_new_user` crea su fila en `profiles`.
+- Los usuarios de terreno se crean desde la vista **Usuarios** de la app
+  (Edge Function `crear-usuario`; ver [Despliegue](#despliegue)), o en
+  **Supabase → Authentication → Users**. El trigger `handle_new_user` crea su
+  fila en `profiles` (siempre `is_admin = false`).
 - Para dar permisos de administrador:
 
   ```sql
@@ -105,7 +108,7 @@ npx serve .          # o python -m http.server, o el hosting de tu elección
 ```
 index.html            Shell HTML de escritorio: login, panel, mapa, modales
 styles.css            CSS de escritorio (tokens Material-3 + responsive)
-movil.html            App de terreno (colaborador): login, sector único, tabs
+movil.html            App de terreno (colaborador): login, territorio único, tabs
 movil.js              Lógica de terreno: fichas, estados, devolución, cola offline
 lib.js                Funciones puras: geometría, EWKB, estados, escaping, links, cola offline
 app.js                Estado global de escritorio, capas del mapa, renders, RPCs
@@ -114,6 +117,7 @@ migrations/           Cambios incrementales para bases ya desplegadas
 seed-comunas.js       Seed de comunas RM (ArcGIS → Supabase)
 tests/lib.test.js     Tests unitarios de lib.js (Vitest)
 eslint.config.js      Configuración de lint (browser + node)
+supabase/functions/   Edge Functions (crear-usuario)
 fonts/                Material Symbols (woff2 autoalojado)
 docs/                 Arquitectura, base de datos, manual y roadmap
 .env.example          Variables para el seed
@@ -133,13 +137,13 @@ La regla está en la base de datos (RLS + RPCs); el front solo la refleja.
 
 | Acción | Admin | Colaborador (terreno) |
 |---|---|---|
-| Ver puntos y sectores | ✔ todos | ✔ solo su **sector activo** y sus puntos |
-| Crear punto | ✔ | ✔ solo dentro del polígono de su sector |
-| **Cambiar estado** de un punto | ✔ | ✔ de su sector (vía RPC `marcar_estado`) |
-| Editar nombre/dirección/notas/coordenadas | ✔ | ✔ solo puntos de su sector (vía `actualizar_punto_terreno`) |
+| Ver puntos y territorios | ✔ todos | ✔ solo su **territorio activo** y sus puntos |
+| Crear punto | ✔ | ✔ solo dentro del polígono de su territorio |
+| **Cambiar estado** de un punto | ✔ | ✔ de su territorio (vía RPC `marcar_estado`) |
+| Editar nombre/dirección/notas/coordenadas | ✔ | ✔ solo puntos de su territorio (vía `actualizar_punto_terreno`) |
 | Eliminar punto | ✔ | ✔ solo los que **él creó** (vía `eliminar_punto_propio`) |
-| Dibujar, renombrar, recolorear o eliminar sectores | ✔ | ✖ |
-| Asignar / devolver sectores | ✔ | ✖ (solo **devuelve** el suyo, vía `devolver_sector`) |
+| Dibujar, renombrar, recolorear o eliminar territorios | ✔ | ✖ |
+| Asignar / devolver territorios | ✔ | ✖ (solo **devuelve** el suyo, vía `devolver_territorio`) |
 | Ver la lista de correos del equipo | ✔ | ✖ (la RPC devuelve 0 filas) |
 | Configurar comunas activas (`app_config`) | ✔ | ✖ (lectura) |
 
@@ -156,12 +160,14 @@ producción**, aplica solo los cambios nuevos, en orden:
 
 | Archivo | Contenido |
 |---|---|
-| [`migrations/001_seguridad_p0.sql`](migrations/001_seguridad_p0.sql) | Sectores solo-admin (policy + `guardar_sector` con advisory lock), `usuarios_asignables` solo-admin, RPC `marcar_estado` |
-| [`migrations/002_rendimiento_t6.sql`](migrations/002_rendimiento_t6.sql) | Índice parcial por `estado`, columna `puntos.sector_id` + backfill + triggers de sincronización |
-| [`migrations/003_colaborador.sql`](migrations/003_colaborador.sql) | Ciclo de vida de asignaciones (activo/devuelto), RLS por sector activo, RPCs `devolver_sector` / `actualizar_punto_terreno` / `eliminar_punto_propio` |
+| [`migrations/001_seguridad_p0.sql`](migrations/001_seguridad_p0.sql) | Territorios solo-admin (policy + `guardar_territorio` con advisory lock), `usuarios_asignables` solo-admin, RPC `marcar_estado` |
+| [`migrations/002_rendimiento_t6.sql`](migrations/002_rendimiento_t6.sql) | Índice parcial por `estado`, columna `puntos.territorio_id` + backfill + triggers de sincronización |
+| [`migrations/003_colaborador.sql`](migrations/003_colaborador.sql) | Ciclo de vida de asignaciones (activo/devuelto), RLS por territorio activo, RPCs `devolver_territorio` / `actualizar_punto_terreno` / `eliminar_punto_propio` |
 | [`migrations/004_grants_tablas.sql`](migrations/004_grants_tablas.sql) | Grants explícitos de `comunas_rm`/`profiles`/`puntos` para proyectos Supabase sin default privileges |
-| [`migrations/005_asignaciones_y_estado.sql`](migrations/005_asignaciones_y_estado.sql) | Clave surrogate en `sectores_asignaciones` (permite reasignar tras devolver), unicidad de activos y el colaborador ya puede cambiar estados |
-| [`migrations/006_grants_asignaciones.sql`](migrations/006_grants_asignaciones.sql) | Grants de `sectores` y `sectores_asignaciones` para `authenticated` (faltaban en la 004; sin ellos la app de terreno no carga el sector asignado) |
+| [`migrations/005_asignaciones_y_estado.sql`](migrations/005_asignaciones_y_estado.sql) | Clave surrogate en `territorios_asignaciones` (permite reasignar tras devolver), unicidad de activos y el colaborador ya puede cambiar estados |
+| [`migrations/006_grants_asignaciones.sql`](migrations/006_grants_asignaciones.sql) | Grants de `territorios` y `territorios_asignaciones` para `authenticated` (faltaban en la 004; sin ellos la app de terreno no carga el territorio asignado) |
+| [`migrations/007_rename_territorios.sql`](migrations/007_rename_territorios.sql) | Rename `sectores` → `territorios` (tablas, columna `territorio_id`, RPCs, triggers y policies) |
+| [`migrations/008_historial_usuarios.sql`](migrations/008_historial_usuarios.sql) | Estado `completado` (auto al 100 % + manual), `notas` por proceso, `puntos.ultima_visita` y RPC `listar_usuarios` |
 
 Todas son idempotentes (se pueden re-ejecutar):
 
@@ -171,6 +177,9 @@ psql "$DATABASE_URL" -f migrations/002_rendimiento_t6.sql
 psql "$DATABASE_URL" -f migrations/003_colaborador.sql
 psql "$DATABASE_URL" -f migrations/004_grants_tablas.sql
 psql "$DATABASE_URL" -f migrations/005_asignaciones_y_estado.sql
+psql "$DATABASE_URL" -f migrations/006_grants_asignaciones.sql
+psql "$DATABASE_URL" -f migrations/007_rename_territorios.sql
+psql "$DATABASE_URL" -f migrations/008_historial_usuarios.sql
 ```
 
 o pega su contenido en el SQL Editor de Supabase.
@@ -200,6 +209,17 @@ Es un sitio 100% estático. Opciones:
 
 No se sube `.env` (está en `.gitignore`); la clave anon/publicable del front
 no es secreta: la protección real la da RLS.
+
+### Edge Functions
+
+La vista **Usuarios** crea usuarios de terreno con la función `crear-usuario`
+(usa `service_role` y valida que quien llama sea admin). Despliégala una vez:
+
+```bash
+supabase functions deploy crear-usuario
+```
+
+Detalle en [`supabase/functions/crear-usuario/README.md`](supabase/functions/crear-usuario/README.md).
 
 ---
 

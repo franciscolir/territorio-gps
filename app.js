@@ -39,16 +39,18 @@ let allPoints = [];
 let allComunas = [];
 let comunaFeatures = null;
 let pointMarkers = {};       // id -> Marker
-let puntosScope = 'comuna';  // marcadores del mapa: region | comuna | sector
+let puntosScope = 'comuna';  // marcadores del mapa: region | comuna | territorio
 try {
   const s = localStorage.getItem('puntosScope');
-  if (s === 'region' || s === 'comuna' || s === 'sector') puntosScope = s;
+  if (s === 'region' || s === 'comuna' || s === 'territorio') puntosScope = s;
 } catch (_) {}
 let usuarios = [];           // [{id, email}] para asignar
-let asignaciones = {};       // sector_id -> { user_id, estado, devuelta_at }
-let assignOpen = false;      // vista de asignación/historial del sector elegido
+let asignaciones = {};       // territorio_id -> { user_id, estado, devuelta_at }
+let assignOpen = false;      // vista de asignación/historial del territorio elegido
 let estadoFiltro = '';       // chip de estado activo en la lista
 let lastEstadoUndo = null;   // {id, prev} para el toast "Deshacer"
+let currentView = 'territorios'; // vista activa: territorios | historial | usuarios
+let histTab = 'territorios';     // pestaña del historial: territorios | puntos
 
 let tempMarker = null;       // marker temporal al hacer clic
 let refMarker = null;        // marker de referencia
@@ -57,26 +59,26 @@ let refMode = false;         // modo referencia activo
 let editingId = null;        // id del punto que se edita
 let refResultsIds = new Set();
 
-// --- Sectores (dibujo manual) ---
-let allSectores = [];        // sectores cargados de la DB
+// --- Territorios (dibujo manual) ---
+let allTerritorios = [];        // territorios cargados de la DB
 let drawActive = false;      // ¿modo dibujo activo?
-let drawColor = '#3b82f6';   // color del sector en curso
+let drawColor = '#3b82f6';   // color del territorio en curso
 let drawVerts = [];          // vértices [[lng,lat], ...]
 let drawHover = null;        // última posición del cursor (goma elástica)
 let drawSnap = null;         // { a, b } arista de referencia con la que se enganchó
-let snapRingsCache = null;   // anillos de referencia para el snap (comuna + sectores)
-let pendingSector = null;    // polígono cerrado esperando guardado
-let sectorHoverId = null;    // sector bajo el cursor
-let sectorSelectedId = null; // sector seleccionado (habilita marcar puntos)
+let snapRingsCache = null;   // anillos de referencia para el snap (comuna + territorios)
+let pendingTerritorio = null;    // polígono cerrado esperando guardado
+let territorioHoverId = null;    // territorio bajo el cursor
+let territorioSelectedId = null; // territorio seleccionado (habilita marcar puntos)
 let lastPlaceAt = 0;         // debounce: evita colocar dos veces en un doble clic
-let sectorListError = null;  // mensaje de error al cargar (tabla ausente, etc.)
+let territorioListError = null;  // mensaje de error al cargar (tabla ausente, etc.)
 
 // --- Configuración (app_config) ---
 let comunasActivas = null;   // Set de comunas activas; null = todas
 let configError = null;      // error al cargar app_config (tabla ausente, etc.)
 let setSaveTimer = null;     // debounce del guardado en app_config
 
-const SECTOR_COLORS = [
+const TERRITORIO_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
   '#8b5cf6', '#ec4899', '#14b8a6', '#64748b',
 ];
@@ -143,9 +145,16 @@ async function afterLogin() {
     .maybeSingle();
   isAdmin = !!prof?.is_admin;
 
-  // T2: dibujar/editar/asignar sectores es solo administración (también lo
+  // T2: dibujar/editar/asignar territorios es solo administración (también lo
   // exige la DB): el botón de dibujar ni siquiera se muestra a los demás
   if (!isAdmin) document.getElementById('drawBtn').style.display = 'none';
+
+  // Historial y Usuarios son solo de administración
+  if (!isAdmin) {
+    document
+      .querySelectorAll('#mainNav button[data-view="historial"], #mainNav button[data-view="usuarios"]')
+      .forEach((b) => { b.style.display = 'none'; });
+  }
 
   // T8: en pantallas angostas el panel arranca colapsado (ver CSS responsive)
   applyInitialSidebarState();
@@ -213,13 +222,13 @@ function initMap() {
     );
   });
   document.getElementById('fitViewBtn').addEventListener('click', () => {
-    if (sectorSelectedId) return focusSector(sectorSelectedId);
+    if (territorioSelectedId) return focusTerritorio(territorioSelectedId);
     const comuna = allComunas.find((c) => c.nombre === comunaSel.value);
     const b = comuna ? boundsFromGeometry(comuna.geom) : null;
     if (b && !b.isEmpty()) {
       map.fitBounds([[b.getWest(), b.getSouth()], [b.getEast(), b.getNorth()]], { padding: 40 });
     } else {
-      toast('Selecciona una comuna o sector para ajustar la vista', true);
+      toast('Selecciona una comuna o territorio para ajustar la vista', true);
     }
   });
 
@@ -228,8 +237,8 @@ function initMap() {
     await loadUsuarios();
     await loadAsignaciones();
     await loadPoints();
-    initSectorLayers();
-    await loadSectores();
+    initTerritorioLayers();
+    await loadTerritorios();
     map.on('click', onMapClick);
     map.on('mousemove', onMapMove);
     map.on('dblclick', onMapDblClick);
@@ -368,12 +377,12 @@ function onComunaChange() {
   renderList();
   renderMarkers();
 
-  // Un sector dibujado queda huérfano si cambias de comuna a mitad de trazo
+  // Un territorio dibujado queda huérfano si cambias de comuna a mitad de trazo
   if (drawActive) stopDraw();
   // La selección no sobrevive al cambio de comuna
-  if (sectorSelectedId) setSectorSelected(null);
-  updateSectorsSource();
-  renderSectorList();
+  if (territorioSelectedId) setTerritorioSelected(null);
+  updateTerritoriosSource();
+  renderTerritorioList();
 
   if (comuna) {
     const b = boundsFromGeometry(comuna.geom);
@@ -412,7 +421,7 @@ function boundsFromGeometry(geom) {
 }
 
 
-// Sectores visibles: solo existen si hay comuna elegida y el punto está dentro
+// Territorios visibles: solo existen si hay comuna elegida y el punto está dentro
 function displayedPoints() {
   const nombre = comunaSel.value;
   if (!nombre) return [];
@@ -505,7 +514,7 @@ function syncScopeUI() {
   });
 }
 function setPuntosScope(v) {
-  if (v !== 'region' && v !== 'comuna' && v !== 'sector') return;
+  if (v !== 'region' && v !== 'comuna' && v !== 'territorio') return;
   puntosScope = v;
   try { localStorage.setItem('puntosScope', puntosScope); } catch (_) {}
   syncScopeUI();
@@ -613,7 +622,7 @@ async function loadPoints() {
 
   renderList();
   renderMarkers();
-  renderSectorList(); // los contadores "N puntos" cambian con cada alta/baja
+  renderTerritorioList(); // los contadores "N puntos" cambian con cada alta/baja
 }
 
 // ============================================================
@@ -640,10 +649,10 @@ estadoChips.querySelector('.chip-f[data-estado=""]').classList.add('active');
 
 function renderList() {
   const list = document.getElementById('list');
-  const sec = sectorSelected();
+  const sec = territorioSelected();
 
   if (!sec) {
-    list.innerHTML = '<div class="empty">Selecciona un sector para ver sus puntos</div>';
+    list.innerHTML = '<div class="empty">Selecciona un territorio para ver sus puntos</div>';
     updateListScope();
     return;
   }
@@ -651,7 +660,7 @@ function renderList() {
   const txt = filterText.value.toLowerCase().trim();
   const est = estadoFiltro;
 
-  const base = pointsInSector(sec);
+  const base = pointsInTerritorio(sec);
   const filtered = base.filter((p) => {
     if (est && (p.estado || 'pendiente') !== est) return false;
     if (txt) {
@@ -662,7 +671,7 @@ function renderList() {
   });
 
   if (!filtered.length) {
-    list.innerHTML = '<div class="empty">No hay puntos en este sector</div>';
+    list.innerHTML = '<div class="empty">No hay puntos en este territorio</div>';
     updateListScope();
     return;
   }
@@ -714,11 +723,11 @@ function renderList() {
 // ============================================================
 // MARCADORES EN MAPA
 // ============================================================
-// Puntos que se muestran en el MAPA según la preferencia (region/comuna/sector)
+// Puntos que se muestran en el MAPA según la preferencia (region/comuna/territorio)
 function mapScopePoints() {
   if (puntosScope === 'region') return allPoints;
-  if (puntosScope === 'sector') {
-    const sec = sectorSelected();
+  if (puntosScope === 'territorio') {
+    const sec = territorioSelected();
     if (!sec) return [];
     return allPoints.filter((p) => p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, sec.geom));
   }
@@ -772,47 +781,47 @@ function focusPoint(id) {
 // ============================================================
 // CLIC EN MAPA
 // ============================================================
-// Sector (visible) bajo un lng/lat: hit-test geométrico preciso.
+// Territorio (visible) bajo un lng/lat: hit-test geométrico preciso.
 // OJO: queryRenderedFeatures con un punto sobre capas de fill da falsos
-// positivos en MapLibre 4.7.1 (devuelve el sector aunque estés fuera).
-function sectorAtLngLat(lng, lat) {
-  const s = allSectores.find((x) => sectorsVisible(x) && pointInGeometry(lng, lat, x.geom));
+// positivos en MapLibre 4.7.1 (devuelve el territorio aunque estés fuera).
+function territorioAtLngLat(lng, lat) {
+  const s = allTerritorios.find((x) => territoriosVisible(x) && pointInGeometry(lng, lat, x.geom));
   return s ? s.id : null;
 }
 
-// Selección de sector: feature-state en el mapa + clase en la tarjeta lateral
-function setSectorSelected(id) {
-  if (sectorSelectedId === id) return;
-  if (map && map.getSource('sectores') && sectorSelectedId != null) {
-    map.setFeatureState({ source: 'sectores', id: sectorSelectedId }, { selected: false });
+// Selección de territorio: feature-state en el mapa + clase en la tarjeta lateral
+function setTerritorioSelected(id) {
+  if (territorioSelectedId === id) return;
+  if (map && map.getSource('territorios') && territorioSelectedId != null) {
+    map.setFeatureState({ source: 'territorios', id: territorioSelectedId }, { selected: false });
   }
-  sectorSelectedId = id;
-  if (map && map.getSource('sectores') && id != null) {
-    map.setFeatureState({ source: 'sectores', id }, { selected: true });
+  territorioSelectedId = id;
+  if (map && map.getSource('territorios') && id != null) {
+    map.setFeatureState({ source: 'territorios', id }, { selected: true });
   }
   syncSelectedCard();
-  renderList();     // la lista muestra solo los puntos del sector seleccionado
-  renderMarkers();  // en modo "sector" también cambian los marcadores del mapa
-  renderSectorDetail();
+  renderList();     // la lista muestra solo los puntos del territorio seleccionado
+  renderMarkers();  // en modo "territorio" también cambian los marcadores del mapa
+  renderTerritorioDetail();
   renderAssign();   // al deselectar se cierra la vista de asignación
 }
 
-// Sector seleccionado (o null)
-function sectorSelected() {
-  return sectorSelectedId ? allSectores.find((s) => s.id === sectorSelectedId) : null;
+// Territorio seleccionado (o null)
+function territorioSelected() {
+  return territorioSelectedId ? allTerritorios.find((s) => s.id === territorioSelectedId) : null;
 }
 
 function updateListScope() {
   const head = document.getElementById('puntosHead');
-  const btn = document.getElementById('allSectoresBtn');
+  const btn = document.getElementById('allTerritoriosBtn');
   if (!head || !btn) return;
-  const sec = sectorSelected();
+  const sec = territorioSelected();
   head.textContent = sec ? `Puntos · ${sec.nombre}` : 'Puntos';
   btn.style.display = sec ? '' : 'none';
 
-  // Navegación en dos niveles (estilo front): lista de sectores <-> detalle
+  // Navegación en dos niveles (estilo front): lista de territorios <-> detalle
   const sel = !!sec;
-  const listBox = document.getElementById('sectorList');
+  const listBox = document.getElementById('territorioList');
   const detail = document.getElementById('detailBlock');
   const fw = document.getElementById('filterWrap');
   const chips = document.getElementById('estadoChips');
@@ -825,8 +834,8 @@ function updateListScope() {
     renderAssign();
   }
 
-  // Dos zonas flex: con sector elegido los puntos toman el espacio y la de
-  // sectores se compacta; sin sector, la lista de sectores crece para llenar.
+  // Dos zonas flex: con territorio elegido los puntos toman el espacio y la de
+  // territorios se compacta; sin territorio, la lista de territorios crece para llenar.
   const sectZone = document.getElementById('sectZone');
   const ptsZone = document.getElementById('ptsZone');
   if (sectZone) sectZone.classList.toggle('compact', sel);
@@ -834,8 +843,8 @@ function updateListScope() {
 }
 
 function syncSelectedCard() {
-  document.querySelectorAll('#sectorList .sector-card').forEach((el) => {
-    el.classList.toggle('selected', el.dataset.id === sectorSelectedId);
+  document.querySelectorAll('#territorioList .territorio-card').forEach((el) => {
+    el.classList.toggle('selected', el.dataset.id === territorioSelectedId);
   });
 }
 
@@ -901,7 +910,7 @@ function onMapClick(e) {
     return;
   }
 
-  // Modo dibujo: cada clic agrega un vértice del sector
+  // Modo dibujo: cada clic agrega un vértice del territorio
   if (drawActive) { handleDrawClick(e); return; }
 
   const { lng, lat } = e.lngLat;
@@ -918,23 +927,23 @@ function onMapClick(e) {
     return;
   }
 
-  const sectorId = sectorAtLngLat(lng, lat);
+  const territorioId = territorioAtLngLat(lng, lat);
 
-  if (sectorId) {
-    if (sectorId === sectorSelectedId) {
-      // Sector ya seleccionado: el clic marca el punto
+  if (territorioId) {
+    if (territorioId === territorioSelectedId) {
+      // Territorio ya seleccionado: el clic marca el punto
       placeTempMarker(lng, lat);
     } else {
-      // Sector distinto (o ninguno seleccionado): cambia/selecciona
-      setSectorSelected(sectorId);
+      // Territorio distinto (o ninguno seleccionado): cambia/selecciona
+      setTerritorioSelected(territorioId);
     }
     return;
   }
 
-  // Sin sector debajo
-  if (sectorSelectedId) {
+  // Sin territorio debajo
+  if (territorioSelectedId) {
     // Clic en zona vacía: deselecciona (el punto se marca con doble clic)
-    setSectorSelected(null);
+    setTerritorioSelected(null);
   }
   // Sin selección: el clic simple no hace nada (marcar = doble clic)
 }
@@ -1029,7 +1038,7 @@ async function savePoint() {
     created_at: prev?.created_at ?? new Date().toISOString(),
     updated_at: new Date().toISOString(),
     deleted_at: null,
-    sector_id: sectorAtLngLat(lng, lat),
+    territorio_id: territorioAtLngLat(lng, lat),
   };
   if (prev) Object.assign(prev, rec); else allPoints.push(rec);
 
@@ -1037,11 +1046,11 @@ async function savePoint() {
   toast(editId ? 'Punto actualizado' : 'Punto guardado');
 }
 
-// Repinta lista, marcadores y contadores de sectores tras un cambio local
+// Repinta lista, marcadores y contadores de territorios tras un cambio local
 function refreshPointsViews() {
   renderList();
   renderMarkers();
-  renderSectorList();
+  renderTerritorioList();
 }
 
 // ============================================================
@@ -1133,19 +1142,19 @@ document.getElementById('pdDelete').addEventListener('click', () => {
 });
 
 // ============================================================
-// SECTORES: CAPAS, CARGA Y LISTA
+// TERRITORIOS: CAPAS, CARGA Y LISTA
 // ============================================================
 function emptyFC() { return { type: 'FeatureCollection', features: [] }; }
 
-function initSectorLayers() {
-  if (!map.getSource('sectores')) {
-    map.addSource('sectores', { type: 'geojson', data: emptyFC(), promoteId: 'id' });
+function initTerritorioLayers() {
+  if (!map.getSource('territorios')) {
+    map.addSource('territorios', { type: 'geojson', data: emptyFC(), promoteId: 'id' });
   }
-  if (!map.getLayer('sectores-fill')) {
+  if (!map.getLayer('territorios-fill')) {
     map.addLayer({
-      id: 'sectores-fill',
+      id: 'territorios-fill',
       type: 'fill',
-      source: 'sectores',
+      source: 'territorios',
       paint: {
         'fill-color': ['get', 'color'],
         'fill-opacity': ['case',
@@ -1156,11 +1165,11 @@ function initSectorLayers() {
       },
     });
   }
-  if (!map.getLayer('sectores-outline')) {
+  if (!map.getLayer('territorios-outline')) {
     map.addLayer({
-      id: 'sectores-outline',
+      id: 'territorios-outline',
       type: 'line',
-      source: 'sectores',
+      source: 'territorios',
       paint: {
         // Trazo punteado estilo front (6 2 sobre ancho 2.5)
         'line-dasharray': [2.4, 0.8],
@@ -1176,11 +1185,11 @@ function initSectorLayers() {
       },
     });
   }
-  if (!map.getLayer('sectores-labels')) {
+  if (!map.getLayer('territorios-labels')) {
     map.addLayer({
-      id: 'sectores-labels',
+      id: 'territorios-labels',
       type: 'symbol',
-      source: 'sectores',
+      source: 'territorios',
       layout: {
         'text-field': ['get', 'nombre'],
         // text-font obligatorio: Open Sans da 404 en OpenFreeMap y deja la
@@ -1268,26 +1277,26 @@ function countPointsInRing(ring) {
   return n;
 }
 
-function countPointsInSector(s) {
+function countPointsInTerritorio(s) {
   const ring = s.geom && s.geom.coordinates && s.geom.coordinates[0];
   return ring ? countPointsInRing(ring) : 0;
 }
 
-// Puntos dentro de un sector.
-// T6: si el punto trae sector_id (lo calcula la DB con un trigger) basta
+// Puntos dentro de un territorio.
+// T6: si el punto trae territorio_id (lo calcula la DB con un trigger) basta
 // comparar ids; solo se cae al hit-test geométrico cuando no está asignado
-// (fuera de todo sector o columna aún sin poblar).
-function pointsInSector(s) {
+// (fuera de todo territorio o columna aún sin poblar).
+function pointsInTerritorio(s) {
   if (!s) return [];
   return allPoints.filter((p) => {
-    if (p.sector_id) return p.sector_id === s.id;
+    if (p.territorio_id) return p.territorio_id === s.id;
     return p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, s.geom);
   });
 }
 
 // Desglose por estado (para la barra multicolor)
-function sectorBreakdown(s) {
-  const pts = pointsInSector(s);
+function territorioBreakdown(s) {
+  const pts = pointsInTerritorio(s);
   const total = pts.length;
   const c = { pendiente: 0, visitado: 0, erroneo: 0, no_pasar: 0 };
   pts.forEach((p) => { const e = p.estado || 'pendiente'; c[e] = (c[e] || 0) + 1; });
@@ -1333,65 +1342,65 @@ async function loadUsuarios() {
 
 async function loadAsignaciones() {
   const { data, error } = await db
-    .from('sectores_asignaciones')
-    .select('sector_id, user_id, estado, assigned_at, devuelta_at');
+    .from('territorios_asignaciones')
+    .select('territorio_id, user_id, estado, assigned_at, devuelta_at, completado_at, notas');
   if (error) {
     // Si falla (tabla/columna ausente, RLS), se avisa: con la lista vacía la
     // UI no podría mostrar procesos en curso y el admin creería que el
-    // sector está libre
+    // territorio está libre
     console.error('asignaciones:', error);
     if (isAdmin) toast('No se pudo cargar el historial de asignaciones: ' + error.message, true);
     asignaciones = {};
     return;
   }
-  // Historial completo por sector: cada fila es un proceso de trabajo
+  // Historial completo por territorio: cada fila es un proceso de trabajo
   asignaciones = {};
   (data || []).forEach((r) => {
-    (asignaciones[r.sector_id] = asignaciones[r.sector_id] || []).push(r);
+    (asignaciones[r.territorio_id] = asignaciones[r.territorio_id] || []).push(r);
   });
 }
 
-// Proceso en curso de un sector (las devueltos no cuentan: el sector queda
+// Proceso en curso de un territorio (las devueltos no cuentan: el territorio queda
 // libre para un nuevo proceso y desaparece de la app del colaborador)
-function asigActiva(sectorId) {
-  const arr = asignaciones[sectorId] || [];
+function asigActiva(territorioId) {
+  const arr = asignaciones[territorioId] || [];
   return arr.find((a) => a.estado === 'activa') || null;
 }
 
-async function loadSectores() {
-  const { data, error } = await db.from('sectores').select('*');
+async function loadTerritorios() {
+  const { data, error } = await db.from('territorios').select('*');
   if (error) {
-    console.error('sectores:', error);
+    console.error('territorios:', error);
     const missing =
       error.code === '42P01' ||
       error.code === 'PGRST205' ||
       /does not exist|could not find the table/i.test(error.message || '');
-    sectorListError = missing
+    territorioListError = missing
       ? 'Falta la tabla: ejecuta la sección 6 de schema.sql en Supabase'
-      : 'Error cargando sectores';
-    renderSectorList();
+      : 'Error cargando territorios';
+    renderTerritorioList();
     return;
   }
-  sectorListError = null;
-  allSectores = data || [];
+  territorioListError = null;
+  allTerritorios = data || [];
   snapRingsCache = null;
-  if (sectorSelectedId && !allSectores.some((s) => s.id === sectorSelectedId)) {
-    sectorSelectedId = null; // el sector seleccionado ya no existe
+  if (territorioSelectedId && !allTerritorios.some((s) => s.id === territorioSelectedId)) {
+    territorioSelectedId = null; // el territorio seleccionado ya no existe
   }
-  updateSectorsSource();
-  renderSectorList();
+  updateTerritoriosSource();
+  renderTerritorioList();
   updateListScope();
 }
 
-function sectorsVisible(s) {
+function territoriosVisible(s) {
   const sel = comunaSel.value;
-  // Solo se muestran sectores de la comuna seleccionada; sin comuna, ninguno
+  // Solo se muestran territorios de la comuna seleccionada; sin comuna, ninguno
   return !!sel && s.comuna === sel;
 }
 
-function updateSectorsSource() {
-  if (!map || !map.getSource('sectores')) return;
-  const features = allSectores.filter(sectorsVisible).map((s) => ({
+function updateTerritoriosSource() {
+  if (!map || !map.getSource('territorios')) return;
+  const features = allTerritorios.filter(territoriosVisible).map((s) => ({
     type: 'Feature',
     properties: {
       id: s.id,
@@ -1401,41 +1410,41 @@ function updateSectorsSource() {
     },
     geometry: s.geom,
   }));
-  map.getSource('sectores').setData({ type: 'FeatureCollection', features });
+  map.getSource('territorios').setData({ type: 'FeatureCollection', features });
   // setData puede descartar los feature-states: reafirma la selección
-  if (sectorSelectedId != null) {
-    map.setFeatureState({ source: 'sectores', id: sectorSelectedId }, { selected: true });
+  if (territorioSelectedId != null) {
+    map.setFeatureState({ source: 'territorios', id: territorioSelectedId }, { selected: true });
   }
 }
 
-function renderSectorList() {
-  const box = document.getElementById('sectorList');
+function renderTerritorioList() {
+  const box = document.getElementById('territorioList');
   if (!box) return;
 
-  // Sin comuna elegida: resumen de los sectores con proceso en curso, para
-  // abrir su comuna y el sector de un clic sin tener que elegir comuna antes.
-  if (!comunaSel.value) return renderSectorResumen(box);
+  // Sin comuna elegida: resumen de los territorios con proceso en curso, para
+  // abrir su comuna y el territorio de un clic sin tener que elegir comuna antes.
+  if (!comunaSel.value) return renderTerritorioResumen(box);
 
-  const visible = allSectores.filter(sectorsVisible);
+  const visible = allTerritorios.filter(territoriosVisible);
 
   if (!visible.length) {
-    box.innerHTML = sectorListError
-      ? `<div class="empty">${escapeHtml(sectorListError)}</div>`
-      : '<div class="empty">Aún no hay sectores · dibuja uno con ✏️</div>';
-    renderSectorDetail();
+    box.innerHTML = territorioListError
+      ? `<div class="empty">${escapeHtml(territorioListError)}</div>`
+      : '<div class="empty">Aún no hay territorios · dibuja uno con ✏️</div>';
+    renderTerritorioDetail();
     renderAssign();
     return;
   }
 
   box.innerHTML = visible.map((s) => {
-    const st = sectorBreakdown(s);
+    const st = territorioBreakdown(s);
     const act = asigActiva(s.id);
     const quien = act ? emailDe(act.user_id) : '';
     const chip = quien
       ? `<span class="who">${escapeHtml(quien)}</span>`
       : `<span class="who none"><span class="ms ms-sm">warning</span>Sin asignar</span>`;
     return `
-      <div class="sector-card${s.id === sectorSelectedId ? ' selected' : ''}" data-id="${s.id}">
+      <div class="territorio-card${s.id === territorioSelectedId ? ' selected' : ''}" data-id="${s.id}">
         <div class="s-top">
           <span class="dot" style="background:${escapeHtml(s.color || '#1d4ed8')}"></span>
           <b>${escapeHtml(s.nombre)}</b>
@@ -1450,45 +1459,45 @@ function renderSectorList() {
       </div>`;
   }).join('');
 
-  box.querySelectorAll('.sector-card').forEach((el) => {
+  box.querySelectorAll('.territorio-card').forEach((el) => {
     const id = el.dataset.id;
     el.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
-      focusSector(id);
+      focusTerritorio(id);
     });
-    el.addEventListener('mouseenter', () => setSectorHover(id, true));
-    el.addEventListener('mouseleave', () => setSectorHover(id, false));
+    el.addEventListener('mouseenter', () => setTerritorioHover(id, true));
+    el.addEventListener('mouseleave', () => setTerritorioHover(id, false));
   });
 
   syncSelectedCard();
-  renderSectorDetail();
+  renderTerritorioDetail();
   renderAssign();
 }
 
-// Resumen sin comuna: tarjetas de los sectores con proceso (asignación)
-// activo, con su comuna; al pulsar uno se abre esa comuna y el sector.
-function renderSectorResumen(box) {
-  const asignados = allSectores.filter(
+// Resumen sin comuna: tarjetas de los territorios con proceso (asignación)
+// activo, con su comuna; al pulsar uno se abre esa comuna y el territorio.
+function renderTerritorioResumen(box) {
+  const asignados = allTerritorios.filter(
     (s) => s.comuna && comunaActiva(s.comuna) && asigActiva(s.id)
   );
 
   if (!asignados.length) {
-    box.innerHTML = sectorListError
-      ? `<div class="empty">${escapeHtml(sectorListError)}</div>`
-      : '<div class="empty">Sin sectores asignados · elige una comuna para ver todos</div>';
-    renderSectorDetail();
+    box.innerHTML = territorioListError
+      ? `<div class="empty">${escapeHtml(territorioListError)}</div>`
+      : '<div class="empty">Sin territorios asignados · elige una comuna para ver todos</div>';
+    renderTerritorioDetail();
     renderAssign();
     return;
   }
 
   box.innerHTML =
     `<div class="sect-resumen-head"><span class="ms ms-sm">assignment_ind</span>` +
-    `${asignados.length} sector${asignados.length === 1 ? '' : 'es'} asignado${asignados.length === 1 ? '' : 's'}</div>` +
+    `${asignados.length} territorio${asignados.length === 1 ? '' : 'es'} asignado${asignados.length === 1 ? '' : 's'}</div>` +
     asignados.map((s) => {
-      const st = sectorBreakdown(s);
+      const st = territorioBreakdown(s);
       const act = asigActiva(s.id);
       return `
-      <div class="sector-card" data-id="${escapeHtml(s.id)}" data-comuna="${escapeHtml(s.comuna)}">
+      <div class="territorio-card" data-id="${escapeHtml(s.id)}" data-comuna="${escapeHtml(s.comuna)}">
         <div class="s-top">
           <span class="dot" style="background:${escapeHtml(s.color || '#1d4ed8')}"></span>
           <b>${escapeHtml(s.nombre)}</b>
@@ -1503,32 +1512,32 @@ function renderSectorResumen(box) {
       </div>`;
     }).join('');
 
-  box.querySelectorAll('.sector-card').forEach((el) => {
-    el.addEventListener('click', () => abrirComunaSector(el.dataset.comuna, el.dataset.id));
+  box.querySelectorAll('.territorio-card').forEach((el) => {
+    el.addEventListener('click', () => abrirComunaTerritorio(el.dataset.comuna, el.dataset.id));
   });
 
-  renderSectorDetail();
+  renderTerritorioDetail();
   renderAssign();
 }
 
-// Desde el resumen: cambia el selector a la comuna del sector y lo enfoca.
+// Desde el resumen: cambia el selector a la comuna del territorio y lo enfoca.
 // onComunaChange() limpia la selección anterior y encuadra la comuna; luego
-// focusSector vuela al polígono y lo deja seleccionado.
-function abrirComunaSector(comuna, sectorId) {
+// focusTerritorio vuela al polígono y lo deja seleccionado.
+function abrirComunaTerritorio(comuna, territorioId) {
   if (comuna && comunaSel.value !== comuna) {
     comunaSel.value = comuna;
     onComunaChange();
   }
-  focusSector(sectorId);
+  focusTerritorio(territorioId);
 }
 
-// Card completa del sector seleccionado
-function renderSectorDetail() {
-  const box = document.getElementById('sectorDetail');
+// Card completa del territorio seleccionado
+function renderTerritorioDetail() {
+  const box = document.getElementById('territorioDetail');
   if (!box) return;
-  const s = sectorSelected();
+  const s = territorioSelected();
   if (!s) { box.innerHTML = ''; return; }
-  const st = sectorBreakdown(s);
+  const st = territorioBreakdown(s);
   const act = asigActiva(s.id);
   const quien = act ? emailDe(act.user_id) : '';
   const asigTitle = asignaciones[s.id] && !act && asignaciones[s.id].devuelta_at
@@ -1536,7 +1545,7 @@ function renderSectorDetail() {
     : '';
   const palette = isAdmin ? `
       <div class="sd-palette" id="sdPalette" style="display:none">
-        ${SECTOR_COLORS.map((c) => `
+        ${TERRITORIO_COLORS.map((c) => `
           <button class="chip${c === s.color ? ' selected' : ''}" data-color="${c}"
                   style="background:${c}" title="Color"></button>`).join('')}
       </div>` : '';
@@ -1551,7 +1560,7 @@ function renderSectorDetail() {
           <span class="who${quien ? '' : ' none'}"${asigTitle}>${escapeHtml(quien || (asigTitle ? 'Devuelta' : 'Sin asignar'))}</span>
           ${isAdmin ? `
           <div class="sd-menu-wrap">
-            <button id="sdMenu" class="sd-iconbtn" title="Opciones del sector"><span class="ms ms-sm">more_vert</span></button>
+            <button id="sdMenu" class="sd-iconbtn" title="Opciones del territorio"><span class="ms ms-sm">more_vert</span></button>
             <div class="sd-menu-pop" id="sdMenuPop">
               <button id="sdAssign"><span class="ms ms-sm">group_add</span>Asignar</button>
               <button id="sdRename"><span class="ms ms-sm">edit</span>Renombrar</button>
@@ -1576,7 +1585,7 @@ function renderSectorDetail() {
       ${palette}
     </div>`;
   const f = document.getElementById('sdFocus');
-  if (f) f.addEventListener('click', () => focusSector(s.id));
+  if (f) f.addEventListener('click', () => focusTerritorio(s.id));
   const menuBtn = document.getElementById('sdMenu');
   const menuPop = document.getElementById('sdMenuPop');
   if (menuBtn && menuPop) {
@@ -1585,7 +1594,7 @@ function renderSectorDetail() {
       menuPop.classList.toggle('visible');
     });
     document.getElementById('sdRename').addEventListener('click', (e) => {
-      e.stopPropagation(); menuPop.classList.remove('visible'); renameSector(s.id);
+      e.stopPropagation(); menuPop.classList.remove('visible'); renameTerritorio(s.id);
     });
     document.getElementById('sdAssign').addEventListener('click', (e) => {
       e.stopPropagation(); menuPop.classList.remove('visible');
@@ -1593,7 +1602,7 @@ function renderSectorDetail() {
       renderAssign();
     });
     document.getElementById('sdDel').addEventListener('click', (e) => {
-      e.stopPropagation(); menuPop.classList.remove('visible'); deleteSector(s.id);
+      e.stopPropagation(); menuPop.classList.remove('visible'); deleteTerritorio(s.id);
     });
     const pal = document.getElementById('sdPalette');
     document.getElementById('sdEdit').addEventListener('click', (e) => {
@@ -1602,28 +1611,28 @@ function renderSectorDetail() {
     });
     if (pal) {
       pal.querySelectorAll('.chip').forEach((chip) => {
-        chip.addEventListener('click', (e) => { e.stopPropagation(); changeSectorColor(s.id, chip.dataset.color); });
+        chip.addEventListener('click', (e) => { e.stopPropagation(); changeTerritorioColor(s.id, chip.dataset.color); });
       });
     }
   }
 }
 
-// Cierra el menú de opciones del sector al hacer clic fuera
+// Cierra el menú de opciones del territorio al hacer clic fuera
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.sd-menu-wrap')) {
     document.querySelectorAll('.sd-menu-pop.visible').forEach((p) => p.classList.remove('visible'));
   }
 });
 
-// Vista de asignación del sector elegido: proceso en curso + historial.
-// Cada fila de sectores_asignaciones es un proceso de trabajo del sector
-// (asignado → devuelto); al devolver, el proceso se cierra y el sector
+// Vista de asignación del territorio elegido: proceso en curso + historial.
+// Cada fila de territorios_asignaciones es un proceso de trabajo del territorio
+// (asignado → devuelto); al devolver, el proceso se cierra y el territorio
 // queda a la espera de un nuevo proceso.
 function renderAssign() {
   const panel = document.getElementById('assignPanel');
-  const detail = document.getElementById('sectorDetail');
+  const detail = document.getElementById('territorioDetail');
   if (!panel) return;
-  const s = sectorSelected();
+  const s = territorioSelected();
   if (!assignOpen || !s) {
     panel.style.display = 'none';
     panel.innerHTML = '';
@@ -1639,33 +1648,40 @@ function renderAssign() {
     .sort((a, b) => new Date(b.assigned_at || 0) - new Date(a.assigned_at || 0));
   const opts = '<option value="">— elegir usuario —</option>' +
     usuarios.map((u) => `<option value="${u.id}">${escapeHtml(u.email)}</option>`).join('');
-  const fila = (a) => `
+  const fila = (a) => {
+    const est = ESTADO_ASIG[a.estado] ? a.estado : 'activa';
+    const cierre = est === 'completado' ? a.completado_at : est === 'devuelta' ? a.devuelta_at : null;
+    return `
     <tr>
       <td>${escapeHtml(emailDe(a.user_id) || '—')}</td>
       <td>${fmtFecha(a.assigned_at)}</td>
-      <td>${a.estado === 'activa' ? '—' : fmtFecha(a.devuelta_at)}</td>
-      <td><span class="chip-est ${a.estado === 'activa' ? 'activa' : 'devuelta'}">${a.estado === 'activa' ? 'En curso' : 'Devuelto'}</span></td>
+      <td>${cierre ? fmtFecha(cierre) : '—'}</td>
+      <td><span class="chip-est ${est}">${ESTADO_ASIG[est]}</span></td>
     </tr>`;
+  };
   panel.innerHTML = `
     <div class="assign-panel">
       <div class="a-head">
-        <span><button id="assignBack" class="sd-iconbtn" title="Volver a la ficha del sector"><span class="ms ms-sm">arrow_back</span></button>Asignación</span>
+        <span><button id="assignBack" class="sd-iconbtn" title="Volver a la ficha del territorio"><span class="ms ms-sm">arrow_back</span></button>Asignación</span>
         <button id="assignClose" type="button" title="Cerrar">✕</button>
       </div>
-      <p class="a-sector">${s.comuna ? escapeHtml(s.comuna) + ' · ' : ''}<b>${escapeHtml(s.nombre)}</b></p>
+      <p class="a-territorio">${s.comuna ? escapeHtml(s.comuna) + ' · ' : ''}<b>${escapeHtml(s.nombre)}</b></p>
       ${act ? `
         <div class="asig-actual">
           <div class="asig-quien">
             <b>${escapeHtml(emailDe(act.user_id) || '—')}</b>
             <small>Asignado el ${fmtFecha(act.assigned_at)}</small>
           </div>
-          <button id="asigDevolver" class="danger-text" title="Cerrar el proceso y liberar el sector">Devolver</button>
+          <div class="asig-actions">
+            <button id="asigCompletar" class="primary" title="Cerrar el proceso como completado">Completar</button>
+            <button id="asigDevolver" class="danger-text" title="Cerrar el proceso y liberar el territorio">Devolver</button>
+          </div>
         </div>` : `
         <div class="asig-nueva">
           <select id="asigUserSel">${opts}</select>
           <button id="asigAsignar" class="primary">Asignar</button>
         </div>`}
-      <p class="assign-hint">Cada fila es un proceso de trabajo sobre el sector: al devolverlo el proceso se cierra y el sector queda libre para un nuevo proceso.</p>
+      <p class="assign-hint">Cada fila es un proceso de trabajo sobre el territorio: al devolverlo el proceso se cierra y el territorio queda libre para un nuevo proceso.</p>
       <table>
         <thead><tr><th>Usuario</th><th>Asignado</th><th>Devuelto</th><th>Estado</th></tr></thead>
         <tbody>${hist.length ? hist.map(fila).join('') : '<tr><td colspan="4">Sin procesos registrados</td></tr>'}</tbody>
@@ -1675,44 +1691,63 @@ function renderAssign() {
   const back = document.getElementById('assignBack');
   if (back) back.addEventListener('click', () => { assignOpen = false; renderAssign(); });
   const close = document.getElementById('assignClose');
-  if (close) close.addEventListener('click', () => { assignOpen = false; setSectorSelected(null); });
+  if (close) close.addEventListener('click', () => { assignOpen = false; setTerritorioSelected(null); });
   const asignar = document.getElementById('asigAsignar');
   if (asignar) asignar.addEventListener('click', () => {
     const uid = document.getElementById('asigUserSel').value;
-    if (!uid) return toast('Elige un usuario para asignar el sector', true);
-    assignSector(s.id, uid);
+    if (!uid) return toast('Elige un usuario para asignar el territorio', true);
+    assignTerritorio(s.id, uid);
   });
   const dev = document.getElementById('asigDevolver');
-  if (dev) dev.addEventListener('click', () => assignSector(s.id, ''));
+  if (dev) dev.addEventListener('click', () => assignTerritorio(s.id, ''));
+  const comp = document.getElementById('asigCompletar');
+  if (comp) comp.addEventListener('click', () => completarTerritorio(s.id));
 }
 
-async function assignSector(sectorId, userId) {
-  if (!isAdmin) return toast('Solo administradores pueden asignar sectores', true);
+// Cierre manual del proceso (admin): RPC completar_territorio + notas
+async function completarTerritorio(territorioId) {
+  if (!isAdmin) return toast('Solo administradores pueden completar territorios', true);
+  const notas = prompt('Notas del proceso (opcional):', '');
+  if (notas === null) return;
+  const { error } = await db.rpc('completar_territorio', {
+    p_territorio: territorioId,
+    p_notas: notas.trim() || null,
+  });
+  if (error) return toast(error.message, true);
+  toast('Proceso completado');
+  await loadAsignaciones();
+  renderAssign();
+  renderTerritorioList();
+  renderTerritorioDetail();
+}
+
+async function assignTerritorio(territorioId, userId) {
+  if (!isAdmin) return toast('Solo administradores pueden asignar territorios', true);
   if (!userId) {
     // Devolver: cierra el proceso en curso; la fila se conserva como historial
-    const { error } = await db.from('sectores_asignaciones').update({
+    const { error } = await db.from('territorios_asignaciones').update({
       estado: 'devuelta',
       devuelta_at: new Date().toISOString(),
       devuelta_por: currentUser ? currentUser.id : null,
-    }).eq('sector_id', sectorId).eq('estado', 'activa');
+    }).eq('territorio_id', territorioId).eq('estado', 'activa');
     if (error) return toast(error.message, true);
-    toast('Proceso cerrado: el sector quedó libre');
+    toast('Proceso cerrado: el territorio quedó libre');
   } else {
-    // Revisión en el servidor: un sector con proceso en curso no se puede
+    // Revisión en el servidor: un territorio con proceso en curso no se puede
     // asignar a otro; tras devolverlo sí (el historial admite varios procesos)
     const { data: act, error: errAct } = await db
-      .from('sectores_asignaciones')
+      .from('territorios_asignaciones')
       .select('user_id')
-      .eq('sector_id', sectorId)
+      .eq('territorio_id', territorioId)
       .eq('estado', 'activa')
       .maybeSingle();
     if (errAct) return toast(errAct.message, true);
-    if (act) return toast('El sector ya está asignado a ' + (emailDe(act.user_id) || 'otro usuario'), true);
+    if (act) return toast('El territorio ya está asignado a ' + (emailDe(act.user_id) || 'otro usuario'), true);
 
-    // Nuevo proceso: INSERT (el sector puede tener varios procesos en el
-    // historial; los índices parciales garantizan 1 activo por sector/usuario)
-    const { error } = await db.from('sectores_asignaciones').insert({
-      sector_id: sectorId,
+    // Nuevo proceso: INSERT (el territorio puede tener varios procesos en el
+    // historial; los índices parciales garantizan 1 activo por territorio/usuario)
+    const { error } = await db.from('territorios_asignaciones').insert({
+      territorio_id: territorioId,
       user_id: userId,
       assigned_by: currentUser ? currentUser.id : null,
       assigned_at: new Date().toISOString(),
@@ -1720,7 +1755,7 @@ async function assignSector(sectorId, userId) {
     });
     if (error) {
       const msg = error.code === '23505'
-        ? 'Ese usuario o ese sector ya tiene un proceso en curso'
+        ? 'Ese usuario o ese territorio ya tiene un proceso en curso'
         : error.message;
       return toast(msg, true);
     }
@@ -1728,8 +1763,8 @@ async function assignSector(sectorId, userId) {
   }
   await loadAsignaciones();
   renderAssign();
-  renderSectorList();
-  renderSectorDetail();
+  renderTerritorioList();
+  renderTerritorioDetail();
 }
 
 // ============================================================
@@ -1737,8 +1772,8 @@ async function assignSector(sectorId, userId) {
 // ============================================================
 function refreshAfterEstado() {
   renderList();
-  renderSectorList();
-  renderSectorDetail();
+  renderTerritorioList();
+  renderTerritorioDetail();
 }
 
 // T1: marcar estado vía RPC (security definer). Cualquier usuario autenticado
@@ -1785,67 +1820,67 @@ document.getElementById('undoBtn').addEventListener('click', () => {
 });
 
 // ============================================================
-// SECTORES: FOCO
+// TERRITORIOS: FOCO
 // ============================================================
-function setSectorHover(id, on) {
-  if (!map || !map.getSource('sectores') || !id) return;
-  map.setFeatureState({ source: 'sectores', id }, { hover: on });
+function setTerritorioHover(id, on) {
+  if (!map || !map.getSource('territorios') || !id) return;
+  map.setFeatureState({ source: 'territorios', id }, { hover: on });
 }
 
-function focusSector(id) {
-  const s = allSectores.find((x) => x.id === id);
+function focusTerritorio(id) {
+  const s = allTerritorios.find((x) => x.id === id);
   if (!s || !s.geom) return;
   const b = boundsFromGeometry(s.geom);
   if (b && !b.isEmpty()) map.fitBounds(b, { padding: 60, duration: 800 });
-  // La tarjeta también deja el sector listo para marcar puntos
-  setSectorSelected(id);
+  // La tarjeta también deja el territorio listo para marcar puntos
+  setTerritorioSelected(id);
 }
 
-async function renameSector(id) {
-  if (!isAdmin) return toast('Solo administradores pueden editar sectores', true);
-  const s = allSectores.find((x) => x.id === id);
+async function renameTerritorio(id) {
+  if (!isAdmin) return toast('Solo administradores pueden editar territorios', true);
+  const s = allTerritorios.find((x) => x.id === id);
   if (!s) return;
-  const nombre = prompt('Nombre del sector:', s.nombre);
+  const nombre = prompt('Nombre del territorio:', s.nombre);
   if (nombre === null) return;
   const trimmed = nombre.trim();
   if (!trimmed || trimmed === s.nombre) return;
-  const { error } = await db.from('sectores').update({ nombre: trimmed }).eq('id', id);
+  const { error } = await db.from('territorios').update({ nombre: trimmed }).eq('id', id);
   if (error) return toast(error.message, true);
-  await loadSectores();
+  await loadTerritorios();
 }
 
-async function changeSectorColor(id, color) {
-  if (!isAdmin) return toast('Solo administradores pueden editar sectores', true);
-  const { error } = await db.from('sectores').update({ color }).eq('id', id);
+async function changeTerritorioColor(id, color) {
+  if (!isAdmin) return toast('Solo administradores pueden editar territorios', true);
+  const { error } = await db.from('territorios').update({ color }).eq('id', id);
   if (error) return toast(error.message, true);
-  await loadSectores();
+  await loadTerritorios();
 }
 
-async function deleteSector(id) {
-  if (!isAdmin) return toast('Solo administradores pueden eliminar sectores', true);
-  const s = allSectores.find((x) => x.id === id);
+async function deleteTerritorio(id) {
+  if (!isAdmin) return toast('Solo administradores pueden eliminar territorios', true);
+  const s = allTerritorios.find((x) => x.id === id);
   if (!confirm(`¿Eliminar "${s?.nombre}"?`)) return;
-  const { error } = await db.from('sectores').delete().eq('id', id);
+  const { error } = await db.from('territorios').delete().eq('id', id);
   if (error) return toast(error.message, true);
-  toast('Sector eliminado');
-  if (sectorSelectedId === id) setSectorSelected(null);
-  await loadSectores();
+  toast('Territorio eliminado');
+  if (territorioSelectedId === id) setTerritorioSelected(null);
+  await loadTerritorios();
 }
 
 // ============================================================
-// DIBUJO DE SECTORES
+// DIBUJO DE TERRITORIOS
 // ============================================================
 function startDraw() {
   if (drawActive) { stopDraw(); return; }
   // T2: la DB rechaza el insert si no es admin; se avisa antes de dibujar.
-  if (!isAdmin) return toast('Solo administradores pueden dibujar sectores', true);
-  if (!comunaSel.value) return toast('Elige una comuna antes de dibujar un sector', true);
+  if (!isAdmin) return toast('Solo administradores pueden dibujar territorios', true);
+  if (!comunaSel.value) return toast('Elige una comuna antes de dibujar un territorio', true);
 
   drawActive = true;
   drawVerts = [];
   drawHover = null;
   snapRingsCache = null;
-  pendingSector = null;
+  pendingTerritorio = null;
 
   // El modo referencia pisaría el primer clic: lo apagamos
   if (refMode) {
@@ -1856,7 +1891,7 @@ function startDraw() {
     clearReference();
   }
 
-  document.getElementById('sectorModal').classList.remove('visible');
+  document.getElementById('territorioModal').classList.remove('visible');
   document.getElementById('drawToolbar').classList.add('visible');
   document.getElementById('drawBtn').classList.add('active');
   map.doubleClickZoom.disable();
@@ -1870,7 +1905,7 @@ function stopDraw() {
   drawVerts = [];
   drawHover = null;
   setDrawSnap(null);
-  pendingSector = null;
+  pendingTerritorio = null;
 
   if (map) {
     if (map.getSource('draw-preview')) map.getSource('draw-preview').setData(emptyFC());
@@ -1878,7 +1913,7 @@ function stopDraw() {
     map.doubleClickZoom.enable();
     map.getCanvas().style.cursor = '';
   }
-  document.getElementById('sectorModal').classList.remove('visible');
+  document.getElementById('territorioModal').classList.remove('visible');
   document.getElementById('drawToolbar').classList.remove('visible');
   document.getElementById('drawBtn').classList.remove('active');
   document.getElementById('drawCount').textContent = '—';
@@ -1916,7 +1951,7 @@ function updateDraw() {
     })),
   });
 
-  // Contador en vivo: puntos que caerían dentro del sector
+  // Contador en vivo: puntos que caerían dentro del territorio
   const badge = document.getElementById('drawCount');
   if (line.length >= 3) {
     const n = countPointsInRing(line);
@@ -1927,7 +1962,7 @@ function updateDraw() {
 }
 
 // ============================================================
-// SNAP A BORDES EXISTENTES (comuna + sectores) mientras dibujas
+// SNAP A BORDES EXISTENTES (comuna + territorios) mientras dibujas
 // ============================================================
 const SNAP_PX = 14;
 
@@ -1946,7 +1981,7 @@ function snapRefRings() {
   } else {
     for (const c of allComunas) push(c.geom);
   }
-  for (const s of allSectores) if (sectorsVisible(s)) push(s.geom);
+  for (const s of allTerritorios) if (territoriosVisible(s)) push(s.geom);
   snapRingsCache = rings;
   return rings;
 }
@@ -2034,9 +2069,9 @@ function setDrawSnap(edge) {
 
 function handleDrawClick(e) {
   // Con el modal abierto el mapa queda "congelado" (evita vértices fantasma)
-  if (document.getElementById('sectorModal').classList.contains('visible')) return;
+  if (document.getElementById('territorioModal').classList.contains('visible')) return;
 
-  // Clic sobre el primer vértice = cerrar el sector
+  // Clic sobre el primer vértice = cerrar el territorio
   if (drawVerts.length >= 3 && distPx(drawVerts[0], e.point) <= 12) {
     drawHover = null;
     closeDraw();
@@ -2058,20 +2093,20 @@ function onMapMove(e) {
     return;
   }
 
-  const id = sectorAtLngLat(e.lngLat.lng, e.lngLat.lat);
+  const id = territorioAtLngLat(e.lngLat.lng, e.lngLat.lat);
 
-  if (id !== sectorHoverId) {
-    setSectorHover(sectorHoverId, false);
-    setSectorHover(id, true);
-    sectorHoverId = id;
+  if (id !== territorioHoverId) {
+    setTerritorioHover(territorioHoverId, false);
+    setTerritorioHover(id, true);
+    territorioHoverId = id;
   }
-  // Feedback: pointer sobre sector, crosshair donde se puede marcar
+  // Feedback: pointer sobre territorio, crosshair donde se puede marcar
   map.getCanvas().style.cursor = id ? 'pointer' : 'crosshair';
 }
 
 function onMapDblClick(e) {
   if (drawActive) {
-    if (document.getElementById('sectorModal').classList.contains('visible')) return;
+    if (document.getElementById('territorioModal').classList.contains('visible')) return;
     e.preventDefault();
 
     // Los clics previos al doble clic dejaron vértices repetidos en la misma
@@ -2090,16 +2125,16 @@ function onMapDblClick(e) {
 
   if (refMode) return; // modo referencia: sin cambios
 
-  // Modo normal: corta el zoom de MapLibre. Si hay sector, los clics previos
-  // ya resolvieron (seleccionar/marcar); sin sector, el doble clic marca.
+  // Modo normal: corta el zoom de MapLibre. Si hay territorio, los clics previos
+  // ya resolvieron (seleccionar/marcar); sin territorio, el doble clic marca.
   e.preventDefault();
-  if (sectorAtLngLat(e.lngLat.lng, e.lngLat.lat)) return;
+  if (territorioAtLngLat(e.lngLat.lng, e.lngLat.lat)) return;
   placeTempMarker(e.lngLat.lng, e.lngLat.lat);
 }
 
 function closeDraw() {
   if (drawVerts.length < 3) {
-    toast('Necesitas al menos 3 vértices para cerrar un sector', true);
+    toast('Necesitas al menos 3 vértices para cerrar un territorio', true);
     return;
   }
 
@@ -2110,14 +2145,14 @@ function closeDraw() {
   }
 
   const count = countPointsInRing(ring);
-  pendingSector = { ring, color: drawColor, comuna: comunaSel.value || null, count };
+  pendingTerritorio = { ring, color: drawColor, comuna: comunaSel.value || null, count };
 
-  document.getElementById('sectorNombre').value = `Sector ${allSectores.length + 1}`;
-  document.getElementById('sectorCount').innerHTML =
+  document.getElementById('territorioNombre').value = `Territorio ${allTerritorios.length + 1}`;
+  document.getElementById('territorioCount').innerHTML =
     `<span class="swatch" style="background:${escapeHtml(drawColor)}"></span>` +
     `${count} punto${count === 1 ? '' : 's'} incluido${count === 1 ? '' : 's'}`;
-  document.getElementById('sectorErr').textContent = '';
-  document.getElementById('sectorModal').classList.add('visible');
+  document.getElementById('territorioErr').textContent = '';
+  document.getElementById('territorioModal').classList.add('visible');
 
   drawHover = null;
   setDrawSnap(null);
@@ -2125,51 +2160,51 @@ function closeDraw() {
 }
 
 
-async function saveSector() {
-  if (!pendingSector) return;
-  const err = document.getElementById('sectorErr');
+async function saveTerritorio() {
+  if (!pendingTerritorio) return;
+  const err = document.getElementById('territorioErr');
   const nombre =
-    document.getElementById('sectorNombre').value.trim() || `Sector ${allSectores.length + 1}`;
+    document.getElementById('territorioNombre').value.trim() || `Territorio ${allTerritorios.length + 1}`;
 
-  // guardar_sector recorta en el servidor: contra la comuna (nunca sale)
-  // y contra los sectores existentes (cero solapes)
-  const { data, error } = await db.rpc('guardar_sector', {
-    p_comuna: pendingSector.comuna,
+  // guardar_territorio recorta en el servidor: contra la comuna (nunca sale)
+  // y contra los territorios existentes (cero solapes)
+  const { data, error } = await db.rpc('guardar_territorio', {
+    p_comuna: pendingTerritorio.comuna,
     p_nombre: nombre,
-    p_color: pendingSector.color,
-    p_geom: ringToEwkt(pendingSector.ring),
+    p_color: pendingTerritorio.color,
+    p_geom: ringToEwkt(pendingTerritorio.ring),
   });
   if (error) {
     const missing = /could not find the function|does not exist/i.test(error.message || '');
     err.textContent = missing
       ? 'Falta la función SQL: ejecuta la sección 8 de schema.sql en Supabase'
-      : (error.message || 'No se pudo guardar el sector');
+      : (error.message || 'No se pudo guardar el territorio');
     return;
   }
 
-  pendingSector = null;
-  document.getElementById('sectorModal').classList.remove('visible');
+  pendingTerritorio = null;
+  document.getElementById('territorioModal').classList.remove('visible');
   stopDraw();
-  await loadSectores();
+  await loadTerritorios();
 
   // Recién tras el recorte se cuentan los puntos que quedaron dentro
-  const saved = data && data.id ? allSectores.find((s) => s.id === data.id) : null;
-  const n = saved ? countPointsInSector(saved) : 0;
+  const saved = data && data.id ? allTerritorios.find((s) => s.id === data.id) : null;
+  const n = saved ? countPointsInTerritorio(saved) : 0;
   const pts = `· ${n} punto${n === 1 ? '' : 's'} incluido${n === 1 ? '' : 's'}`;
   if (data && data.recortado) {
-    toast(`Sector guardado recortado a los límites · ${data.pct}% del área dibujada ${pts}`);
+    toast(`Territorio guardado recortado a los límites · ${data.pct}% del área dibujada ${pts}`);
   } else {
-    toast(`Sector guardado ${pts}`);
+    toast(`Territorio guardado ${pts}`);
   }
 }
 
 // --- Toolbar y atajos ---
 const drawPalette = document.getElementById('drawPalette');
-SECTOR_COLORS.forEach((c) => {
+TERRITORIO_COLORS.forEach((c) => {
   const chip = document.createElement('button');
   chip.className = 'chip' + (c === drawColor ? ' selected' : '');
   chip.style.background = c;
-  chip.title = 'Color del sector';
+  chip.title = 'Color del territorio';
   chip.addEventListener('click', () => {
     drawColor = c;
     drawPalette.querySelectorAll('.chip').forEach((x) => x.classList.remove('selected'));
@@ -2183,12 +2218,12 @@ document.getElementById('drawBtn').addEventListener('click', startDraw);
 document.getElementById('drawUndo').addEventListener('click', () => { drawVerts.pop(); updateDraw(); });
 document.getElementById('drawCancel').addEventListener('click', () => stopDraw());
 document.getElementById('drawClose').addEventListener('click', () => { drawHover = null; closeDraw(); });
-document.getElementById('sectorCancelBtn').addEventListener('click', () => {
-  pendingSector = null;
-  document.getElementById('sectorModal').classList.remove('visible');
+document.getElementById('territorioCancelBtn').addEventListener('click', () => {
+  pendingTerritorio = null;
+  document.getElementById('territorioModal').classList.remove('visible');
 });
-document.getElementById('sectorSaveBtn').addEventListener('click', saveSector);
-document.getElementById('allSectoresBtn').addEventListener('click', () => setSectorSelected(null));
+document.getElementById('territorioSaveBtn').addEventListener('click', saveTerritorio);
+document.getElementById('allTerritoriosBtn').addEventListener('click', () => setTerritorioSelected(null));
 
 document.addEventListener('keydown', (e) => {
   const typing = e.target && e.target.matches && e.target.matches('input, textarea');
@@ -2207,13 +2242,13 @@ document.addEventListener('keydown', (e) => {
       settingsModal.classList.remove('visible');
       return;
     }
-    if (document.getElementById('sectorModal').classList.contains('visible')) {
-      pendingSector = null;
-      document.getElementById('sectorModal').classList.remove('visible');
+    if (document.getElementById('territorioModal').classList.contains('visible')) {
+      pendingTerritorio = null;
+      document.getElementById('territorioModal').classList.remove('visible');
       return;
     }
     if (drawActive) { stopDraw(); return; }
-    if (sectorSelectedId) setSectorSelected(null);
+    if (territorioSelectedId) setTerritorioSelected(null);
     return;
   }
 
@@ -2228,7 +2263,7 @@ document.addEventListener('keydown', (e) => {
 // ============================================================
 // BUSCADOR UNIFICADO (dirección · coordenadas · link Google Maps)
 // Vuela al lugar, marca el punto con el popup "Guardar punto aquí"
-// (mismo flujo que un clic en el mapa dentro de un sector).
+// (mismo flujo que un clic en el mapa dentro de un territorio).
 // ============================================================
 let lastGeocode = null; // { lat, lng, direccion } para precargar el modal
 
@@ -2443,6 +2478,192 @@ function applyInitialSidebarState() {
 document.getElementById('toggleSidebar').addEventListener('click', () => {
   setSidebarCollapsed(!document.getElementById('sidebar').classList.contains('collapsed'));
 });
+
+// ============================================================
+// VISTAS: TERRITORIOS · HISTORIAL · USUARIOS
+// ============================================================
+function setView(name) {
+  const views = { territorios: 'main', historial: 'viewHistorial', usuarios: 'viewUsuarios' };
+  if (!views[name]) return;
+  const cambio = currentView !== name;
+  currentView = name;
+
+  document.querySelectorAll('#mainNav button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.view === name);
+  });
+  document.getElementById('main').style.display = name === 'territorios' ? 'flex' : 'none';
+  document.getElementById('viewHistorial').style.display = name === 'historial' ? 'flex' : 'none';
+  document.getElementById('viewUsuarios').style.display = name === 'usuarios' ? 'flex' : 'none';
+
+  if (name === 'territorios') {
+    if (map && cambio) map.resize();   // el contenedor estaba oculto
+  } else if (name === 'historial') {
+    loadHistorial();
+  } else if (name === 'usuarios') {
+    loadUsuariosView();
+  }
+}
+
+function fmtFechaHora(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d)
+    ? '—'
+    : d.toLocaleDateString('es-CL') + ' · ' +
+      d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Etiquetas del ciclo de vida de una asignación (En proceso / Devuelto / Completado)
+const ESTADO_ASIG = { activa: 'En proceso', devuelta: 'Devuelto', completado: 'Completado' };
+
+function loadHistorial() {
+  return histTab === 'territorios' ? loadHistorialTerritorios() : loadHistorialPuntos();
+}
+
+async function loadHistorialTerritorios() {
+  const box = document.getElementById('histTerritorios');
+  if (!box) return;
+  box.innerHTML = '<div class="empty">Cargando…</div>';
+
+  const { data, error } = await db
+    .from('territorios_asignaciones')
+    .select('territorio_id, user_id, assigned_at, estado, notas, devuelta_at, completado_at, territorios(nombre, comuna)')
+    .order('assigned_at', { ascending: false });
+
+  if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+  if (!data || !data.length) { box.innerHTML = '<div class="empty">Sin registros de asignación</div>'; return; }
+
+  const filas = data.map((r) => {
+    const t = r.territorios || {};
+    const est = ESTADO_ASIG[r.estado] ? r.estado : 'activa';
+    const cierre = est === 'completado' ? r.completado_at : est === 'devuelta' ? r.devuelta_at : null;
+    return `<tr>
+      <td><b>${escapeHtml(t.nombre || '—')}</b></td>
+      <td>${escapeHtml(t.comuna || '—')}</td>
+      <td>${escapeHtml(emailDe(r.user_id) || '—')}</td>
+      <td>${fmtFecha(r.assigned_at)}</td>
+      <td><span class="chip-est ${est}">${ESTADO_ASIG[est]}</span></td>
+      <td>${cierre ? fmtFecha(cierre) : '—'}</td>
+      <td class="notas">${escapeHtml(r.notas || '')}</td>
+    </tr>`;
+  }).join('');
+
+  box.innerHTML = `<table class="hist-table">
+    <thead><tr>
+      <th>Territorio</th><th>Comuna</th><th>Usuario</th><th>Asignado</th>
+      <th>Estado</th><th>Cierre</th><th>Notas</th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table>`;
+}
+
+async function loadHistorialPuntos() {
+  const box = document.getElementById('histPuntos');
+  if (!box) return;
+  box.innerHTML = '<div class="empty">Cargando…</div>';
+
+  const { data, error } = await db
+    .from('puntos')
+    .select('nombre, estado, ultima_visita, notas')
+    .is('deleted_at', null)
+    .order('nombre');
+
+  if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+  if (!data || !data.length) { box.innerHTML = '<div class="empty">Sin puntos</div>'; return; }
+
+  const si = '<span class="mark yes">✓</span>';
+  const no = '<span class="mark no">—</span>';
+  const filas = data.map((p) => {
+    const est = p.estado || 'pendiente';
+    const activo = est !== 'erroneo' && est !== 'no_pasar';   // "activo" = no erróneo ni no pasar
+    return `<tr>
+      <td><b>${escapeHtml(p.nombre || '—')}</b></td>
+      <td>${p.ultima_visita ? fmtFechaHora(p.ultima_visita) : '—'}</td>
+      <td><span class="estado-tag ${estadoClass(est)}">${estadoLabel(est)}</span></td>
+      <td>${est === 'no_pasar' ? si : no}</td>
+      <td>${est === 'erroneo' ? si : no}</td>
+      <td>${activo ? si : no}</td>
+      <td class="notas">${escapeHtml(p.notas || '')}</td>
+    </tr>`;
+  }).join('');
+
+  box.innerHTML = `<table class="hist-table">
+    <thead><tr>
+      <th>Punto</th><th>Última visita</th><th>Estado</th>
+      <th>No pasar</th><th>Erróneo</th><th>Activo</th><th>Notas</th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table>`;
+}
+
+async function loadUsuariosView() {
+  const box = document.getElementById('usuariosList');
+  if (!box) return;
+  box.innerHTML = '<div class="empty">Cargando…</div>';
+
+  const { data, error } = await db.rpc('listar_usuarios');
+  if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+  const lista = data || [];
+  if (!lista.length) { box.innerHTML = '<div class="empty">Sin usuarios</div>'; return; }
+
+  const filas = lista.map((u) => `
+    <tr>
+      <td>${escapeHtml(u.email || '—')}</td>
+      <td>${u.is_admin ? 'Administrador' : 'Usuario'}</td>
+      <td>${u.territorio ? escapeHtml(u.territorio) : '<span class="muted">Libre</span>'}</td>
+      <td>${u.desde ? fmtFecha(u.desde) : '—'}</td>
+    </tr>`).join('');
+
+  box.innerHTML = `<table class="hist-table">
+    <thead><tr><th>Email</th><th>Rol</th><th>Territorio en curso</th><th>Desde</th></tr></thead>
+    <tbody>${filas}</tbody>
+  </table>`;
+}
+
+// Alta de usuarios de terreno (nunca admin) vía Edge Function con service_role
+async function crearUsuario(ev) {
+  ev.preventDefault();
+  const email = document.getElementById('newUserEmail').value.trim();
+  const pass = document.getElementById('newUserPass').value;
+  const errEl = document.getElementById('userFormErr');
+  const btn = document.getElementById('newUserBtn');
+  errEl.textContent = '';
+  if (!email || pass.length < 6) {
+    errEl.textContent = 'Email válido y contraseña de al menos 6 caracteres';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Creando…';
+  try {
+    const { data, error } = await db.functions.invoke('crear-usuario', { body: { email, password: pass } });
+    if (error) throw error;
+    if (data && data.error) throw new Error(data.error);
+    toast('Usuario creado');
+    document.getElementById('userForm').reset();
+    await loadUsuarios();       // refresca los correos para la asignación
+    await loadUsuariosView();
+  } catch (ex) {
+    errEl.textContent = (ex && ex.message) || 'No se pudo crear el usuario';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Crear usuario';
+  }
+}
+
+document.querySelectorAll('#mainNav button').forEach((b) => {
+  b.addEventListener('click', () => setView(b.dataset.view));
+});
+document.getElementById('histTabs').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-tab]');
+  if (!b) return;
+  histTab = b.dataset.tab;
+  document.querySelectorAll('#histTabs button').forEach((x) => x.classList.toggle('active', x === b));
+  document.getElementById('histTerritorios').style.display = histTab === 'territorios' ? '' : 'none';
+  document.getElementById('histPuntos').style.display = histTab === 'puntos' ? '' : 'none';
+  loadHistorial();
+});
+document.getElementById('userForm').addEventListener('submit', crearUsuario);
 
 // ============================================================
 // ARRANQUE

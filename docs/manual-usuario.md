@@ -1,6 +1,6 @@
 # Manual de usuario
 
-Aplicación para levantar y clasificar puntos GPS agrupados en **sectores**
+Aplicación para levantar y clasificar puntos GPS agrupados en **territorios**
 de una comuna de la Región Metropolitana.
 
 ---
@@ -16,27 +16,45 @@ Arriba a la izquierda verás la marca, tu correo y el botón de **salir**.
 
 ---
 
-## 2. El panel lateral
+## 2. Vistas de la aplicación
+
+Arriba hay una barra con tres vistas:
+
+- **Territorios**: el mapa y el panel lateral (todo lo que describe este manual).
+- **Historial** (solo administración): registro de trabajo.
+  - Pestaña **Territorios**: una fila por proceso de asignación — territorio,
+    comuna, usuario, fecha de asignación, estado (**En proceso / Devuelto /
+    Completado**), fecha de cierre y notas.
+  - Pestaña **Puntos**: una fila por punto — nombre, **última visita**, estado,
+    marcas de *No pasar* / *Erróneo* / *Activo* (activo = ni erróneo ni no
+    pasar) y notas.
+- **Usuarios** (solo administración): lista del equipo con su rol, territorio en
+  curso y fecha de asignación; y alta de **usuarios de terreno** (email +
+  contraseña). Los usuarios creados nunca son administradores.
+
+---
+
+## 3. El panel lateral
 
 El panel tiene dos zonas:
 
-- **Sectores**: los polígonos de la comuna seleccionada, con su avance.
-  Cuando eliges un sector, esta zona se compacta.
-- **Puntos**: los puntos **del sector seleccionado**, con buscador de texto y
+- **Territorios**: los polígonos de la comuna seleccionada, con su avance.
+  Cuando eliges un territorio, esta zona se compacta.
+- **Puntos**: los puntos **del territorio seleccionado**, con buscador de texto y
   chips de filtro por estado.
 
-Sin sector seleccionado, la lista de puntos muestra *«Selecciona un sector
+Sin territorio seleccionado, la lista de puntos muestra *«Selecciona un territorio
 para ver sus puntos»*.
 
 ### Elegir comuna
 
 Usa el selector **Comuna** en la cabecera. Solo aparecen las comunas
 habilitadas (las desactiva un admin desde ⚙️ Ajustes). La vista salta a esa
-comuna y **solo se muestran sus sectores**.
+comuna y **solo se muestran sus territorios**.
 
-Sin comuna elegida, el panel muestra un **resumen de los sectores
+Sin comuna elegida, el panel muestra un **resumen de los territorios
 asignados** (los que tienen un proceso de trabajo en curso) con su comuna,
-colaborador y avance; al pulsar uno se abre esa comuna y queda el sector
+colaborador y avance; al pulsar uno se abre esa comuna y queda el territorio
 seleccionado.
 
 ### Abrir / cerrar el panel
@@ -47,18 +65,18 @@ seleccionado.
 
 ---
 
-## 3. Sectores
+## 4. Territorios
 
 ### Seleccionar
 
 Haz clic sobre un polígono en el mapa o sobre su tarjeta en el panel. El
-sector queda resaltado y habilita:
+territorio queda resaltado y habilita:
 
 - la lista de sus puntos,
 - el marcado de puntos nuevos dentro de él,
 - el botón **📍 encuadrar** para ajustar la vista a su polígono.
 
-**Esc** o el botón **Todos** (junto al título *Sectores*) deselecciona.
+**Esc** o el botón **Todos** (junto al título *Territorios*) deselecciona.
 
 ### Crear (solo administración)
 
@@ -66,13 +84,13 @@ sector queda resaltado y habilita:
    aparece el botón **✏️**.
 2. Pulsa **✏️** y elige un color en la paleta de la barra superior.
 3. Haz clic en el mapa para agregar vértices. Hay **imán (snap)** a bordes de
-   comunas y sectores vecinos, y un contador en vivo de cuántos puntos caen
+   comunas y territorios vecinos, y un contador en vivo de cuántos puntos caen
    dentro del trazo.
-4. Cierra con **Cerrar sector** o haciendo clic en el primer vértice.
+4. Cierra con **Cerrar territorio** o haciendo clic en el primer vértice.
 5. Ponle nombre y **Guardar**.
 
 La base de datos recorta el polígono: nunca queda fuera de la comuna ni se
-solapa con otro sector. Si el recorte deja menos del 2 % de lo dibujado, se
+solapa con otro territorio. Si el recorte deja menos del 2 % de lo dibujado, se
 rechaza con un mensaje. Tras guardar verás qué porcentaje sobrevivió y cuántos
 puntos quedaron dentro.
 
@@ -81,39 +99,44 @@ Atajos durante el trazo: **Ctrl/Cmd + Z** quita el último vértice (o botón
 
 ### Editar / eliminar (solo administración)
 
-- Todo se maneja desde las **opciones ⋮** de la ficha del sector
+- Todo se maneja desde las **opciones ⋮** de la ficha del territorio
   (*Asignar*, *Renombrar*, *Editar* → paleta de color, *Eliminar*).
 
 ### Asignar y procesos de trabajo (solo administración)
 
-La asignación se gestiona **por sector**, desde su menú ⋮:
+La asignación se gestiona **por territorio**, desde su menú ⋮:
 
-1. Selecciona un sector → **⋮ → Asignar**. Se abre la vista de asignación
-   ocupando la zona de sectores.
-2. Si el sector no tiene proceso en curso: elige el usuario y pulsa
+1. Selecciona un territorio → **⋮ → Asignar**. Se abre la vista de asignación
+   ocupando la zona de territorios.
+2. Si el territorio no tiene proceso en curso: elige el usuario y pulsa
    **Asignar**. Se inicia un **proceso de trabajo**.
-3. Cuando el colaborador devuelve el sector (o tú lo cierras con
-   **Devolver**), el proceso se marca **Devuelto** con su fecha y el sector
-   queda libre para iniciar otro proceso.
+3. El proceso se cierra de una de estas formas:
+   - **Automática**: cuando ya no quedan puntos `pendiente` en el territorio.
+   - **Completar** (manual): tú cierras el proceso, con notas opcionales.
+   - **Devolver**: el colaborador lo devuelve (o tú lo devuelves) y el proceso
+     queda **Devuelto**.
 
-La vista muestra el proceso **En curso** (usuario y fecha) y, debajo, el
+En todos los casos el territorio queda libre para iniciar un proceso nuevo.
+
+La vista muestra el proceso **En proceso** (usuario y fecha) y, debajo, el
 **historial**: cada fila es un proceso con su usuario, fecha de asignación,
-fecha de devolución y estado. Todo queda guardado en la base de datos.
+fecha de cierre y estado (**En proceso / Devuelto / Completado**). Todo queda
+guardado en la base de datos (y también en la vista **Historial**).
 
 Reglas: **un colaborador solo puede tener un proceso en curso a la vez** y
-un sector solo puede tener uno activo (si ya existe, se avisa). El correo de
-quien tiene el sector aparece como chip en su tarjeta y en su lista de
-sectores.
+un territorio solo puede tener uno activo (si ya existe, se avisa). El correo de
+quien tiene el territorio aparece como chip en su tarjeta y en su lista de
+territorios.
 
 ---
 
-## 4. Puntos
+## 5. Puntos
 
 ### Crear
 
-1. Selecciona el sector.
+1. Selecciona el territorio.
 2. Haz clic sobre el lugar en el mapa → aparece el pin con
-   **«Guardar punto aquí»** (en zonas sin sector, haz **doble clic**).
+   **«Guardar punto aquí»** (en zonas sin territorio, haz **doble clic**).
    Si haces clic **encima de un punto ya marcado** no se ofrece guardar:
    se abren directamente sus detalles.
 3. Completa nombre (obligatorio), dirección, estado y notas → **Guardar**.
@@ -143,18 +166,18 @@ existe en la app de terreno (`movil.html`).
 
 - Texto libre: nombre o dirección.
 - Chips **Todos / Pendiente / Visitado / Erróneo / No pasar**.
-- El contador y la barra de avance del sector se recalculan al instante.
+- El contador y la barra de avance del territorio se recalculan al instante.
 
 ### Alcance de los marcadores
 
-El grupo de botones **Toda RM · Comuna · Sector** (abajo a la derecha) decide
+El grupo de botones **Toda RM · Comuna · Territorio** (abajo a la derecha) decide
 qué puntos se pintan como marcadores. Solo afecta al mapa; la lista lateral
-siempre muestra los del sector seleccionado. La preferencia se guarda en el
+siempre muestra los del territorio seleccionado. La preferencia se guarda en el
 navegador (⚙️ Ajustes).
 
 ---
 
-## 5. Buscar
+## 6. Buscar
 
 Botón **🔍** en el riel. Acepta tres tipos de entrada:
 
@@ -168,7 +191,7 @@ guardar el punto ahí.
 
 ---
 
-## 6. Modo referencia (búsqueda por radio)
+## 7. Modo referencia (búsqueda por radio)
 
 1. Pulsa **◎** (barra inferior).
 2. Haz clic en el mapa para fijar la referencia.
@@ -179,16 +202,16 @@ Sirve para responder «¿qué direcciones tengo alrededor de esta esquina?».
 
 ---
 
-## 7. App de terreno (celular)
+## 8. App de terreno (celular)
 
 La app de terreno es **`movil.html`** (misma URL + `/movil.html`, ver
-sección 11): el colaborador ve su sector asignado, cambia estados y sincroniza
+sección 11): el colaborador ve su territorio asignado, cambia estados y sincroniza
 incluso sin señal. El botón de vista terreno del panel de escritorio fue
 eliminado.
 
 ---
 
-## 8. Ajustes (solo administración)
+## 9. Ajustes (solo administración)
 
 Botón **⚙️**:
 
@@ -199,40 +222,40 @@ Botón **⚙️**:
 
 ---
 
-## 9. Atajos de teclado
+## 10. Atajos de teclado
 
 | Tecla | Acción |
 |---|---|
-| **Esc** | Cierra lo que esté encima (vista de asignación → detalle → ajustes → modal de sector → modo dibujo → deselecciona sector) |
+| **Esc** | Cierra lo que esté encima (vista de asignación → detalle → ajustes → modal de territorio → modo dibujo → deselecciona territorio) |
 | **Ctrl/Cmd + Z** | Deshacer último vértice mientras dibujas |
 | **Enter** | Dispara la búsqueda / el login |
 
 ---
 
-## 10. Problemas frecuentes
+## 11. Problemas frecuentes
 
 | Síntoma | Causa y solución |
 |---|---|
 | «Falta la tabla: ejecuta la sección 6 de schema.sql» | Falta una sección del esquema en Supabase |
-| «Falta la función SQL: ejecuta la sección 8…» | Falta `guardar_sector` |
+| «Falta la función SQL: ejecuta la sección 8…» | Falta `guardar_territorio` |
 | «Solo administradores pueden…» | Operación reservada; pide permiso de admin |
 | No aparece mi comuna en el selector | Un admin la desactivó en ⚙️ Ajustes |
-| El sector guardó «recortado» | Se ajustó a los límites de la comuna o a sectores vecinos; el % indica cuánto se conservó |
+| El territorio guardó «recortado» | Se ajustó a los límites de la comuna o a territorios vecinos; el % indica cuánto se conservó |
 | Un punto quedó «Sin GPS» | Se creó sin coordenadas válidas; edítalo en terreno (admin) |
 
 ---
 
-## 11. App de terreno (colaboradores) — `movil.html`
+## 12. App de terreno (colaboradores) — `movil.html`
 
 Es la app de la cuadrilla: se abre en el celular con la misma URL + `/movil.html`
-(mismo hosting que la de escritorio). Ve **solo su sector asignado y sus puntos**.
+(mismo hosting que la de escritorio). Ve **solo su territorio asignado y sus puntos**.
 
-### Ingreso y sector
+### Ingreso y territorio
 
 - Entra con tu correo y contraseña (la misma cuenta que te dio central).
-- Si no tienes sector asignado ves **«Sin sector asignado»**; pulsa
+- Si no tienes territorio asignado ves **«Sin territorio asignado»**; pulsa
   *Actualizar* cuando te lo hayan dado.
-- La tarjeta superior muestra tu sector, comuna y el avance
+- La tarjeta superior muestra tu territorio, comuna y el avance
   (visitados / erróneos / no pasar / pendientes).
 
 ### Lista y mapa
@@ -240,7 +263,7 @@ Es la app de la cuadrilla: se abre en el celular con la misma URL + `/movil.html
 - **Ruta**: lista de puntos con filtros (Todos, Visitados, Incidencias,
   Pendientes). Cada tarjeta tiene *Cómo llegar* (abre Google Maps) y
   *Cambiar estado* (hoja con los 4 estados).
-- **Mapa**: el polígono de tu sector con los pins de estado. Toca un pin
+- **Mapa**: el polígono de tu territorio con los pins de estado. Toca un pin
   para abrir su ficha; toca el mapa para **crear un punto nuevo** (solo
   dentro del polígono).
 - Toca el nombre de un punto para ver/editar su ficha: nombre, dirección,
@@ -250,7 +273,7 @@ Es la app de la cuadrilla: se abre en el celular con la misma URL + `/movil.html
 
 - **Nuevo punto**: en el mapa, toca la ubicación → completa el nombre
   (obligatorio) → *Guardar punto*. Las coordenadas deben quedar dentro
-  del sector.
+  del territorio.
 - **Editar**: desde la ficha. Si mueves el punto fuera del polígono, la
   base de datos lo rechaza.
 - **Borrar**: solo puedes borrar los puntos **que tú creaste** (sale el
@@ -261,10 +284,10 @@ Es la app de la cuadrilla: se abre en el celular con la misma URL + `/movil.html
 - *Cambiar estado* → Visitado / Erróneo / No pasar / Pendiente. Tras el
   cambio aparece un aviso con **Deshacer** (unos segundos).
 
-### Devolver el sector
+### Devolver el territorio
 
-- Botón **Devolver** en la tarjeta del sector. Funciona aunque no hayas
-  terminado el 100 %: al confirmar, el sector vuelve a central y **dejas
+- Botón **Devolver** en la tarjeta del territorio. Funciona aunque no hayas
+  terminado el 100 %: al confirmar, el territorio vuelve a central y **dejas
   de verlo al instante** (puntos incluidos). Pídele a tu jefe que te
   asigne otro.
 
@@ -273,5 +296,5 @@ Es la app de la cuadrilla: se abre en el celular con la misma URL + `/movil.html
 - Los cambios (estado, nuevo punto, edición, borrado) se guardan en el
   teléfono y aparece el botón flotante **Sincronizar ahora (N)**.
 - Al volver la señal se sincronizan solas cada cierto tiempo; si un
-  cambio ya no aplica (p. ej. devolviste el sector) se descarta con aviso.
+  cambio ya no aplica (p. ej. devolviste el territorio) se descarta con aviso.
 - La pestaña **Sync** muestra el detalle de lo pendiente.

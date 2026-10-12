@@ -161,9 +161,9 @@ function colaResumen(ops) {
   return r;
 }
 
-// Avance de un sector a partir de sus puntos (mismos estados que la app
+// Avance de un territorio a partir de sus puntos (mismos estados que la app
 // de escritorio; pct = visitados sobre el total).
-function sectorAvance(puntos) {
+function territorioAvance(puntos) {
   const r = { total: puntos.length, pendiente: 0, visitado: 0, erroneo: 0, no_pasar: 0, pct: 0 };
   for (const p of puntos) {
     const e = p && p.estado && Object.prototype.hasOwnProperty.call(r, p.estado)

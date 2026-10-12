@@ -42,6 +42,18 @@ alter index if exists public.puntos_sector_idx rename to puntos_territorio_idx;
 -- ------------------------------------------------------------
 -- 3. Fuera los objetos con nombre/funciones viejos
 -- ------------------------------------------------------------
+-- Las policies PRIMERO: varias dependen de sector_activo_usuario(uuid)
+-- (error 2BP01 si se dropea la función antes). Se recrean en 10 y 11.
+drop policy if exists "sectores_select_all" on public.territorios;
+drop policy if exists "sectores_insert_auth" on public.territorios;
+drop policy if exists "sectores_insert_admin" on public.territorios;
+drop policy if exists "sectores_update_admin" on public.territorios;
+drop policy if exists "sectores_delete_admin" on public.territorios;
+drop policy if exists "sectores_select_colab" on public.territorios;
+drop policy if exists "puntos_select_colab" on public.puntos;
+drop policy if exists "puntos_insert_colab" on public.puntos;
+drop policy if exists "puntos_update_colab" on public.puntos;
+
 drop trigger if exists puntos_sync_sector on public.puntos;
 drop trigger if exists sectores_resync_puntos on public.territorios;
 drop function if exists public.puntos_sync_sector();
@@ -49,14 +61,6 @@ drop function if exists public.sectores_resync_puntos();
 drop function if exists public.guardar_sector(text, text, text, geometry);
 drop function if exists public.sector_activo_usuario(uuid);
 drop function if exists public.devolver_sector();
-
--- policies viejas de territorios
-drop policy if exists "sectores_select_all" on public.territorios;
-drop policy if exists "sectores_insert_auth" on public.territorios;
-drop policy if exists "sectores_insert_admin" on public.territorios;
-drop policy if exists "sectores_update_admin" on public.territorios;
-drop policy if exists "sectores_delete_admin" on public.territorios;
-drop policy if exists "sectores_select_colab" on public.territorios;
 
 -- ------------------------------------------------------------
 -- 4. guardar_territorio (antes guardar_sector)
@@ -355,19 +359,23 @@ grant execute on function public.actualizar_punto_terreno(uuid, text, text, text
 -- ------------------------------------------------------------
 -- 10. Policies de territorios (nombres nuevos)
 -- ------------------------------------------------------------
+drop policy if exists "territorios_insert_admin" on public.territorios;
 create policy "territorios_insert_admin" on public.territorios
   for insert to authenticated
   with check (public.is_admin() and auth.uid() = created_by);
 
+drop policy if exists "territorios_update_admin" on public.territorios;
 create policy "territorios_update_admin" on public.territorios
   for update to authenticated
   using (public.is_admin())
   with check (public.is_admin());
 
+drop policy if exists "territorios_delete_admin" on public.territorios;
 create policy "territorios_delete_admin" on public.territorios
   for delete to authenticated
   using (public.is_admin());
 
+drop policy if exists "territorios_select_colab" on public.territorios;
 create policy "territorios_select_colab" on public.territorios
   for select to authenticated
   using (public.is_admin() or id = public.territorio_activo_usuario(auth.uid()));

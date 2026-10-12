@@ -29,6 +29,16 @@ begin
   ) then
     alter table public.puntos rename column sector_id to territorio_id;
   end if;
+
+  -- La columna dentro de la tabla de asignaciones también cambia de nombre.
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'territorios_asignaciones'
+      and column_name = 'sector_id'
+  ) then
+    alter table public.territorios_asignaciones rename column sector_id to territorio_id;
+  end if;
 end $$;
 
 -- ------------------------------------------------------------

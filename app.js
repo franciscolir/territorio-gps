@@ -2618,6 +2618,7 @@ async function loadHistorialPuntos() {
   const si = '<span class="mark yes">✓</span>';
   const no = '<span class="mark no">—</span>';
   const filas = [];
+  let banda = false;   // alterna el color de fondo de un territorio a otro
 
   for (const comunaKey of ordenarClaves(porComuna)) {
     const porTerr = porComuna.get(comunaKey);
@@ -2629,12 +2630,13 @@ async function loadHistorialPuntos() {
       const pts = terr.puntos.slice().sort(
         (a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'),
       );
+      const enBanda = banda;
       let terrPuesta = false;
 
       for (const p of pts) {
         const est = p.estado || 'pendiente';
         const activo = est !== 'erroneo' && est !== 'no_pasar';   // "activo" = no erróneo ni no pasar
-        filas.push(`<tr>
+        filas.push(`<tr${enBanda ? ' class="band"' : ''}>
           ${comunaPuesta ? '' : `<td class="grp comuna" rowspan="${totalComuna}"><span>${escapeHtml(comunaKey || 'Sin comuna')}</span></td>`}
           ${terrPuesta ? '' : `<td class="grp terr" rowspan="${pts.length}"><span>${escapeHtml(terrKey === null || !terr.nombre ? 'Sin territorio' : terr.nombre)}</span></td>`}
           <td><b>${escapeHtml(p.nombre || '—')}</b></td>
@@ -2649,6 +2651,7 @@ async function loadHistorialPuntos() {
         comunaPuesta = true;
         terrPuesta = true;
       }
+      banda = !banda;   // el siguiente territorio cambia de color
     }
   }
 

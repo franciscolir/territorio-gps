@@ -131,10 +131,20 @@
   /* Historial de puntos: filas combinadas con comuna/territorio en vertical */
   .hist-table td.grp {
     padding: 0; width: 30px; min-width: 30px; text-align: center; overflow: hidden;
-    background: var(--surface-low); border-right: 1px solid var(--outline-variant);
+    border-right: 1px solid var(--outline-variant);
   }
   .hist-table .grp-h { width: 30px; min-width: 30px; padding-left: 6px; padding-right: 6px; }
-  .hist-table tr:hover td.grp { background: var(--surface-high); }
+
+  /* Bandas por territorio (solo la tabla de puntos, .hist-grp):
+     un territorio con color, el siguiente sin color, y así sucesivamente,
+     para separar visualmente los puntos de cada sector. */
+  .hist-table.hist-grp tbody tr td { background: var(--surface-lowest); }
+  .hist-table.hist-grp tbody tr.band td { background: var(--surface-low); }
+  .hist-table.hist-grp td.grp.comuna { background: var(--surface-high); }
+  .hist-table.hist-grp tbody tr:hover td { background: var(--surface-mid); }
+  .hist-table.hist-grp tbody tr.band:hover td { background: var(--surface-high); }
+  .hist-table.hist-grp tbody tr:hover td.grp.comuna { background: var(--surface-highest); }
+
   .hist-table td.grp span {
     display: inline-block; white-space: nowrap; padding: 12px 0;
     writing-mode: vertical-rl; transform: rotate(180deg);
@@ -142,6 +152,7 @@
     text-transform: uppercase; color: var(--on-surface-variant);
   }
   .hist-table td.grp.terr span { color: var(--primary); }
+  .hist-table td.grp.comuna span { color: var(--primary); }
   .hist-table .col-ver { text-align: right; white-space: nowrap; }
   .hist-table .col-ver-h { width: 58px; }
   .hist-table .ver-btn {

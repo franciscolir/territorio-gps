@@ -1,8 +1,8 @@
 // ============================================================
 // MÓVIL — app de terreno para colaboradores.
-// · ve SOLO su sector asignado y sus puntos (RLS de la migración 003)
-// · crea/edita puntos del sector, cambia estados, borra solo los suyos
-// · devuelve el sector aunque no cubra el 100%
+// · ve SOLO su territorio asignado y sus puntos (RLS de la migración 003)
+// · crea/edita puntos del territorio, cambia estados, borra solo los suyos
+// · devuelve el territorio aunque no cubra el 100%
 // · cola offline en localStorage con sincronización manual/automática
 // ============================================================
 
@@ -33,8 +33,8 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 let user = null;
-let sector = null;      // asignación activa con el sector anidado
-let puntos = [];        // puntos del servidor (RLS ya limita al sector)
+let territorio = null;      // asignación activa con el territorio anidado
+let puntos = [];        // puntos del servidor (RLS ya limita al territorio)
 let cola = [];          // operaciones offline pendientes
 let tabActual = 'ruta';
 let filtroActual = 'todos';
@@ -126,7 +126,7 @@ async function doLogin() {
 
 $('btnLogout').addEventListener('click', async () => {
   await db.auth.signOut();
-  user = null; sector = null; puntos = [];
+  user = null; territorio = null; puntos = [];
   $('appView').classList.add('hidden');
   $('emptyView').classList.add('hidden');
   $('emptyView').classList.remove('flex');
@@ -147,46 +147,46 @@ async function entrar(u) {
   pintarTodo();
 }
 
-$('btnReloadSector').addEventListener('click', async () => {
+$('btnReloadTerritorio').addEventListener('click', async () => {
   await refrescar({ ajustarMapa: true });
   pintarTodo();
 });
 
 // ============================================================
-// DATOS (RLS: el servidor ya limita a sector activo / puntos propios)
+// DATOS (RLS: el servidor ya limita a territorio activo / puntos propios)
 // ============================================================
 async function refrescar({ ajustarMapa = false } = {}) {
-  // Sin señal se conserva lo que hay en memoria (no se "borra" el sector)
+  // Sin señal se conserva lo que hay en memoria (no se "borra" el territorio)
   if (!navigator.onLine) {
     if (mapListo && ajustarMapa) ajustarVistaMapa();
     return;
   }
   await cargarAsignacion();
-  if (sector) await cargarPuntos();
+  if (territorio) await cargarPuntos();
   if (mapListo && ajustarMapa) ajustarVistaMapa();
 }
 
 async function cargarAsignacion() {
   const { data, error } = await db
-    .from('sectores_asignaciones')
-    .select('sector_id, estado, assigned_at, sectores ( id, nombre, comuna, color, geom )')
+    .from('territorios_asignaciones')
+    .select('territorio_id, estado, assigned_at, territorios ( id, nombre, comuna, color, geom )')
     .eq('user_id', user.id)
     .eq('estado', 'activa')
     .maybeSingle();
   if (error) {
-    // red caída: conserva el sector en memoria; otro error (columna faltante,
-    // RLS) se avisa para no confundirlo con "sin sector asignado"
-    if (!esErrorDeRed(error)) toast('No se pudo cargar tu sector: ' + error.message, { error: true });
+    // red caída: conserva el territorio en memoria; otro error (columna faltante,
+    // RLS) se avisa para no confundirlo con "sin territorio asignado"
+    if (!esErrorDeRed(error)) toast('No se pudo cargar tu territorio: ' + error.message, { error: true });
     return;
   }
-  sector = data && data.sectores ? data : null;
+  territorio = data && data.territorios ? data : null;
 }
 
 async function cargarPuntos() {
   const { data, error } = await db
     .from('puntos')
     .select('*')
-    .eq('sector_id', sector.sector_id)
+    .eq('territorio_id', territorio.territorio_id)
     .is('deleted_at', null)
     .order('nombre');
   if (error) {
@@ -218,16 +218,16 @@ function encolar(tipo, clave, datos) {
 // RENDER
 // ============================================================
 function pintarTodo() {
-  pintarVistaSector();
+  pintarVistaTerritorio();
   pintarCola();
   pintarLista();
-  pintarTarjetaSector();
+  pintarTarjetaTerritorio();
   pintarFiltros();
   if (mapListo) actualizarCapaPuntos();
 }
 
-function pintarVistaSector() {
-  const vacio = !sector;
+function pintarVistaTerritorio() {
+  const vacio = !territorio;
   $('emptyView').classList.toggle('hidden', !vacio);
   $('emptyView').classList.toggle('flex', vacio);
   $('appView').classList.toggle('hidden', vacio);
@@ -245,7 +245,7 @@ function pintarCola() {
   $('stripTexto').textContent = r.total
     ? `${r.total} gestión${r.total === 1 ? '' : 'es'} en cola local`
     : (off ? 'Sin señal: los cambios se guardan en el teléfono' : 'Sincronizado con central');
-  $('stripComuna').textContent = sector?.sectores?.comuna || '—';
+  $('stripComuna').textContent = territorio?.territorios?.comuna || '—';
 
   $('fabSync').classList.toggle('hidden', !r.total);
   $('fabCount').textContent = String(r.total);
@@ -273,11 +273,11 @@ function textoOp(tipo) {
   return { estado: 'Cambio de estado', crear: 'Punto nuevo', editar: 'Edición de punto', borrar: 'Borrado de punto' }[tipo] || tipo;
 }
 
-function pintarTarjetaSector() {
-  const av = sectorAvance(puntos);
+function pintarTarjetaTerritorio() {
+  const av = territorioAvance(puntos);
   const extra = colaResumen(cola).crear;
-  $('sectorNombre').textContent = sector ? sector.sectores.nombre : '—';
-  $('sectorProgreso').textContent = `${av.visitado} de ${av.total} visitados (${av.pct}%)`;
+  $('territorioNombre').textContent = territorio ? territorio.territorios.nombre : '—';
+  $('territorioProgreso').textContent = `${av.visitado} de ${av.total} visitados (${av.pct}%)`;
   const pct = (n) => (av.total ? (n / av.total) * 100 : 0) + '%';
   $('barVisitado').style.width = pct(av.visitado);
   $('barErroneo').style.width = pct(av.erroneo);
@@ -290,7 +290,7 @@ function pintarTarjetaSector() {
 }
 
 function pintarFiltros() {
-  const av = sectorAvance(puntos);
+  const av = territorioAvance(puntos);
   const extra = colaResumen(cola).crear;
   const val = { todos: av.total + extra, visitado: av.visitado, incidencia: av.erroneo + av.no_pasar, pendiente: av.pendiente + extra };
   document.querySelectorAll('[data-badge]').forEach((b) => {
@@ -405,14 +405,14 @@ function bboxDeGeometria(geom) {
 }
 
 function initMap() {
-  if (map || !sector) return;
+  if (map || !territorio) return;
   const gl = document.createElement('canvas').getContext('webgl2')
     || document.createElement('canvas').getContext('webgl');
   if (!gl) {
     toast('WebGL no está disponible en este navegador', { error: true });
     return;
   }
-  const geom = sector.sectores.geom;
+  const geom = territorio.territorios.geom;
   const bb = bboxDeGeometria(geom);
   const centro = bb ? [(bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2] : [-70.6483, -33.457];
 
@@ -427,14 +427,14 @@ function initMap() {
 
   map.on('load', () => {
     if (geom) {
-      map.addSource('sector-movil', { type: 'geojson', data: { type: 'Feature', geometry: geom, properties: {} } });
+      map.addSource('territorio-movil', { type: 'geojson', data: { type: 'Feature', geometry: geom, properties: {} } });
       map.addLayer({
-        id: 'sector-movil-fill', type: 'fill', source: 'sector-movil',
-        paint: { 'fill-color': sector.sectores.color || '#3b82f6', 'fill-opacity': 0.08 },
+        id: 'territorio-movil-fill', type: 'fill', source: 'territorio-movil',
+        paint: { 'fill-color': territorio.territorios.color || '#3b82f6', 'fill-opacity': 0.08 },
       });
       map.addLayer({
-        id: 'sector-movil-line', type: 'line', source: 'sector-movil',
-        paint: { 'line-color': sector.sectores.color || '#3b82f6', 'line-width': 2 },
+        id: 'territorio-movil-line', type: 'line', source: 'territorio-movil',
+        paint: { 'line-color': territorio.territorios.color || '#3b82f6', 'line-width': 2 },
       });
     }
     mapListo = true;
@@ -450,8 +450,8 @@ function initMap() {
 }
 
 function ajustarVistaMapa() {
-  if (!map || !sector) return;
-  const bb = bboxDeGeometria(sector.sectores.geom);
+  if (!map || !territorio) return;
+  const bb = bboxDeGeometria(territorio.territorios.geom);
   if (bb) {
     map.fitBounds(bb, { padding: 40, duration: 0 });
   } else if (puntos.length) {
@@ -487,7 +487,7 @@ function actualizarCapaPuntos() {
     pintar({ id: o.clave, estado: 'pendiente', lat: o.datos.lat, lng: o.datos.lng }, { local: true });
   });
 
-  const av = sectorAvance(puntos);
+  const av = territorioAvance(puntos);
   $('mapLegend').innerHTML = `
     <span class="text-on-tertiary">${av.visitado} visitados</span>
     <span class="text-on-surface-variant">${av.erroneo} erróneos</span>
@@ -584,7 +584,7 @@ async function guardarFicha() {
 
   if (!nombre) { err.textContent = 'El nombre es obligatorio'; return; }
   if (isNaN(lat) || isNaN(lng)) { err.textContent = 'Latitud/longitud inválidas'; return; }
-  if (!dentroDelSector(lat, lng)) { err.textContent = 'Las coordenadas quedan fuera de tu sector'; return; }
+  if (!dentroDelTerritorio(lat, lng)) { err.textContent = 'Las coordenadas quedan fuera de tu territorio'; return; }
 
   if (sheetPunto.esNuevo) {
     // Intenta contra el servidor; sin señal, encola la creación
@@ -629,8 +629,8 @@ async function guardarFicha() {
   pintarTodo();
 }
 
-function dentroDelSector(lat, lng) {
-  const g = sector?.sectores?.geom;
+function dentroDelTerritorio(lat, lng) {
+  const g = territorio?.territorios?.geom;
   if (!g) return true; // sin polígono no se puede validar en cliente
   return pointInGeometry(lng, lat, g);
 }
@@ -673,7 +673,7 @@ async function aplicarEstado(id, estado, { silent = false } = {}) {
 
   // Optimista: la lista refleja el cambio al instante
   p.estado = estado;
-  pintarLista(); pintarTarjetaSector(); pintarFiltros(); actualizarCapaPuntos();
+  pintarLista(); pintarTarjetaTerritorio(); pintarFiltros(); actualizarCapaPuntos();
 
   const { error } = await db.rpc('marcar_estado', { p_id: id, p_estado: estado });
   if (error) {
@@ -683,7 +683,7 @@ async function aplicarEstado(id, estado, { silent = false } = {}) {
       return;
     }
     p.estado = prev; // revierte el optimismo
-    pintarLista(); pintarTarjetaSector(); pintarFiltros(); actualizarCapaPuntos();
+    pintarLista(); pintarTarjetaTerritorio(); pintarFiltros(); actualizarCapaPuntos();
     toast(error.message, { error: true });
     return;
   }
@@ -719,24 +719,24 @@ $('btnPointDelete').addEventListener('click', () => {
 });
 
 // ============================================================
-// DEVOLVER SECTOR
+// DEVOLVER TERRITORIO
 // ============================================================
 $('btnDevolver').addEventListener('click', () => {
-  if (!sector) return;
+  if (!territorio) return;
   preguntar(
-    '¿Devolver el sector?',
-    `Vas a devolver "${sector.sectores.nombre}" a central aunque no esté terminado. Dejarás de verlo al instante.`,
+    '¿Devolver el territorio?',
+    `Vas a devolver "${territorio.territorios.nombre}" a central aunque no esté terminado. Dejarás de verlo al instante.`,
     async () => {
-      const { error } = await db.rpc('devolver_sector');
+      const { error } = await db.rpc('devolver_territorio');
       if (error) {
         toast(esErrorDeRed(error) ? 'Sin señal: no se pudo devolver' : error.message, { error: true });
         return;
       }
-      sector = null;
+      territorio = null;
       puntos = [];
       if (map) { map.remove(); map = null; mapListo = false; markers = {}; }
       pintarTodo();
-      toast('Sector devuelto a central');
+      toast('Territorio devuelto a central');
     }
   );
 });
@@ -750,7 +750,7 @@ $('btnNavegar').addEventListener('click', () => {
   const destino = c
     ? `${c.lat},${c.lng}`
     : (() => {
-        const bb = bboxDeGeometria(sector?.sectores?.geom);
+        const bb = bboxDeGeometria(territorio?.territorios?.geom);
         return bb ? `${(bb[0][1] + bb[1][1]) / 2},${(bb[0][0] + bb[1][0]) / 2}` : '';
       })();
   if (!destino) { toast('Sin coordenadas para navegar', { error: true }); return; }
@@ -782,7 +782,7 @@ function pintarTabs() {
     b.classList.toggle('text-on-surface-variant', !activo);
   });
   if (tabActual === 'mapa') {
-    if (!map && sector) {
+    if (!map && territorio) {
       try { initMap(); } catch (e) { console.error(e); toast('No se pudo iniciar el mapa: ' + e.message, { error: true }); }
     } else if (map) { map.resize(); actualizarCapaPuntos(); }
   }

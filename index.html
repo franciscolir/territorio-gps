@@ -53,12 +53,12 @@
 
       <div class="sect-zone" id="sectZone">
         <div class="sect-head">
-          <h2>Sectores</h2>
-          <button id="allSectoresBtn" class="ghost back" style="display:none" title="Volver a la lista de sectores"><span class="ms ms-sm">list</span>Todos</button>
+          <h2>Territorios</h2>
+          <button id="allTerritoriosBtn" class="ghost back" style="display:none" title="Volver a la lista de territorios"><span class="ms ms-sm">list</span>Todos</button>
         </div>
-        <div id="sectorList"><div class="empty">Aún no hay sectores</div></div>
+        <div id="territorioList"><div class="empty">Aún no hay territorios</div></div>
         <div id="detailBlock" style="display:none">
-          <div id="sectorDetail"></div>
+          <div id="territorioDetail"></div>
           <div id="assignPanel" style="display:none"></div>
         </div>
       </div>
@@ -84,11 +84,11 @@
 
     <div id="map"></div>
 
-    <!-- Riel de borde: colapsar panel, buscador unificado y dibujar sector -->
+    <!-- Riel de borde: colapsar panel, buscador unificado y dibujar territorio -->
     <div id="edgeRail">
       <button id="toggleSidebar" title="Mostrar/ocultar panel"><span class="ms">menu</span></button>
       <button id="searchFab" title="Buscar dirección, coordenadas o link"><span class="ms">search</span></button>
-      <button id="drawBtn" title="Dibujar un sector a mano (elige una comuna)" style="display:none"><span class="ms">draw</span></button>
+      <button id="drawBtn" title="Dibujar un territorio a mano (elige una comuna)" style="display:none"><span class="ms">draw</span></button>
     </div>
     <div id="searchOverlay">
       <span class="ms ms-sm search-ic">search</span>
@@ -104,7 +104,7 @@
         <button id="locateBtn" title="Mi ubicación"><span class="ms">my_location</span></button>
       </div>
       <div class="fab-group">
-        <button id="fitViewBtn" title="Ajustar vista a la comuna o sector"><span class="ms">center_focus_strong</span></button>
+        <button id="fitViewBtn" title="Ajustar vista a la comuna o territorio"><span class="ms">center_focus_strong</span></button>
       </div>
     </div>
 
@@ -119,7 +119,7 @@
         <div class="scope-seg" id="scopeSeg" title="Alcance de puntos en el mapa">
           <button id="scopeRegion" data-scope="region">Toda RM</button>
           <button id="scopeCommune" data-scope="comuna">Comuna</button>
-          <button id="scopeSector" data-scope="sector">Sector</button>
+          <button id="scopeTerritorio" data-scope="territorio">Territorio</button>
         </div>
       </div>
     </div>
@@ -134,12 +134,12 @@
     </div>
 
     <div id="drawToolbar">
-      <span class="t-label">✏️ Sector</span>
+      <span class="t-label">✏️ Territorio</span>
       <span id="drawPalette"></span>
       <span id="drawCount">—</span>
       <button id="drawUndo">Deshacer</button>
       <button id="drawCancel">Cancelar</button>
-      <button id="drawClose" class="primary">Cerrar sector</button>
+      <button id="drawClose" class="primary">Cerrar territorio</button>
     </div>
   </div>
 </div>
@@ -192,17 +192,17 @@
   </div>
 </div>
 
-<!-- ================= MODAL NUEVO SECTOR ================= -->
-<div id="sectorModal">
+<!-- ================= MODAL NUEVO TERRITORIO ================= -->
+<div id="territorioModal">
   <div class="box">
-    <h2>Nuevo sector</h2>
-    <div class="count-badge" id="sectorCount"></div>
+    <h2>Nuevo territorio</h2>
+    <div class="count-badge" id="territorioCount"></div>
     <label>Nombre</label>
-    <input id="sectorNombre" type="text" />
-    <div class="err" id="sectorErr"></div>
+    <input id="territorioNombre" type="text" />
+    <div class="err" id="territorioErr"></div>
     <div class="buttons">
-      <button class="secondary" id="sectorCancelBtn">Cancelar</button>
-      <button class="primary" id="sectorSaveBtn">Guardar</button>
+      <button class="secondary" id="territorioCancelBtn">Cancelar</button>
+      <button class="primary" id="territorioSaveBtn">Guardar</button>
     </div>
   </div>
 </div>
@@ -227,9 +227,9 @@
     <div class="set-radios">
       <label><input type="radio" name="mapScope" value="region" /> Toda la región</label>
       <label><input type="radio" name="mapScope" value="comuna" /> Comuna seleccionada</label>
-      <label><input type="radio" name="mapScope" value="sector" /> Sector seleccionado</label>
+      <label><input type="radio" name="mapScope" value="territorio" /> Territorio seleccionado</label>
     </div>
-    <div class="set-note">Solo afecta a los marcadores del mapa; es una preferencia de este navegador. La lista lateral muestra siempre los puntos del sector seleccionado.</div>
+    <div class="set-note">Solo afecta a los marcadores del mapa; es una preferencia de este navegador. La lista lateral muestra siempre los puntos del territorio seleccionado.</div>
     <div class="err" id="setErr"></div>
     <div class="buttons">
       <button class="primary" id="setCloseBtn">Cerrar</button>

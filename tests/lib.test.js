@@ -16,7 +16,7 @@ const lib = new Function(
      SEGMENTOS, ESTADOS, PIN_ICONS, estadoLabel, estadoClass,
      escapeHtml, pointFromGeom, pointInGeometry, inRing,
      ringArea, ringToEwkt, createCircle, coordsFromLink, parseCoordQuery,
-     nuevaOpCola, colaAgregar, colaQuitar, colaResumen, sectorAvance,
+     nuevaOpCola, colaAgregar, colaQuitar, colaResumen, territorioAvance,
    };`
 )();
 
@@ -45,7 +45,7 @@ describe('escapeHtml', () => {
     expect(lib.escapeHtml(undefined)).toBe('');
   });
   it('no rompe texto normal con acentos', () => {
-    expect(lib.escapeHtml('Sector Ñuñoa · visitado')).toBe('Sector Ñuñoa · visitado');
+    expect(lib.escapeHtml('Territorio Ñuñoa · visitado')).toBe('Territorio Ñuñoa · visitado');
   });
 });
 
@@ -249,21 +249,21 @@ describe('cola offline (nuevaOpCola / colaAgregar / colaQuitar / colaResumen)', 
   });
 });
 
-describe('sectorAvance', () => {
+describe('territorioAvance', () => {
   it('cuenta estados y calcula el porcentaje de visitados', () => {
     const puntos = [
       { estado: 'visitado' }, { estado: 'visitado' }, { estado: 'visitado' },
       { estado: 'erroneo' }, { estado: 'no_pasar' }, { estado: 'pendiente' },
     ];
-    expect(lib.sectorAvance(puntos)).toEqual({
+    expect(lib.territorioAvance(puntos)).toEqual({
       total: 6, pendiente: 1, visitado: 3, erroneo: 1, no_pasar: 1, pct: 50,
     });
   });
   it('trata lo vacío o desconocido como pendiente', () => {
-    expect(lib.sectorAvance([])).toEqual({
+    expect(lib.territorioAvance([])).toEqual({
       total: 0, pendiente: 0, visitado: 0, erroneo: 0, no_pasar: 0, pct: 0,
     });
-    const r = lib.sectorAvance([{}, { estado: 'raro' }]);
+    const r = lib.territorioAvance([{}, { estado: 'raro' }]);
     expect(r.pendiente).toBe(2);
     expect(r.pct).toBe(0);
   });

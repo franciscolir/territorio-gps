@@ -70,9 +70,17 @@ Las **vistas** (barra superior) las cambia `setView()`: oculta/muestra `#main`
 `territorios_asignaciones` y `puntos`; *Usuarios* usa la RPC `listar_usuarios` y
 la Edge Function `crear-usuario` para el alta.
 
+Dentro del *Historial*:
+- `loadHistorialTerritorios()` → **todos** los territorios (ordenados por
+  comuna) cruzados con su proceso más reciente (`asigPorTerr`).
+- `loadHistorialPuntos()` → agrupa `puntos` en **comuna → territorio** y pinta
+  filas combinadas (`rowspan`) con el texto en vertical; el botón **Ver**
+  delega en `abrirHistorialPunto()`, que llama a la RPC `punto_historial` y
+  rellena `#puntoHistorial`.
+
 La vista de asignación (menú ⋮ → Asignar) ocupa la zona de territorios y lista
 los **procesos de trabajo** del territorio: filas de `territorios_asignaciones`
-(usuario, fecha de asignación, fecha de devolución, estado En curso/Devuelto).
+(usuario, fecha de asignación, fecha de cierre, estado En proceso/Devuelto/Completado).
 `asignaciones` guarda el historial completo por territorio; `asigActiva()` devuelve
 el proceso en curso.
 

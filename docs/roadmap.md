@@ -20,6 +20,7 @@ deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
 | T9 | App de terreno | `movil.html`/`movil.js`: territorio único asignado, lista/mapa/fichas de punto, alta y edición dentro del polígono, estados con deshacer, **devolución de territorio** y **cola offline** en `localStorage` con auto-sync. Falta solo PWA (service worker + manifest) |
 | T10 | RLS por territorio | `territorio_activo_usuario`, policies de `puntos`/`territorios` por territorio activo, trigger `puntos_bloquear_columnas`, RPCs `devolver_territorio`/`actualizar_punto_terreno`/`eliminar_punto_propio` (migración 003) |
 | T-H | Vistas e historial | Rename `sectores` → `territorios` (007), barra **Territorios · Historial · Usuarios**, cierre de procesos (**auto al 100 %** + manual), `notas` por proceso, `puntos.ultima_visita`, `listar_usuarios` y alta de usuarios con Edge Function `crear-usuario` (008) |
+| T-H2 | Historial y bitácora | Pestaña *Territorios* con **todos** los territorios por comuna; pestaña *Puntos* agrupada por comuna/territorio con **texto vertical en filas combinadas** y botón **Ver**; tabla `puntos_historial` (log por movimiento, trigger security definer) + RPC `punto_historial` (009) |
 
 ---
 
@@ -37,14 +38,9 @@ instalable/cacheado del navegador:
   polígono del territorio.
 - Botón en la ficha del territorio; para compartir con quien no usa la app.
 
-### T13 · Bitácora de cambios de estado
-- La vista **Historial** ya trae el **registro vivo** por punto (última visita y
-  estado) y el historial de procesos por territorio. Queda pendiente la
-  **bitácora append-only** por cada cambio de estado
-  (`puntos_historial (punto_id, estado_anterior, estado_nuevo, user_id, at)`),
-  poblada por trigger desde `marcar_estado`.
-- Sirve para auditoría fina y productividad por cuadrilla (quién visitó qué y
-  cuándo, no solo el último estado).
+### T13 · Exportación del historial
+- La **bitácora por punto** (`puntos_historial`, 009) ya registra cada
+  movimiento; queda exportarla junto con la vista Historial (CSV).
 
 ### T14 · Marcadores y lista con muchos datos
 - Clustering de marcadores (`supercluster`) cuando el alcance es «Toda RM».

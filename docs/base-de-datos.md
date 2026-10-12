@@ -60,6 +60,23 @@ de verlo (RLS) y el territorio queda libre para reasignar. El proceso se cierra
 solo cuando no quedan puntos `pendiente` (trigger `territorios_autocompletar`) o
 manualmente con `completar_territorio()` (admin).
 
+### `public.puntos_historial`
+
+Bitácora **append-only** de movimientos de un punto (una fila por movimiento).
+
+| Columna | Notas |
+|---|---|
+| `punto_id` | → `puntos` (`on delete cascade`) |
+| `tipo` | check: `creado` \| `estado` \| `territorio` \| `borrado` \| `restaurado` \| `nota` |
+| `estado_anterior` / `estado_nuevo` | en los cambios de estado |
+| `territorio_anterior` / `territorio_nuevo` | en los cambios de territorio |
+| `user_id` | quién lo movió (`auth.uid()`) |
+| `at` | cuándo |
+
+La escribe el trigger `puntos_historial_ins`/`_upd` (security definer) y la lee
+la RPC `punto_historial()`. **RLS habilitado sin policies**: el cliente no tiene
+ningún permiso directo sobre la tabla, solo puede consultarla vía la RPC.
+
 ### `public.comunas_rm`
 
 `nombre`, `codigo_comuna`, `geom geometry(MultiPolygon,4326)`. Cargada por
@@ -122,6 +139,7 @@ Notas:
 | `eliminar_punto_propio(id)` | **definer** | Borrado lógico de puntos creados por el propio colaborador. |
 | `completar_territorio(territorio, notas)` | **definer** | Solo admin: cierra el proceso activo como `completado` (auditoría + notas). |
 | `listar_usuarios()` | **definer** | Solo admin: `id, email, is_admin` + territorio activo y fecha de asignación (`desde`). |
+| `punto_historial(punto)` | **definer** | Bitácora de un punto: sus movimientos (creación, estado, territorio, borrado, notas) + las asignaciones de su territorio. Devuelve `ev_at, ev_tipo, ev_actor, ev_detalle`; exige admin, ser el creador o tener ese territorio activo. |
 
 `guardar_punto` y `eliminar_punto` mantienen el chequeo de admin en el cuerpo
 porque son `security invoker` y ejecutan bajo RLS.
@@ -137,6 +155,7 @@ porque son `security invoker` y ejecutan bajo RLS.
 | `territorios_resync_puntos` | INSERT o DELETE en `territorios` | Recalcula `territorio_id` de los puntos vivos |
 | `puntos_bloquear_columnas` | UPDATE en `puntos` | Bloquea que un no-admin toque `user_id` ni `deleted_at` ajeno; deja pasar cambios de `estado` dentro del territorio |
 | `territorios_autocompletar` | UPDATE de `estado` en `puntos` | Si al territorio no le quedan puntos `pendiente`, cierra su proceso activo como `completado` |
+| `puntos_historial_ins` / `puntos_historial_upd` | INSERT o UPDATE en `puntos` | Escribe una fila en `puntos_historial` por cada movimiento (creación, cambio de estado/territorio, borrado/restauración, edición de notas). **definer**, así que el cliente no necesita permisos sobre la bitácora. |
 
 `territorios_resync_puntos` solo escribe `territorio_id` (nunca `geom`), así que no
 vuelve a disparar `puntos_sync_territorio`: no hay bucle.
@@ -169,6 +188,7 @@ psql "$DATABASE_URL" -f migrations/005_asignaciones_y_estado.sql  # reasignar + 
 psql "$DATABASE_URL" -f migrations/006_grants_asignaciones.sql    # grants territorios/asignaciones
 psql "$DATABASE_URL" -f migrations/007_rename_territorios.sql     # sectores → territorios
 psql "$DATABASE_URL" -f migrations/008_historial_usuarios.sql     # completado + historial + usuarios
+psql "$DATABASE_URL" -f migrations/009_puntos_historial.sql       # bitácora de movimientos por punto
 ```
 
 o vía SQL Editor de Supabase.
@@ -183,6 +203,7 @@ o vía SQL Editor de Supabase.
 | `006_grants_asignaciones.sql` | grants de `territorios` y `territorios_asignaciones` para `authenticated` |
 | `007_rename_territorios.sql` | rename `sectores` → `territorios` (tablas, columna, RPCs, triggers, policies) |
 | `008_historial_usuarios.sql` | estado `completado`, `notas`/`completado_*`, `puntos.ultima_visita`, trigger `territorios_autocompletar`, RPCs `completar_territorio` y `listar_usuarios` |
+| `009_puntos_historial.sql` | tabla `puntos_historial` (bitácora), triggers `puntos_historial_ins`/`_upd`, RPC `punto_historial` |
 
 ### Verificación rápida tras migrar
 
@@ -191,7 +212,8 @@ o vía SQL Editor de Supabase.
 select proname from pg_proc
 where proname in ('marcar_estado','guardar_territorio','devolver_territorio',
                   'actualizar_punto_terreno','eliminar_punto_propio',
-                  'territorio_activo_usuario','completar_territorio','listar_usuarios');
+                  'territorio_activo_usuario','completar_territorio','listar_usuarios',
+                  'punto_historial','puntos_historial_log');
 
 -- todos los puntos vivos tienen territorio (o están fuera de todo territorio)
 select count(*) from public.puntos where deleted_at is null and territorio_id is null;

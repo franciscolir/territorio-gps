@@ -22,12 +22,21 @@ Arriba hay una barra con tres vistas:
 
 - **Territorios**: el mapa y el panel lateral (todo lo que describe este manual).
 - **Historial** (solo administración): registro de trabajo.
-  - Pestaña **Territorios**: una fila por proceso de asignación — territorio,
-    comuna, usuario, fecha de asignación, estado (**En proceso / Devuelto /
-    Completado**), fecha de cierre y notas.
-  - Pestaña **Puntos**: una fila por punto — nombre, **última visita**, estado,
+  - Pestaña **Territorios**: **todos** los territorios, ordenados por comuna.
+    Una fila por territorio — comuna, territorio, usuario (o *Sin asignar*),
+    fecha de asignación, estado (**En proceso / Devuelto / Completado / Libre**),
+    fecha de cierre y notas.
+  - Pestaña **Puntos**: una fila por punto, **agrupado por comuna y territorio**.
+    Las columnas de la izquierda muestran la comuna y el territorio en **texto
+    vertical**, abarcando todas las filas del grupo; los puntos sin territorio
+    aparecen como *Sin territorio*. Luego: nombre, **última visita**, estado,
     marcas de *No pasar* / *Erróneo* / *Activo* (activo = ni erróneo ni no
     pasar) y notas.
+  - Botón **Ver** (columna final): abre la **bitácora** del punto, con un log por
+    fila — fecha, tipo de movimiento, detalle y quién lo hizo. Registra la
+    creación, cada cambio de estado, cambio de territorio, borrado/restauración,
+    edición de notas, y las **asignaciones / devoluciones / cierres** del
+    territorio en que está el punto.
 - **Usuarios** (solo administración): lista del equipo con su rol, territorio en
   curso y fecha de asignación; y alta de **usuarios de terreno** (email +
   contraseña). Los usuarios creados nunca son administradores.

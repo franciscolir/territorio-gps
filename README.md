@@ -7,7 +7,7 @@ Aplicación web de trabajo en terreno para levantar, clasificar y agrupar
 - Alta de puntos con clic en el mapa, buscador unificado (dirección · coordenadas · link de Google Maps) y búsqueda por radio de referencia.
 - Estados por punto (`pendiente`, `visitado`, `erróneo`, `no_pasar`) con barra de avance y deshacer.
 - Asignación de territorios a cuadrillas con ciclo de vida **en proceso / devuelto / completado** (un colaborador, un territorio a la vez; se cierra al 100 % o manualmente).
-- **Vistas de escritorio**: *Territorios* (mapa + panel), *Historial* (registro de asignaciones y de puntos) y *Usuarios* (alta y estado del equipo de terreno).
+- **Vistas de escritorio**: *Territorios* (mapa + panel), *Historial* (todos los territorios por comuna + puntos agrupados por comuna/territorio con **bitácora por punto**) y *Usuarios* (alta y estado del equipo de terreno).
 - **App de terreno** (`movil.html`) para el colaborador: ve solo su territorio, crea/edita puntos, cambia estados, **devuelve el territorio** y opera con **cola offline**.
 - Backend en Supabase (PostgreSQL + PostGIS + RLS).
 
@@ -168,6 +168,7 @@ producción**, aplica solo los cambios nuevos, en orden:
 | [`migrations/006_grants_asignaciones.sql`](migrations/006_grants_asignaciones.sql) | Grants de `territorios` y `territorios_asignaciones` para `authenticated` (faltaban en la 004; sin ellos la app de terreno no carga el territorio asignado) |
 | [`migrations/007_rename_territorios.sql`](migrations/007_rename_territorios.sql) | Rename `sectores` → `territorios` (tablas, columna `territorio_id`, RPCs, triggers y policies) |
 | [`migrations/008_historial_usuarios.sql`](migrations/008_historial_usuarios.sql) | Estado `completado` (auto al 100 % + manual), `notas` por proceso, `puntos.ultima_visita` y RPC `listar_usuarios` |
+| [`migrations/009_puntos_historial.sql`](migrations/009_puntos_historial.sql) | Bitácora `puntos_historial` (un log por movimiento del punto) y RPC `punto_historial` |
 
 Todas son idempotentes (se pueden re-ejecutar):
 
@@ -180,6 +181,7 @@ psql "$DATABASE_URL" -f migrations/005_asignaciones_y_estado.sql
 psql "$DATABASE_URL" -f migrations/006_grants_asignaciones.sql
 psql "$DATABASE_URL" -f migrations/007_rename_territorios.sql
 psql "$DATABASE_URL" -f migrations/008_historial_usuarios.sql
+psql "$DATABASE_URL" -f migrations/009_puntos_historial.sql
 ```
 
 o pega su contenido en el SQL Editor de Supabase.
@@ -237,5 +239,5 @@ Detalle en [`supabase/functions/crear-usuario/README.md`](supabase/functions/cre
 ## Roadmap
 
 Lo que queda fuera de esta rama (ver [docs/roadmap.md](docs/roadmap.md)):
-exportación CSV/GeoJSON, historial de cambios de estado, PWA instalable con
+exportación CSV/GeoJSON, PWA instalable con
 service worker, clustering de marcadores y proxy de Nominatim.

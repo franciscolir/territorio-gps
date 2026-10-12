@@ -2234,6 +2234,10 @@ document.addEventListener('keydown', (e) => {
       renderAssign();
       return;
     }
+    if (document.getElementById('puntoHistorial').classList.contains('visible')) {
+      cerrarHistorialPunto();
+      return;
+    }
     if (document.getElementById('pointDetail').classList.contains('visible')) {
       closePointDetail();
       return;
@@ -2525,32 +2529,52 @@ async function loadHistorialTerritorios() {
   if (!box) return;
   box.innerHTML = '<div class="empty">Cargando…</div>';
 
-  const { data, error } = await db
-    .from('territorios_asignaciones')
-    .select('territorio_id, user_id, assigned_at, estado, notas, devuelta_at, completado_at, territorios(nombre, comuna)')
-    .order('assigned_at', { ascending: false });
-
+  const [rt, ra] = await Promise.all([
+    db.from('territorios').select('id, nombre, comuna'),
+    db.from('territorios_asignaciones')
+      .select('territorio_id, user_id, assigned_at, estado, notas, devuelta_at, completado_at'),
+  ]);
+  const error = rt.error || ra.error;
   if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
-  if (!data || !data.length) { box.innerHTML = '<div class="empty">Sin registros de asignación</div>'; return; }
 
-  const filas = data.map((r) => {
-    const t = r.territorios || {};
-    const est = ESTADO_ASIG[r.estado] ? r.estado : 'activa';
-    const cierre = est === 'completado' ? r.completado_at : est === 'devuelta' ? r.devuelta_at : null;
+  const territorios = (rt.data || []).slice()
+    .sort((a, b) => (a.comuna || '').localeCompare(b.comuna || '', 'es')
+      || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+  if (!territorios.length) { box.innerHTML = '<div class="empty">Sin territorios</div>'; return; }
+
+  // Proceso más relevante por territorio: la activa si existe, si no el más reciente.
+  const rank = (a) => (a.estado === 'activa' ? 0 : 1);
+  const asigPorTerr = new Map();
+  for (const a of ra.data || []) {
+    const prev = asigPorTerr.get(a.territorio_id);
+    if (!prev
+      || rank(a) < rank(prev)
+      || (rank(a) === rank(prev) && new Date(a.assigned_at) > new Date(prev.assigned_at))) {
+      asigPorTerr.set(a.territorio_id, a);
+    }
+  }
+
+  const filas = territorios.map((t) => {
+    const a = asigPorTerr.get(t.id);
+    const est = a ? (ESTADO_ASIG[a.estado] ? a.estado : 'activa') : null;
+    const cierre = !a ? null
+      : est === 'completado' ? a.completado_at
+      : est === 'devuelta' ? a.devuelta_at
+      : null;
     return `<tr>
-      <td><b>${escapeHtml(t.nombre || '—')}</b></td>
       <td>${escapeHtml(t.comuna || '—')}</td>
-      <td>${escapeHtml(emailDe(r.user_id) || '—')}</td>
-      <td>${fmtFecha(r.assigned_at)}</td>
-      <td><span class="chip-est ${est}">${ESTADO_ASIG[est]}</span></td>
+      <td><b>${escapeHtml(t.nombre || '—')}</b></td>
+      <td>${a ? escapeHtml(emailDe(a.user_id) || '—') : '<span class="muted">Sin asignar</span>'}</td>
+      <td>${a ? fmtFecha(a.assigned_at) : '—'}</td>
+      <td>${a ? `<span class="chip-est ${est}">${ESTADO_ASIG[est]}</span>` : '<span class="muted">Libre</span>'}</td>
       <td>${cierre ? fmtFecha(cierre) : '—'}</td>
-      <td class="notas">${escapeHtml(r.notas || '')}</td>
+      <td class="notas">${a ? escapeHtml(a.notas || '') : ''}</td>
     </tr>`;
   }).join('');
 
   box.innerHTML = `<table class="hist-table">
     <thead><tr>
-      <th>Territorio</th><th>Comuna</th><th>Usuario</th><th>Asignado</th>
+      <th>Comuna</th><th>Territorio</th><th>Usuario</th><th>Asignado</th>
       <th>Estado</th><th>Cierre</th><th>Notas</th>
     </tr></thead>
     <tbody>${filas}</tbody>
@@ -2564,36 +2588,123 @@ async function loadHistorialPuntos() {
 
   const { data, error } = await db
     .from('puntos')
-    .select('nombre, estado, ultima_visita, notas')
+    .select('id, nombre, estado, ultima_visita, notas, territorio_id, territorios(nombre, comuna)')
     .is('deleted_at', null)
     .order('nombre');
 
   if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
   if (!data || !data.length) { box.innerHTML = '<div class="empty">Sin puntos</div>'; return; }
 
+  // Agrupa: comuna -> territorio -> puntos (para filas combinadas con rowspan)
+  const porComuna = new Map();
+  for (const p of data) {
+    const t = p.territorios;
+    const comuna = (t && t.comuna) || null;
+    const terrId = p.territorio_id || null;
+    if (!porComuna.has(comuna)) porComuna.set(comuna, new Map());
+    const porTerr = porComuna.get(comuna);
+    if (!porTerr.has(terrId)) porTerr.set(terrId, { nombre: (t && t.nombre) || null, puntos: [] });
+    porTerr.get(terrId).puntos.push(p);
+  }
+
+  // Claves alfabéticas; las vacías (Sin comuna / Sin territorio) van al final.
+  const ordenarClaves = (m) => {
+    const keys = [...m.keys()];
+    const llenas = keys.filter((k) => k !== null && k !== '').sort((a, b) => String(a).localeCompare(String(b), 'es'));
+    const vacias = keys.filter((k) => k === null || k === '');
+    return [...llenas, ...vacias];
+  };
+
   const si = '<span class="mark yes">✓</span>';
   const no = '<span class="mark no">—</span>';
-  const filas = data.map((p) => {
-    const est = p.estado || 'pendiente';
-    const activo = est !== 'erroneo' && est !== 'no_pasar';   // "activo" = no erróneo ni no pasar
-    return `<tr>
-      <td><b>${escapeHtml(p.nombre || '—')}</b></td>
-      <td>${p.ultima_visita ? fmtFechaHora(p.ultima_visita) : '—'}</td>
-      <td><span class="estado-tag ${estadoClass(est)}">${estadoLabel(est)}</span></td>
-      <td>${est === 'no_pasar' ? si : no}</td>
-      <td>${est === 'erroneo' ? si : no}</td>
-      <td>${activo ? si : no}</td>
-      <td class="notas">${escapeHtml(p.notas || '')}</td>
-    </tr>`;
-  }).join('');
+  const filas = [];
 
-  box.innerHTML = `<table class="hist-table">
+  for (const comunaKey of ordenarClaves(porComuna)) {
+    const porTerr = porComuna.get(comunaKey);
+    const totalComuna = [...porTerr.values()].reduce((n, t) => n + t.puntos.length, 0);
+    let comunaPuesta = false;
+
+    for (const terrKey of ordenarClaves(porTerr)) {
+      const terr = porTerr.get(terrKey);
+      const pts = terr.puntos.slice().sort(
+        (a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'),
+      );
+      let terrPuesta = false;
+
+      for (const p of pts) {
+        const est = p.estado || 'pendiente';
+        const activo = est !== 'erroneo' && est !== 'no_pasar';   // "activo" = no erróneo ni no pasar
+        filas.push(`<tr>
+          ${comunaPuesta ? '' : `<td class="grp comuna" rowspan="${totalComuna}"><span>${escapeHtml(comunaKey || 'Sin comuna')}</span></td>`}
+          ${terrPuesta ? '' : `<td class="grp terr" rowspan="${pts.length}"><span>${escapeHtml(terrKey === null || !terr.nombre ? 'Sin territorio' : terr.nombre)}</span></td>`}
+          <td><b>${escapeHtml(p.nombre || '—')}</b></td>
+          <td>${p.ultima_visita ? fmtFechaHora(p.ultima_visita) : '—'}</td>
+          <td><span class="estado-tag ${estadoClass(est)}">${estadoLabel(est)}</span></td>
+          <td>${est === 'no_pasar' ? si : no}</td>
+          <td>${est === 'erroneo' ? si : no}</td>
+          <td>${activo ? si : no}</td>
+          <td class="notas">${escapeHtml(p.notas || '')}</td>
+          <td class="col-ver"><button type="button" class="ver-btn" data-punto="${escapeHtml(String(p.id))}" data-nombre="${escapeHtml(p.nombre || '')}">Ver</button></td>
+        </tr>`);
+        comunaPuesta = true;
+        terrPuesta = true;
+      }
+    }
+  }
+
+  if (!filas.length) { box.innerHTML = '<div class="empty">Sin puntos</div>'; return; }
+
+  box.innerHTML = `<table class="hist-table hist-grp">
     <thead><tr>
+      <th class="grp-h">Comuna</th><th class="grp-h">Territorio</th>
       <th>Punto</th><th>Última visita</th><th>Estado</th>
       <th>No pasar</th><th>Erróneo</th><th>Activo</th><th>Notas</th>
+      <th class="col-ver-h"></th>
     </tr></thead>
-    <tbody>${filas}</tbody>
+    <tbody>${filas.join('')}</tbody>
   </table>`;
+}
+
+// Etiquetas de la bitácora de movimientos (punto_historial)
+const TIPO_LOG = {
+  creado: 'Creación',
+  estado: 'Estado',
+  territorio: 'Territorio',
+  borrado: 'Borrado',
+  restaurado: 'Restaurado',
+  nota: 'Notas',
+  asignado: 'Asignación',
+  devuelto: 'Devolución',
+  completado: 'Completado',
+};
+
+// Log de un punto: cada movimiento registrado por usuario o admin
+async function abrirHistorialPunto(puntoId, nombre) {
+  const overlay = document.getElementById('puntoHistorial');
+  const body = document.getElementById('phBody');
+  document.getElementById('phTitle').textContent = 'Historial · ' + (nombre || 'punto');
+  body.innerHTML = '<div class="empty">Cargando…</div>';
+  overlay.classList.add('visible');
+
+  const { data, error } = await db.rpc('punto_historial', { p_punto: puntoId });
+  if (error) { body.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+
+  const filas = data || [];
+  if (!filas.length) { body.innerHTML = '<div class="empty">Sin movimientos registrados</div>'; return; }
+
+  body.innerHTML = `<table class="hist-table log-table">
+    <thead><tr><th>Fecha</th><th>Movimiento</th><th>Detalle</th><th>Usuario</th></tr></thead>
+    <tbody>${filas.map((r) => `<tr>
+      <td>${fmtFechaHora(r.ev_at)}</td>
+      <td><span class="log-tipo ${escapeHtml(r.ev_tipo || '')}">${escapeHtml(TIPO_LOG[r.ev_tipo] || r.ev_tipo || '—')}</span></td>
+      <td class="log-det">${escapeHtml(r.ev_detalle || '')}</td>
+      <td>${escapeHtml(r.ev_actor || '—')}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function cerrarHistorialPunto() {
+  document.getElementById('puntoHistorial').classList.remove('visible');
 }
 
 async function loadUsuariosView() {
@@ -2664,6 +2775,17 @@ document.getElementById('histTabs').addEventListener('click', (ev) => {
   loadHistorial();
 });
 document.getElementById('userForm').addEventListener('submit', crearUsuario);
+
+// Historial de un punto: botón "Ver" de la tabla (delegación en el contenedor)
+document.getElementById('histPuntos').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button.ver-btn');
+  if (!b) return;
+  abrirHistorialPunto(b.dataset.punto, b.dataset.nombre);
+});
+document.getElementById('phClose').addEventListener('click', cerrarHistorialPunto);
+document.getElementById('puntoHistorial').addEventListener('click', (ev) => {
+  if (ev.target.id === 'puntoHistorial') cerrarHistorialPunto();   // clic fuera del box
+});
 
 // ============================================================
 // ARRANQUE

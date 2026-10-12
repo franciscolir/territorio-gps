@@ -269,6 +269,11 @@ function initMap() {
     map.on('click', onMapClick);
     map.on('mousemove', onMapMove);
     map.on('dblclick', onMapDblClick);
+
+    // Los grupos de marcadores se calculan en píxeles: al cambiar de zoom o
+    // desplazar el mapa dejan de ser válidos y hay que volver a agrupar.
+    // Solo si la pintura anterior agrupó, para no repintar de más.
+    map.on('moveend', () => { if (clusterActivo) renderMarkers(); });
   });
 }
 
@@ -679,12 +684,20 @@ estadoChips.querySelectorAll('.chip-f').forEach((btn) => {
   });
 });
 
+// Ventana de la lista lateral (T14): se pintan tarjetas de a PAGINA_PUNTOS
+// y el resto entra con «Cargar más», para que territorios con miles de puntos
+// no construyan miles de tarjetas de golpe.
+const PAGINA_PUNTOS = 100;
+let listaClave = '';
+let listaPagina = 1;
+
 function renderList() {
   const list = document.getElementById('list');
   const sec = territorioSelected();
 
   if (!sec) {
     list.innerHTML = '<div class="empty">Selecciona un territorio para ver sus puntos</div>';
+    listaClave = '';
     updateListScope();
     return;
   }
@@ -704,11 +717,22 @@ function renderList() {
 
   if (!filtered.length) {
     list.innerHTML = '<div class="empty">No hay puntos en este territorio</div>';
+    listaClave = '';
     updateListScope();
     return;
   }
 
-  list.innerHTML = filtered.map((p) => {
+  // Cambiar de territorio o de filtro vuelve a la primera página.
+  const clave = `${sec.id}|${est}|${txt}`;
+  if (clave !== listaClave) { listaClave = clave; listaPagina = 1; }
+  const visibles = filtered.slice(0, listaPagina * PAGINA_PUNTOS);
+  const restan = filtered.length - visibles.length;
+
+  const paginador = restan > 0
+    ? `<button id="listMore" class="list-more" type="button"><span class="ms ms-sm">add</span>Cargar más · quedan ${restan}</button>`
+    : '';
+
+  list.innerHTML = visibles.map((p) => {
     const e = p.estado || 'pendiente';
     const seg = SEGMENTOS.map(([v, l, ic]) =>
       `<button data-estado="${v}" class="${e === v ? 'active' : ''}"><span class="ic ms">${ic}</span><span>${l}</span></button>`
@@ -736,7 +760,10 @@ function renderList() {
       </div>
       <div class="seg">${seg}</div>
     </div>`;
-  }).join('');
+  }).join('') + paginador;
+
+  const more = document.getElementById('listMore');
+  if (more) more.addEventListener('click', () => { listaPagina += 1; renderList(); });
 
   list.querySelectorAll('.point-card').forEach((el) => {
     const id = el.dataset.id;
@@ -766,33 +793,87 @@ function mapScopePoints() {
   return displayedPoints();
 }
 
+// Marcadores agrupados (T14): solo con alcance «Toda RM» y muchos puntos.
+const UMBRAL_CLUSTER = 150;  // por debajo de esto no se agrupa nada
+const RADIO_CLUSTER = 60;    // px: hasta aquí se cae dentro de un grupo
+let clusterActivo = false;   // ¿la última pintura agrupó? → recalcular al mover
+let pinFocoId = null;        // punto resaltado por focusPoint
+let groupMarkers = [];       // burbujas de agrupación
+
 function renderMarkers() {
   // Limpiar todos
   Object.values(pointMarkers).forEach((m) => m.remove());
   pointMarkers = {};
+  groupMarkers.forEach((m) => m.remove());
+  groupMarkers = [];
+  if (!map) return;
 
-  // Puntos del alcance elegido + puntos del modo referencia (aunque estén fuera)
   const visibleIds = new Set(mapScopePoints().map((p) => p.id));
-  const toShow = allPoints.filter((p) => visibleIds.has(p.id) || refResultsIds.has(p.id));
+  const toShow = allPoints.filter(
+    (p) => p.lat != null && p.lng != null && (visibleIds.has(p.id) || refResultsIds.has(p.id))
+  );
 
-  toShow.forEach((p) => {
-    if (p.lat == null || p.lng == null) return;
-    const el = document.createElement('div');
-    const inRef = refResultsIds.has(p.id);
-    const est = p.estado || 'pendiente';
-    // wrap (lo transforma MapLibre) + .pin interno (el dibujo, con hover)
-    el.className = 'pin-wrap' + (inRef ? ' is-ref' : '');
-    el.innerHTML = `<div class="pin" data-est="${est}"><span class="ms pin-ic">${PIN_ICONS[est] || 'schedule'}</span></div>`;
-    // Sin popup: el clic abre la ficha de detalles (openPointDetail)
-    const marker = new maplibregl.Marker({ element: el })
-      .setLngLat([p.lng, p.lat])
-      .addTo(map);
-    el.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      openPointDetail(p.id);
-    });
-    pointMarkers[p.id] = marker;
+  // El modo referencia va punto por punto: son los resultados de la búsqueda
+  // por radio y tienen que distinguirse. Lo mismo para el punto que pidió
+  // focusPoint: si fuiste a ese punto, tiene que verse aunque esté agrupado.
+  const sueltos = toShow.filter((p) => refResultsIds.has(p.id) || p.id === pinFocoId);
+  const idsSueltos = new Set(sueltos.map((p) => p.id));
+  const enAlcance = toShow.filter((p) => !idsSueltos.has(p.id));
+
+  clusterActivo = puntosScope === 'region' && enAlcance.length > UMBRAL_CLUSTER;
+  const grupos = agruparPuntos(enAlcance, {
+    radio: clusterActivo ? RADIO_CLUSTER : 0,
+    proyectar: (p) => map.project([p.lng, p.lat]),
   });
+
+  for (const g of grupos) {
+    if (g.puntos.length === 1) agregarPin(g.puntos[0]);
+    else agregarGrupo(g);
+  }
+  sueltos.forEach(agregarPin);
+
+  resaltarPinFoco();
+}
+
+function agregarPin(p) {
+  const el = document.createElement('div');
+  const inRef = refResultsIds.has(p.id);
+  const est = p.estado || 'pendiente';
+  // wrap (lo transforma MapLibre) + .pin interno (el dibujo, con hover)
+  el.className = 'pin-wrap' + (inRef ? ' is-ref' : '');
+  el.innerHTML = `<div class="pin" data-est="${est}"><span class="ms pin-ic">${PIN_ICONS[est] || 'schedule'}</span></div>`;
+  // Sin popup: el clic abre la ficha de detalles (openPointDetail)
+  const marker = new maplibregl.Marker({ element: el })
+    .setLngLat([p.lng, p.lat])
+    .addTo(map);
+  el.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    openPointDetail(p.id);
+  });
+  pointMarkers[p.id] = marker;
+}
+
+// Burbuja de agrupación: cuenta de puntos en el centroide. El clic acerca el
+// zoom; al acercarse los puntos se separan en pantalla y el grupo se abre solo.
+function agregarGrupo(g) {
+  const centro = map.unproject([g.x, g.y]);
+  const el = document.createElement('div');
+  el.className = 'pin-wrap pin-group-wrap';
+  el.innerHTML = `<div class="pin-group"><span>${g.n}</span></div>`;
+  const marker = new maplibregl.Marker({ element: el })
+    .setLngLat(centro)
+    .addTo(map);
+  el.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    map.flyTo({ center: centro, zoom: Math.min(map.getZoom() + 1.5, 18) });
+  });
+  groupMarkers.push(marker);
+}
+
+function resaltarPinFoco() {
+  document.querySelectorAll('.pin-wrap.pin-focus').forEach((el) => el.classList.remove('pin-focus'));
+  const m = pinFocoId != null ? pointMarkers[pinFocoId] : null;
+  if (m) m.getElement().classList.add('pin-focus');
 }
 
 function focusPoint(id) {
@@ -804,10 +885,11 @@ function focusPoint(id) {
   if (p.lat == null || p.lng == null) {
     return toast('Este punto no tiene coordenadas válidas', true);
   }
+  // El punto pedido siempre queda como pin suelto, aunque esté dentro de un
+  // grupo: renderMarkers() lo repinta así en cada `moveend` del flyTo.
+  pinFocoId = id;
   map.flyTo({ center: [p.lng, p.lat], zoom: Math.max(map.getZoom(), 15) });
-  document.querySelectorAll('.pin.pin-focus').forEach((el) => el.classList.remove('pin-focus'));
-  const m = pointMarkers[id];
-  if (m) m.getElement().classList.add('pin-focus');
+  resaltarPinFoco();
 }
 
 // ============================================================
@@ -828,6 +910,7 @@ function setTerritorioSelected(id) {
     map.setFeatureState({ source: 'territorios', id: territorioSelectedId }, { selected: false });
   }
   territorioSelectedId = id;
+  pinFocoId = null; // el resaltado no sobrevive a cambiar de territorio
   prefSet('territorioSel', id || '');
   if (map && map.getSource('territorios') && id != null) {
     map.setFeatureState({ source: 'territorios', id }, { selected: true });

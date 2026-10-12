@@ -35,7 +35,7 @@ cruce archivos.
 | `styles.css` | Todo el estilo de la app de escritorio. Tokens Material-3 al inicio; responsive al final (`@media 860px`, `480px`). |
 | `movil.html` | Shell de la app de terreno: login, tarjeta del territorio, lista/mapa/sync, bottom sheets. Estilo con Tailwind CDN + tokens del mockup. |
 | `movil.js` | Lógica de terreno: territorio único, fichas de punto, estados, devolución y **cola offline**. |
-| `lib.js` | Funciones **puras**: escaping, geometría EWKB/GeoJSON, punto-en-polígono, EWKT, círculos, parseo de links/coordenadas, etiquetas de estado, cola offline, avance de territorio, duplicados, escapado CSV, GeoJSON de territorio y geocaché de Nominatim. Sin DOM ni estado. |
+| `lib.js` | Funciones **puras**: escaping, geometría EWKB/GeoJSON, punto-en-polígono, EWKT, círculos, parseo de links/coordenadas, etiquetas de estado, cola offline, avance de territorio, duplicados, escapado CSV, GeoJSON de territorio, geocaché de Nominatim y agrupación de marcadores. Sin DOM ni estado. |
 | `app.js` | Estado global de escritorio, cliente Supabase, mapa, eventos, RPCs, UI y vistas (Historial/Usuarios). |
 | `sw.js` | Service worker de la app de terreno (PWA): precache del shell, red-primero para navegación y Supabase, *stale-while-revalidate* para CDN. |
 | `manifest.webmanifest` | Manifest PWA: nombre, `start_url: movil.html`, colores y iconos (se registra desde `movil.html`). |
@@ -120,7 +120,11 @@ Orden de pintado (debajo → arriba):
 2. `territorios-fill` / `territorios-outline` / `territorios-labels` (feature-state `selected`/`hover`)
 3. `ref-circle-fill` / `ref-circle-line` (modo referencia)
 4. `draw-fill` / `draw-line` / `draw-vert-dots` (trazo en curso)
-5. Marcadores DOM (`maplibregl.Marker`) — un `<div class="pin">` por punto
+5. Marcadores DOM (`maplibregl.Marker`) — un `<div class="pin">` por punto.
+   Con alcance «Toda RM» y más de 150 puntos, `agruparPuntos()` los agrupa en
+   pantalla y los puntos de un grupo se pintan como **una sola burbuja**
+   `<div class="pin-group">`; se recalcula en cada `moveend` porque la
+   agrupación vive en píxeles, no en coordenadas.
 
 Los colores de los territorios vienen del dato (`['get','color']`), no del CSS.
 `text-font` está fijado a `Noto Sans Regular`: en OpenFreeMap la pila por

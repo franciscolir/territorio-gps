@@ -316,3 +316,54 @@ function geoCachePoner(cache, q, resultados, ahora = Date.now()) {
   }
   return salida;
 }
+
+// ============================================================
+// AGRUPACIÓN DE MARCADORES (T14)
+// ============================================================
+// Clustering por radio en **coordenadas de pantalla**: no depende de una
+// proyección concreta ni de librerías, se le entrega el píxel de cada punto
+// (`proyectar`) y se recalcula con cada `moveend` del mapa.
+//
+// · radio <= 0  → cada punto queda suelto (el comportamiento de siempre)
+// · radio >  0  → los puntos a <= radio px del centro de un grupo caen dentro
+//
+// Devuelve [{ x, y, n, puntos }]:
+//   · n === 1 → marcador individual
+//   · n >  1  → burbuja de agrupación con `n` puntos en (x, y)
+//
+// Es voraz (cada punto se asigna al grupo más cercano) y el centro del grupo
+// se recalcula como centroide al aceptarlo, así que la burbuja queda en medio
+// de sus puntos. Un punto que no se puede proyectar (sin GPS) se ignora.
+function agruparPuntos(puntos, opciones = {}) {
+  const rRaw = Number(opciones.radio);
+  const r = Number.isFinite(rRaw) && rRaw > 0 ? rRaw : 0;
+  const proyectar = typeof opciones.proyectar === 'function' ? opciones.proyectar : null;
+
+  const grupos = [];
+  for (const p of (Array.isArray(puntos) ? puntos : [])) {
+    const c = proyectar ? proyectar(p) : { x: p && p.x, y: p && p.y };
+    if (!c || !Number.isFinite(c.x) || !Number.isFinite(c.y)) continue;
+
+    let destino = null;
+    if (r > 0) {
+      let mejor = r * r;
+      for (const g of grupos) {
+        const dx = g.x - c.x;
+        const dy = g.y - c.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 <= mejor) { mejor = d2; destino = g; }
+      }
+    }
+
+    if (destino) {
+      const n = destino.n;
+      destino.x = (destino.x * n + c.x) / (n + 1);
+      destino.y = (destino.y * n + c.y) / (n + 1);
+      destino.n = n + 1;
+      destino.puntos.push(p);
+    } else {
+      grupos.push({ x: c.x, y: c.y, n: 1, puntos: [p] });
+    }
+  }
+  return grupos;
+}

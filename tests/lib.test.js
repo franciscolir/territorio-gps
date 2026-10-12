@@ -20,6 +20,7 @@ const lib = new Function(
      distMeters, duplicadoCercano, DUP_METROS, csvEscape,
      territorioFeatureCollection,
      GEO_MIN_MS, GEO_MAX, GEO_TTL_MS, geoClave, geoCacheLeer, geoCachePoner,
+     agruparPuntos,
    };`
 )();
 
@@ -446,5 +447,68 @@ describe('geocaché (geoClave / geoCacheLeer / geoCachePoner)', () => {
     expect(lib.GEO_MIN_MS).toBeGreaterThanOrEqual(1000);
     expect(lib.geoCachePoner({}, '   ', [], 5)).toEqual({});
     expect(lib.geoCacheLeer({}, '   ', 5)).toBeNull();
+  });
+});
+
+describe('agruparPuntos (T14)', () => {
+  const pts = [
+    { id: 'a', x: 0, y: 0 },
+    { id: 'b', x: 30, y: 40 }, // exactamente 50 px de a
+    { id: 'c', x: 500, y: 500 },
+  ];
+
+  it('con radio 0 cada punto queda suelto', () => {
+    const g = lib.agruparPuntos(pts, { radio: 0 });
+    expect(g).toHaveLength(3);
+    g.forEach((x) => { expect(x.n).toBe(1); });
+    expect(lib.agruparPuntos(pts, {}).map((x) => x.n)).toEqual([1, 1, 1]);
+  });
+
+  it('une lo que está dentro del radio y respeta la distancia exacta', () => {
+    const g = lib.agruparPuntos(pts, { radio: 50 });
+    expect(g).toHaveLength(2);
+
+    const grupo = g.find((x) => x.n === 2);
+    expect(grupo.puntos.map((p) => p.id).sort()).toEqual(['a', 'b']);
+    expect(grupo.x).toBeCloseTo(15, 6); // centroide (0,0)-(30,40)
+    expect(grupo.y).toBeCloseTo(20, 6);
+
+    expect(g.find((x) => x.n === 1).puntos[0].id).toBe('c');
+  });
+
+  it('un radio menor que la distancia deja todo separado', () => {
+    expect(lib.agruparPuntos(pts, { radio: 49 })).toHaveLength(3);
+  });
+
+  it('conserva cada punto exactamente una vez', () => {
+    const g = lib.agruparPuntos(pts, { radio: 1000 });
+    expect(g).toHaveLength(1);
+    expect(g[0].n).toBe(3);
+    expect(g[0].puntos.map((p) => p.id).sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('descarta lo que no se puede proyectar y tolera entradas vacías', () => {
+    const proyectar = (p) => (p.x == null ? null : { x: p.x, y: p.y });
+    const g = lib.agruparPuntos([...pts, { id: 'sin-gps' }], { radio: 0, proyectar });
+    expect(g.flatMap((x) => x.puntos).map((p) => p.id).sort()).toEqual(['a', 'b', 'c']);
+
+    expect(lib.agruparPuntos([{ id: 's' }], { radio: 10 })).toEqual([]);
+    expect(lib.agruparPuntos(null, { radio: 10 })).toEqual([]);
+    expect(lib.agruparPuntos([], { radio: 10 })).toEqual([]);
+  });
+
+  it('usa el proyector inyectado (lng/lat → píxel)', () => {
+    const g = lib.agruparPuntos([{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }], {
+      radio: 5,
+      proyectar: (p) => ({ x: p.lng * 100, y: p.lat * 100 }),
+    });
+    expect(g).toHaveLength(2);
+
+    const juntos = lib.agruparPuntos([{ lng: 1, lat: 1 }, { lng: 1.01, lat: 1.01 }], {
+      radio: 5,
+      proyectar: (p) => ({ x: p.lng * 100, y: p.lat * 100 }),
+    });
+    expect(juntos).toHaveLength(1);
+    expect(juntos[0].n).toBe(2);
   });
 });

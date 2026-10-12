@@ -35,6 +35,7 @@ const libGlobals = Object.fromEntries(
     'distMeters', 'duplicadoCercano', 'DUP_METROS', 'csvEscape',
     'territorioFeatureCollection',
     'GEO_MIN_MS', 'GEO_MAX', 'GEO_TTL_MS', 'geoClave', 'geoCacheLeer', 'geoCachePoner',
+    'agruparPuntos',
   ].map((k) => [k, 'readonly'])
 );
 

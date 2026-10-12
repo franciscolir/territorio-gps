@@ -28,14 +28,16 @@ deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
 | T-H7 | Duplicados | `duplicadoCercano` avisa al crear un punto con el mismo nombre a <10 m (web y móvil) |
 | T-H8 | Accesibilidad | `aria-label` en 16 botones de solo ícono, foco atrapado en modales + foco devuelto al cerrar, `--outline`/`--est-erroneo` a `#6e727a` (4,8:1 WCAG AA) |
 | T-H9 | Exportación CSV | Botón **Exportar CSV** en Historial (ambas pestañas), Usuarios y el modal de bitácora; `csvEscape` con BOM y anti-fórmula |
-| T-H10 | Lint y tests estrictos | `no-unused-vars: error` con `caughtErrors`; 48 tests sobre `lib.js` (`npm test`), lint a 0 |
+| T-H10 | Lint y tests estrictos | `no-unused-vars: error` con `caughtErrors`; 54 tests sobre `lib.js` (`npm test`), lint a 0 |
 | T-H11 | Exportación del territorio | Menú **⋮** de la ficha: **Exportar GeoJSON** (polígono + puntos con estado/notas) y **Exportar puntos (CSV)**; items visibles para todos, acciones de admin reservadas (`territorioFeatureCollection` en `lib.js`) |
 | T-H12 | PWA de terreno | `manifest.webmanifest` + iconos PNG (`scripts/gen-icons.js`, sin dependencias) + `sw.js`: precache del shell, red-primero con caché para Supabase y *stale-while-revalidate* para los CDN. Registrada solo en `movil.html`, con recarga única al actualizar |
 | T-H13 | Geocaching | Caché de Nominatim en `localStorage` (7 días, 200 entradas, clave normalizada) + ≤1 petición/s; `geoClave`/`geoCacheLeer`/`geoCachePoner` en `lib.js` |
+| T-H14 | Agrupación de marcadores | `agruparPuntos` en `lib.js` (6 tests): clustering voraz en píxeles con `proyectar` inyectado; burbujas con conteo, recálculo en `moveend`, y el punto de `focusPoint` + los del modo referencia siempre sueltos |
+| T-H15 | Lista paginada | `PAGINA_PUNTOS = 100` + botón **Cargar más**; la página vuelve a 1 al cambiar territorio o filtro |
 
 ---
 
-## P2 — pendiente
+## P2 — ✅ cerrado
 
 ### T11 · PWA para terreno — ✅ hecha
 - `manifest.webmanifest` con `start_url: movil.html`, `display: standalone`,
@@ -67,11 +69,23 @@ Queda opcional exportar la **comuna visible** (varios polígonos juntos).
 ### T13 · Exportación del historial — ✅ hecha
 La bitácora por punto y la vista Historial ya se exportan en CSV (T-H9).
 
-### T14 · Marcadores y lista con muchos datos
-- Clustering de marcadores (`supercluster`) cuando el alcance es «Toda RM».
-- Lista virtualizada (o paginación) para territorios con miles de puntos.
-- Hoy: todo cabe en memoria y se repinta completo; el cuello de botella
-  real es el número de nodos DOM de marcadores.
+### T14 · Marcadores y lista con muchos datos — ✅ hecha
+- **Agrupación de marcadores sin dependencias**: `agruparPuntos` en `lib.js`
+  (6 tests) hace clustering voraz en **coordenadas de pantalla**, con el píxel
+  de cada punto inyectado desde `map.project()`. Se activa solo con alcance
+  «Toda RM» y más de 150 puntos (`UMBRAL_CLUSTER`), con radio de 60 px.
+  Cada grupo se pinta como una burbuja con el conteo; el clic acerca el zoom
+  y los puntos se solapan solos. Se recalcula en cada `moveend` (solo si la
+  pintura anterior agrupó).
+- El punto que pide `focusPoint` y los resultados del modo **◎ referencia**
+  siempre salen sueltos: si pediste ir a ese punto, tiene que verse.
+- **Paginación de la lista**: `PAGINA_PUNTOS = 100` tarjetas por página y un
+  botón **Cargar más · quedan N**. Cambiar de territorio o de filtro (estado
+  o texto) vuelve a la primera página; marcar estados no, así que no se te
+  pierde la posición.
+- Bonus: `focusPoint` antes añadía `pin-focus` al *wrapper* y lo quitaba
+  buscando `.pin.pin-focus`, o sea que nunca limpiaba y se podían encadenar
+  varios resaltados. Arreglado.
 
 ### T15 · Geocodificación robusta — ✅ hecha
 - Caché local (`localStorage`, `gps_geo_cache`): clave normalizada
@@ -97,8 +111,9 @@ La bitácora por punto y la vista Historial ya se exportan en CSV (T-H9).
   bloqueaba, así que era engañoso. Migración **012** revoca el privilegio
   para `authenticated` y lo deja en `service_role` (scripts).
 
-Queda abierta **T14** (clustering de marcadores y lista virtualizada); la
-exportación de la comuna visible queda como ampliación opcional de **T12**.
+Todos los ítems del P2 están cerrados (T11–T15). Quedan opcionales: la
+exportación de la **comuna visible** (ampliación de T12), **push
+notifications** y pantalla propia de «sin conexión» (T11).
 
 ---
 

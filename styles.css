@@ -354,6 +354,16 @@
   }
   .point-card .pd-btn:hover { color: var(--primary); }
 
+  /* Paginación de la lista (T14) */
+  .list-more {
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    width: 100%; margin-top: 6px; padding: 10px 8px;
+    border: 1px dashed var(--outline); border-radius: 12px;
+    background: var(--surface-low); color: var(--secondary);
+    font-size: 12px; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+  .list-more:hover { border-style: solid; border-color: var(--secondary); background: #eff6ff; }
+
   /* ============ ESTADO DEL PUNTO + DETALLE ============ */
   .estado-tag { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; }
   .estado-pendiente { background: var(--est-pendiente); color: var(--est-pendiente-on); }
@@ -889,6 +899,25 @@
   .pin[data-est="ref"] { background: #f59e0b; color: #422006; }
   .pin-wrap.is-ref .pin { outline: 3px solid #f59e0b; outline-offset: 2px; }
   .pin-wrap.pin-focus .pin { outline: 3px solid var(--secondary); outline-offset: 3px; }
+  /* Burbuja de agrupación (T14): agrandar el wrap porque la cuenta mide más
+     que los 28 px del pin; el dibujo sigue viviendo en un hijo por lo mismo
+     que .pin (MapLibre escribe `transform` inline en el elemento marcador). */
+  .pin-group-wrap { width: 44px; height: 44px; }
+  .pin-group {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--secondary); color: #fff;
+    font-size: 15px; font-weight: 700; line-height: 1;
+    border: 2px solid #fff; box-shadow: 0 3px 9px rgba(13,28,46,.4);
+    cursor: pointer;
+    transition: scale .14s ease, box-shadow .14s ease, filter .14s ease;
+  }
+  .pin-wrap:hover .pin-group {
+    scale: 1.12;
+    box-shadow: 0 7px 16px rgba(13,28,46,.45);
+    filter: brightness(1.07);
+  }
+  .pin-wrap:active .pin-group { scale: 1.04; }
   .pin.pin-temp {
     width: 24px; height: 24px; background: var(--error); color: #fff;
     border-radius: 50% 50% 50% 0; rotate: -45deg;

@@ -209,12 +209,21 @@ existe en la app de terreno (`movil.html`).
 - Chips **Todos / Pendiente / Visitado / Erróneo / No pasar**.
 - El contador y la barra de avance del territorio se recalculan al instante.
 
+La lista muestra de a **100 tarjetas**; si hay más, al final aparece un botón
+**Cargar más · quedan N**. Cambiar de territorio o de filtro vuelve al
+principio de la lista.
+
 ### Alcance de los marcadores
 
 El grupo de botones **Toda RM · Comuna · Territorio** (abajo a la derecha) decide
 qué puntos se pintan como marcadores. Solo afecta al mapa; la lista lateral
 siempre muestra los del territorio seleccionado. La preferencia se guarda en el
 navegador (⚙️ Ajustes).
+
+Con **Toda RM** y más de 150 puntos visibles, el mapa agrupa los que están
+cerca: verás una **burbuja azul con el número** de puntos que contiene. Haz
+clic para acercarte y el grupo se abre solo. Al elegir un punto desde la
+lista, ese punto siempre aparece suelto y resaltado.
 
 ---
 

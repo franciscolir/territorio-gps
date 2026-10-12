@@ -287,6 +287,7 @@ async function loadComunas() {
   allComunas = data.map((c) => ({ nombre: c.nombre, geom: c.geom }));
   snapRingsCache = null;
   populateComunaFilter();
+  populateHistComunaFilter(); // el filtro del Historial no depende de "activas"
 
   // Construir FeatureCollection
   comunaFeatures = data.map((c) => ({
@@ -2765,6 +2766,31 @@ function loadHistorial() {
 }
 
 // ============================================================
+// FILTRO POR COMUNA DEL HISTORIAL
+// ============================================================
+// Aplica a las dos pestañas (Territorios y Puntos) y también al CSV, para que
+// lo que exportas es lo que ves. Va en el <select> del encabezado y se
+// recuerda en la sesión. Va con TODAS las comunas, no solo con las activas:
+// desactivar una comuna no debería ocultar su historial.
+const histComunaSel = document.getElementById('histComunaSel');
+
+function populateHistComunaFilter() {
+  const prev = histComunaSel.value || prefGet('histComuna');
+  const names = todasLasComunas()
+    .slice()
+    .sort((a, b) => a.localeCompare(b, 'es'));
+  histComunaSel.innerHTML =
+    '<option value="">Todas las comunas</option>' +
+    names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  histComunaSel.value = names.includes(prev) ? prev : '';
+}
+
+// Comuna elegida (vacío = todas)
+function histComuna() {
+  return histComunaSel.value || '';
+}
+
+// ============================================================
 // EXPORTACIÓN (Historial · Usuarios · modales · territorio)
 // ============================================================
 // El escapado (csvEscape) y el armado del GeoJSON viven en lib.js: son puros
@@ -2824,8 +2850,14 @@ async function exportarHistorialCsv() {
       porTerr.get(a.territorio_id).push(a);
     }
 
+    const comuna = histComuna();
     const filas = [];
-    for (const [tid, lista] of [...porTerr.entries()].sort(
+    // Solo los territorios de la comuna elegida (el select del encabezado)
+    const entradas = [...porTerr.entries()].filter(([tid]) => {
+      const t = porId.get(tid);
+      return t && (!comuna || t.comuna === comuna);
+    });
+    for (const [tid, lista] of entradas.sort(
       (x, y) => {
         const a = porId.get(x[0]), b = porId.get(y[0]);
         return String(a?.comuna || '').localeCompare(String(b?.comuna || ''), 'es')
@@ -2846,7 +2878,7 @@ async function exportarHistorialCsv() {
         ]);
       });
     }
-    descargarCsv('historial-territorios', cabeceras, filas);
+    descargarCsv(comuna ? `historial-territorios-${slugNombre(comuna)}` : 'historial-territorios', cabeceras, filas);
     return;
   }
 
@@ -2858,19 +2890,22 @@ async function exportarHistorialCsv() {
     .order('nombre');
   if (error) return toast(error.message, true);
 
+  const comuna = histComuna();
   const cabeceras = ['Comuna', 'Territorio', 'Punto', 'Última visita', 'Estado', 'No pasar', 'Erróneo', 'Activo', 'Notas'];
-  const filas = (data || []).map((p) => {
-    const t = p.territorios;
-    const est = p.estado || 'pendiente';
-    const activo = est !== 'erroneo' && est !== 'no_pasar';
-    return [
-      (t && t.comuna) || '', (t && t.nombre) || '', p.nombre || '',
-      p.ultima_visita || '', estadoLabel(est),
-      est === 'no_pasar' ? 'Sí' : '', est === 'erroneo' ? 'Sí' : '',
-      activo ? 'Sí' : 'No', p.notas || '',
-    ];
-  });
-  descargarCsv('historial-puntos', cabeceras, filas);
+  const filas = (data || [])
+    .filter((p) => !comuna || (p.territorios && p.territorios.comuna) === comuna)
+    .map((p) => {
+      const t = p.territorios;
+      const est = p.estado || 'pendiente';
+      const activo = est !== 'erroneo' && est !== 'no_pasar';
+      return [
+        (t && t.comuna) || '', (t && t.nombre) || '', p.nombre || '',
+        p.ultima_visita || '', estadoLabel(est),
+        est === 'no_pasar' ? 'Sí' : '', est === 'erroneo' ? 'Sí' : '',
+        activo ? 'Sí' : 'No', p.notas || '',
+      ];
+    });
+  descargarCsv(comuna ? `historial-puntos-${slugNombre(comuna)}` : 'historial-puntos', cabeceras, filas);
 }
 
 async function exportarUsuariosCsv() {
@@ -2939,10 +2974,15 @@ async function loadHistorialTerritorios() {
   const error = rt.error || ra.error;
   if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
 
-  const territorios = (rt.data || []).slice()
+  const comuna = histComuna();
+  const territorios = (rt.data || [])
+    .filter((t) => !comuna || t.comuna === comuna)
     .sort((a, b) => (a.comuna || '').localeCompare(b.comuna || '', 'es')
       || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
-  if (!territorios.length) { box.innerHTML = '<div class="empty">Sin territorios</div>'; return; }
+  if (!territorios.length) {
+    box.innerHTML = `<div class="empty">${comuna ? `Sin territorios en ${escapeHtml(comuna)}` : 'Sin territorios'}</div>`;
+    return;
+  }
 
   // Proceso más relevante por territorio: la activa si existe, si no el más reciente.
   const rank = (a) => (a.estado === 'activa' ? 0 : 1);
@@ -2997,11 +3037,17 @@ async function loadHistorialPuntos() {
     .order('nombre');
 
   if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
-  if (!data || !data.length) { box.innerHTML = '<div class="empty">Sin puntos</div>'; return; }
+
+  const comunaFiltro = histComuna();
+  const puntosFiltrados = (data || []).filter((p) => !comunaFiltro || (p.territorios && p.territorios.comuna) === comunaFiltro);
+  if (!puntosFiltrados.length) {
+    box.innerHTML = `<div class="empty">${comunaFiltro ? `Sin puntos en ${escapeHtml(comunaFiltro)}` : 'Sin puntos'}</div>`;
+    return;
+  }
 
   // Agrupa: comuna -> territorio -> puntos (para filas combinadas con rowspan)
   const porComuna = new Map();
-  for (const p of data) {
+  for (const p of puntosFiltrados) {
     const t = p.territorios;
     const comuna = (t && t.comuna) || null;
     const terrId = p.territorio_id || null;
@@ -3247,6 +3293,11 @@ document.getElementById('histTabs').addEventListener('click', (ev) => {
   document.querySelectorAll('#histTabs button').forEach((x) => x.classList.toggle('active', x === b));
   document.getElementById('histTerritorios').style.display = histTab === 'territorios' ? '' : 'none';
   document.getElementById('histPuntos').style.display = histTab === 'puntos' ? '' : 'none';
+  loadHistorial();
+});
+// Filtro por comuna del historial: recarga la pestaña activa y lo recuerda
+histComunaSel.addEventListener('change', () => {
+  prefSet('histComuna', histComunaSel.value);
   loadHistorial();
 });
 document.getElementById('userForm').addEventListener('submit', crearUsuario);

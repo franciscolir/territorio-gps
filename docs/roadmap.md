@@ -34,6 +34,7 @@ deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
 | T-H13 | Geocaching | Caché de Nominatim en `localStorage` (7 días, 200 entradas, clave normalizada) + ≤1 petición/s; `geoClave`/`geoCacheLeer`/`geoCachePoner` en `lib.js` |
 | T-H14 | Agrupación de marcadores | `agruparPuntos` en `lib.js` (6 tests): clustering voraz en píxeles con `proyectar` inyectado; burbujas con conteo, recálculo en `moveend`, y el punto de `focusPoint` + los del modo referencia siempre sueltos |
 | T-H15 | Lista paginada | `PAGINA_PUNTOS = 100` + botón **Cargar más**; la página vuelve a 1 al cambiar territorio o filtro |
+| T-H16 | Historial por comuna | `<select id="histComunaSel">` en el encabezado: filtra **ambas pestañas** y también el **CSV**; recuerda la elección (`prefGet('histComuna')`) y lista **todas** las comunas, incluso las desactivadas (desactivar no borra historial) |
 
 ---
 

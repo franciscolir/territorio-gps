@@ -43,17 +43,27 @@ Arriba hay una barra con tres vistas:
     Registra la creación, cada cambio de estado, cambio de territorio,
     borrado/restauración, edición de notas, y las **asignaciones / devoluciones
     / cierres** del territorio en que está el punto.
+  - **Desplegable de comuna** (entre las pestañas y el botón de exportar):
+    deja ver **solo esa comuna**, en la pestaña que estés mirando. Sirve para
+    las dos (Territorios y Puntos) y también para lo que exportes en CSV. Por
+    defecto está en **Todas las comunas** y la elección se recuerda en el
+    navegador. Incluye todas las comunas, aunque hayas desactivado alguna en
+    Ajustes: desactivarla no borra su historial. Los puntos sin territorio no
+    tienen comuna, así que no aparecen mientras el filtro esté activo.
 - **Usuarios** (solo administración): lista del equipo con su rol, territorio en
   curso y fecha de asignación; y alta de **usuarios de terreno** (email +
   contraseña). Los usuarios creados nunca son administradores.
 - **Exportar CSV**: el botón a la derecha de las pestañas descarga la vista de
   **Historial** en CSV — en *Territorios* exporta **todos** los procesos de cada
   territorio (comuna, territorio, nº de proceso, usuario, asignación, cierre,
-  estado y notas); en *Puntos* exporta la tabla tal como se ve. En **Usuarios**
+  estado y notas); en *Puntos* exporta la tabla tal como se ve. Si elegiste una
+  comuna en el desplegable, la exportación respeta ese filtro. En **Usuarios**
   descarga la lista del equipo, y dentro de la bitácora (el **Ver**) hay otro
   botón que descarga ese log. Los archivos se descargan con nombre
   `historial-territorios-AAAA-MM-DD.csv` (o `historial-puntos`, `usuarios`,
-  `bitacora-punto`) y Excel los abre directamente con los acentos correctos.
+  `bitacora-punto`), con la comuna en el nombre si filtraste
+  (`historial-territorios-santiago-AAAA-MM-DD.csv`), y Excel los abre
+  directamente con los acentos correctos.
 
 ---
 

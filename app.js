@@ -47,7 +47,22 @@ try {
 let usuarios = [];           // [{id, email}] para asignar
 let asignaciones = {};       // territorio_id -> { user_id, estado, devuelta_at }
 let assignOpen = false;      // vista de asignación/historial del territorio elegido
-let estadoFiltro = '';       // chip de estado activo en la lista
+
+// Preferencias que sobreviven entre sesiones (filtros). Nunca lanzan: en modo
+// privado o con la cuota llena localStorage falla y eso no debe romper la app.
+function prefGet(clave, defecto = '') {
+  try {
+    const v = localStorage.getItem(clave);
+    return v === null ? defecto : v;
+  } catch (_) { return defecto; }
+}
+function prefSet(clave, valor) {
+  try { localStorage.setItem(clave, valor == null ? '' : String(valor)); } catch (_) {}
+}
+
+// Chip de estado activo en la lista (persistido; valor inválido = "Todos")
+const CHIP_ESTADOS = ['', ...ESTADOS.map((e) => e[0])];
+let estadoFiltro = CHIP_ESTADOS.includes(prefGet('estadoFiltro')) ? prefGet('estadoFiltro') : '';
 let lastEstadoUndo = null;   // {id, prev} para el toast "Deshacer"
 let currentView = 'territorios'; // vista activa: territorios | historial | usuarios
 let histTab = 'territorios';     // pestaña del historial: territorios | puntos
@@ -233,12 +248,24 @@ function initMap() {
   });
 
   map.on('load', async () => {
+    // Se captura ANTES de onComunaChange(), que limpia la selección al
+    // reconstruir el filtro de comuna.
+    const terrGuardado = prefGet('territorioSel');
+
     await ensureComunasLoaded();
     await loadUsuarios();
     await loadAsignaciones();
     await loadPoints();
     initTerritorioLayers();
     await loadTerritorios();
+
+    // Reaplica el filtro de comuna guardado (encuadre + capas + lista)
+    if (comunaSel.value) onComunaChange();
+
+    // Y deja seleccionado el territorio con el que se cerró la sesión
+    const terr = allTerritorios.find((s) => s.id === terrGuardado);
+    if (terr && terr.comuna && terr.comuna === comunaSel.value) setTerritorioSelected(terr.id);
+
     map.on('click', onMapClick);
     map.on('mousemove', onMapMove);
     map.on('dblclick', onMapDblClick);
@@ -327,7 +354,8 @@ const comunaSel = document.getElementById('comunaSel');
 comunaSel.addEventListener('change', onComunaChange);
 
 function populateComunaFilter() {
-  const prev = comunaSel.value;
+  // Arranca con la comuna guardada en la sesión anterior si sigue disponible
+  const prev = comunaSel.value || prefGet('comunaSel');
   const names = allComunas
     .map((c) => c.nombre)
     .filter(Boolean)
@@ -349,6 +377,7 @@ function syncDrawBtn() {
 
 function onComunaChange() {
   const nombre = comunaSel.value;
+  prefSet('comunaSel', nombre);
   const comuna = allComunas.find((c) => c.nombre === nombre);
   const hayCapas = map && map.getLayer('comunas-fill');
   snapRingsCache = null;
@@ -629,9 +658,11 @@ async function loadPoints() {
 // RENDER LISTA
 // ============================================================
 const filterText = document.getElementById('filterText');
+filterText.value = prefGet('filtroTexto');
 // T6: el filtro no repinta por cada tecla (con listas grandes era costoso)
 let filterTimer = null;
 filterText.addEventListener('input', () => {
+  prefSet('filtroTexto', filterText.value);
   clearTimeout(filterTimer);
   filterTimer = setTimeout(renderList, 120);
 });
@@ -639,13 +670,14 @@ filterText.addEventListener('input', () => {
 // Chips de filtro por estado
 const estadoChips = document.getElementById('estadoChips');
 estadoChips.querySelectorAll('.chip-f').forEach((btn) => {
+  if (btn.dataset.estado === estadoFiltro) btn.classList.add('active');
   btn.addEventListener('click', () => {
     estadoFiltro = btn.dataset.estado;
+    prefSet('estadoFiltro', estadoFiltro);
     estadoChips.querySelectorAll('.chip-f').forEach((b) => b.classList.toggle('active', b === btn));
     renderList();
   });
 });
-estadoChips.querySelector('.chip-f[data-estado=""]').classList.add('active');
 
 function renderList() {
   const list = document.getElementById('list');
@@ -796,6 +828,7 @@ function setTerritorioSelected(id) {
     map.setFeatureState({ source: 'territorios', id: territorioSelectedId }, { selected: false });
   }
   territorioSelectedId = id;
+  prefSet('territorioSel', id || '');
   if (map && map.getSource('territorios') && id != null) {
     map.setFeatureState({ source: 'territorios', id }, { selected: true });
   }

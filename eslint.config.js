@@ -78,7 +78,7 @@ export default [
     },
     rules: {
       ...recommended.rules,
-      'no-unused-vars': ['warn', { args: 'none', varsIgnorePattern: '^_', caughtErrors: 'all', caughtErrorsIgnorePattern: '^_' }],
+      'no-unused-vars': ['error', { args: 'none', varsIgnorePattern: '^_', caughtErrors: 'all', caughtErrorsIgnorePattern: '^_' }],
       'no-empty': ['error', { allowEmptyCatch: true }],
       'no-console': 'off',
     },
@@ -95,7 +95,7 @@ export default [
     },
     rules: {
       ...recommended.rules,
-      'no-unused-vars': ['warn', { args: 'none' }],
+      'no-unused-vars': ['error', { args: 'none', varsIgnorePattern: '^_', caughtErrors: 'all', caughtErrorsIgnorePattern: '^_' }],
     },
   },
 ];

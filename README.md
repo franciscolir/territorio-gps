@@ -169,6 +169,7 @@ producción**, aplica solo los cambios nuevos, en orden:
 | [`migrations/007_rename_territorios.sql`](migrations/007_rename_territorios.sql) | Rename `sectores` → `territorios` (tablas, columna `territorio_id`, RPCs, triggers y policies) |
 | [`migrations/008_historial_usuarios.sql`](migrations/008_historial_usuarios.sql) | Estado `completado` (auto al 100 % + manual), `notas` por proceso, `puntos.ultima_visita` y RPC `listar_usuarios` |
 | [`migrations/009_puntos_historial.sql`](migrations/009_puntos_historial.sql) | Bitácora `puntos_historial` (un log por movimiento del punto) y RPC `punto_historial` |
+| [`migrations/010_reinicio_visitados.sql`](migrations/010_reinicio_visitados.sql) | Al (re)asignar un territorio: `visitado` vuelve a `pendiente` (nuevo proceso de trabajo); `erroneo` y `no_pasar` se heredan |
 
 Todas son idempotentes (se pueden re-ejecutar):
 
@@ -182,6 +183,7 @@ psql "$DATABASE_URL" -f migrations/006_grants_asignaciones.sql
 psql "$DATABASE_URL" -f migrations/007_rename_territorios.sql
 psql "$DATABASE_URL" -f migrations/008_historial_usuarios.sql
 psql "$DATABASE_URL" -f migrations/009_puntos_historial.sql
+psql "$DATABASE_URL" -f migrations/010_reinicio_visitados.sql
 ```
 
 o pega su contenido en el SQL Editor de Supabase.

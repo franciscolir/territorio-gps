@@ -32,7 +32,8 @@ Arriba hay una barra con tres vistas:
     aparecen como *Sin territorio*. Luego: nombre, **última visita**, estado,
     marcas de *No pasar* / *Erróneo* / *Activo* (activo = ni erróneo ni no
     pasar) y notas. Los bloques de territorio **alternan fondo** (uno con color,
-    el siguiente sin color) para separarlos visualmente.
+    el siguiente sin color) para separarlos visualmente. El **encabezado de la
+    tabla queda fijo** al hacer scroll.
   - Botón **Ver** (columna final): abre la **bitácora** del punto, con un log por
     fila — fecha, tipo de movimiento, detalle y quién lo hizo. Registra la
     creación, cada cambio de estado, cambio de territorio, borrado/restauración,

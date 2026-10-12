@@ -115,10 +115,21 @@
 
   .hist-table {
     width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--surface-lowest);
-    border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-1);
+    border-radius: var(--r-lg);
+    /* Recorta las esquinas redondeadas SIN crear un contenedor de scroll.
+       Con overflow:hidden la tabla se volvía el scrollport de la cabecera y
+       sticky dejaba de pegarse al .vp-body (encabezado que se perdía al bajar). */
+    overflow: hidden;
+    overflow: clip;
+    box-shadow: var(--shadow-1);
   }
   .hist-table th, .hist-table td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
-  .hist-table th { position: sticky; top: 0; background: var(--surface-mid); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--on-surface-variant); }
+  .hist-table th {
+    position: sticky; top: 0; z-index: 3;
+    background: var(--surface-mid);
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--on-surface-variant);
+    box-shadow: inset 0 -1px 0 var(--outline-variant);
+  }
   .hist-table tr:hover td { background: var(--surface-low); }
   .hist-table .notas { max-width: 300px; color: var(--on-surface-variant); }
   .hist-table .chip-est { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }

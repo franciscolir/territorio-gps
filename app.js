@@ -2418,11 +2418,9 @@ async function doSmartSearch() {
   const c = parseCoordQuery(q);
   if (c) return flyMarkAndToast(c.lng, c.lat, `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`);
 
-  // 3) Texto libre → geocodificar con Nominatim (Chile)
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=cl&q=${encodeURIComponent(q)}`;
+  // 3) Texto libre → geocodificar con Nominatim (Chile), con caché y ≤1 req/s
   try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    const data = await res.json();
+    const data = await geocodificar(q);
     if (!data.length) return toast('Dirección no encontrada', true);
     const { lat, lon, display_name } = data[0];
     lastGeocode = { lat: parseFloat(lat), lng: parseFloat(lon), direccion: display_name };
@@ -2430,6 +2428,49 @@ async function doSmartSearch() {
   } catch (_err) {
     toast('Error en la búsqueda', true);
   }
+}
+
+// --- Geocodificación (T15): caché local + espacio mínimo entre peticiones --
+const GEO_LS = 'gps_geo_cache';
+let geoCache = geoCargarCache();
+let geoUltimaPet = 0;
+
+function geoCargarCache() {
+  try {
+    const v = JSON.parse(localStorage.getItem(GEO_LS));
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function geoGuardarCache() {
+  try {
+    localStorage.setItem(GEO_LS, JSON.stringify(geoCache));
+  } catch (_) {}
+}
+
+// Misma query repetida → respuesta del caché sin salir de la máquina.
+// Si toca petición, espera lo que falte para respetar 1 petición/s y guarda
+// el resultado (también los vacíos: una dirección inexistente no debe volver
+// a consultarse).
+async function geocodificar(q) {
+  const ahora = Date.now();
+  const hit = geoCacheLeer(geoCache, q, ahora);
+  if (hit) return hit;
+
+  const espera = GEO_MIN_MS - (ahora - geoUltimaPet);
+  if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=cl&q=${encodeURIComponent(q)}`;
+  geoUltimaPet = Date.now();
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Nominatim ${res.status}`);
+
+  const data = await res.json();
+  geoCache = geoCachePoner(geoCache, q, data, Date.now());
+  geoGuardarCache();
+  return Array.isArray(data) ? data : [];
 }
 
 function searchFromLink(url) {

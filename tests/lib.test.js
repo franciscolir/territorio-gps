@@ -19,6 +19,7 @@ const lib = new Function(
      nuevaOpCola, colaAgregar, colaQuitar, colaResumen, territorioAvance,
      distMeters, duplicadoCercano, DUP_METROS, csvEscape,
      territorioFeatureCollection,
+     GEO_MIN_MS, GEO_MAX, GEO_TTL_MS, geoClave, geoCacheLeer, geoCachePoner,
    };`
 )();
 
@@ -401,5 +402,49 @@ describe('territorioFeatureCollection', () => {
 
     const vacio = lib.territorioFeatureCollection(null, null);
     expect(vacio).toEqual({ type: 'FeatureCollection', features: [] });
+  });
+});
+
+describe('geocaché (geoClave / geoCacheLeer / geoCachePoner)', () => {
+  it('la clave normaliza mayúsculas, acentos y espacios repetidos', () => {
+    expect(lib.geoClave('  Av. Providencia   1234 ')).toBe('av. providencia 1234');
+    expect(lib.geoClave('PROVIDENCIA')).toBe(lib.geoClave('providencia'));
+    expect(lib.geoClave('Piso Ñuñoa')).toBe(lib.geoClave('piso nunoa'));
+    expect(lib.geoClave(null)).toBe('');
+    expect(lib.geoClave(undefined)).toBe('');
+  });
+
+  it('lee solo lo que está guardado y no ha vencido', () => {
+    const t0 = 1_000_000;
+    const c = lib.geoCachePoner({}, 'Santiago', [{ lat: '-33.45' }], t0);
+
+    expect(lib.geoCacheLeer(c, 'santiago', t0)).toEqual([{ lat: '-33.45' }]);
+    expect(lib.geoCacheLeer(c, '  SANTIAGO ', t0 + lib.GEO_TTL_MS)).toEqual([{ lat: '-33.45' }]);
+    expect(lib.geoCacheLeer(c, 'Santiago', t0 + lib.GEO_TTL_MS + 1)).toBeNull();
+
+    expect(lib.geoCacheLeer(c, 'Valparaíso', t0)).toBeNull();
+    expect(lib.geoCacheLeer({}, 'Santiago', t0)).toBeNull();
+    expect(lib.geoCacheLeer(null, 'Santiago', t0)).toBeNull();
+  });
+
+  it('no muta el caché anterior y recorta las entradas más antiguas', () => {
+    const original = {};
+    const c1 = lib.geoCachePoner(original, 'a', [], 10);
+    expect(original).toEqual({});
+    expect(Object.keys(c1)).toEqual(['a']);
+
+    let c = {};
+    for (let i = 0; i < lib.GEO_MAX + 10; i++) {
+      c = lib.geoCachePoner(c, `q${i}`, [], 1000 + i);
+    }
+    expect(Object.keys(c)).toHaveLength(lib.GEO_MAX);
+    expect(c.q0).toBeUndefined();                    // la más antigua se fue
+    expect(c[`q${lib.GEO_MAX + 9}`]).toBeDefined();  // la última sigue
+  });
+
+  it('el límite de frecuencia es ≥1 s y una clave vacía no se cachea', () => {
+    expect(lib.GEO_MIN_MS).toBeGreaterThanOrEqual(1000);
+    expect(lib.geoCachePoner({}, '   ', [], 5)).toEqual({});
+    expect(lib.geoCacheLeer({}, '   ', 5)).toBeNull();
   });
 });

@@ -201,7 +201,7 @@ o pega su contenido en el SQL Editor de Supabase.
 ## Tests y lint
 
 ```bash
-npm test        # 44 tests sobre lib.js (geometría, EWKB, estados, links, cola offline, duplicados, CSV, GeoJSON)
+npm test        # 48 tests sobre lib.js (geometría, EWKB, estados, links, cola offline, duplicados, CSV, GeoJSON, geocaché)
 npm run lint    # ESLint, 0 errores
 ```
 

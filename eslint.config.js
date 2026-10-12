@@ -34,6 +34,7 @@ const libGlobals = Object.fromEntries(
     'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'territorioAvance',
     'distMeters', 'duplicadoCercano', 'DUP_METROS', 'csvEscape',
     'territorioFeatureCollection',
+    'GEO_MIN_MS', 'GEO_MAX', 'GEO_TTL_MS', 'geoClave', 'geoCacheLeer', 'geoCachePoner',
   ].map((k) => [k, 'readonly'])
 );
 

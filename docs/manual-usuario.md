@@ -230,6 +230,11 @@ Botón **🔍** en el riel. Acepta tres tipos de entrada:
 En los tres casos la app vuela al lugar, deja el pin temporal y ofrece
 guardar el punto ahí.
 
+> La dirección se guarda en el navegador durante **7 días**: si repites la
+> misma búsqueda es **instantánea** (y funciona sin conexión). Entre una
+> consulta y la siguiente a OpenStreetMap espera al menos **1 segundo**, que
+> es lo que exige su política de uso.
+
 ---
 
 ## 7. Modo referencia (búsqueda por radio)

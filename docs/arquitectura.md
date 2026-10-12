@@ -35,7 +35,7 @@ cruce archivos.
 | `styles.css` | Todo el estilo de la app de escritorio. Tokens Material-3 al inicio; responsive al final (`@media 860px`, `480px`). |
 | `movil.html` | Shell de la app de terreno: login, tarjeta del territorio, lista/mapa/sync, bottom sheets. Estilo con Tailwind CDN + tokens del mockup. |
 | `movil.js` | Lógica de terreno: territorio único, fichas de punto, estados, devolución y **cola offline**. |
-| `lib.js` | Funciones **puras**: escaping, geometría EWKB/GeoJSON, punto-en-polígono, EWKT, círculos, parseo de links/coordenadas, etiquetas de estado, cola offline y avance de territorio. Sin DOM ni estado. |
+| `lib.js` | Funciones **puras**: escaping, geometría EWKB/GeoJSON, punto-en-polígono, EWKT, círculos, parseo de links/coordenadas, etiquetas de estado, cola offline, avance de territorio, duplicados, escapado CSV, GeoJSON de territorio y geocaché de Nominatim. Sin DOM ni estado. |
 | `app.js` | Estado global de escritorio, cliente Supabase, mapa, eventos, RPCs, UI y vistas (Historial/Usuarios). |
 | `sw.js` | Service worker de la app de terreno (PWA): precache del shell, red-primero para navegación y Supabase, *stale-while-revalidate* para CDN. |
 | `manifest.webmanifest` | Manifest PWA: nombre, `start_url: movil.html`, colores y iconos (se registra desde `movil.html`). |

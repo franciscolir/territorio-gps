@@ -269,3 +269,50 @@ function territorioFeatureCollection(territorio, puntos) {
 
   return { type: 'FeatureCollection', features };
 }
+
+// ============================================================
+// GEOCACHÉ DE NOMINATIM (T15)
+// ============================================================
+// La política de uso de Nominatim pide identificar la app (el navegador
+// envía el Referer solo) y respetar **≤1 petición por segundo**. El límite de
+// frecuencia lo impone `app.js` con `GEO_MIN_MS`; aquí vive el caché local,
+// que evita repetir la misma búsqueda y por tanto evita el tráfico.
+const GEO_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
+const GEO_MAX = 200;                        // entradas máximas del caché
+const GEO_MIN_MS = 1000;                    // ≤ 1 petición/s a Nominatim
+
+// Clave de caché: minúsculas, sin acentos y con espacios colapsados, para
+// que "Av. Providencia  1234" y "av. providencia 1234" compartan entrada.
+function geoClave(q) {
+  return String(q == null ? '' : q)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// → la lista de resultados cacheada, o null si no hay o ya venció
+function geoCacheLeer(cache, q, ahora = Date.now()) {
+  const reg = cache ? cache[geoClave(q)] : null;
+  if (!reg || !Array.isArray(reg.r) || typeof reg.t !== 'number') return null;
+  return ahora - reg.t <= GEO_TTL_MS ? reg.r : null;
+}
+
+// Devuelve un caché nuevo (no muta el anterior) con la entrada puesta,
+// descartando las más antiguas al superar GEO_MAX.
+function geoCachePoner(cache, q, resultados, ahora = Date.now()) {
+  const clave = geoClave(q);
+  const salida = { ...(cache || {}) };
+  if (!clave) return salida;
+  salida[clave] = { t: ahora, r: Array.isArray(resultados) ? resultados : [] };
+
+  const claves = Object.keys(salida);
+  if (claves.length > GEO_MAX) {
+    claves
+      .sort((a, b) => (salida[a].t || 0) - (salida[b].t || 0))
+      .slice(0, claves.length - GEO_MAX)
+      .forEach((k) => { delete salida[k]; });
+  }
+  return salida;
+}

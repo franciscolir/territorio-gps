@@ -28,9 +28,10 @@ deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
 | T-H7 | Duplicados | `duplicadoCercano` avisa al crear un punto con el mismo nombre a <10 m (web y móvil) |
 | T-H8 | Accesibilidad | `aria-label` en 16 botones de solo ícono, foco atrapado en modales + foco devuelto al cerrar, `--outline`/`--est-erroneo` a `#6e727a` (4,8:1 WCAG AA) |
 | T-H9 | Exportación CSV | Botón **Exportar CSV** en Historial (ambas pestañas), Usuarios y el modal de bitácora; `csvEscape` con BOM y anti-fórmula |
-| T-H10 | Lint y tests estrictos | `no-unused-vars: error` con `caughtErrors`; 44 tests sobre `lib.js` (`npm test`), lint a 0 |
+| T-H10 | Lint y tests estrictos | `no-unused-vars: error` con `caughtErrors`; 48 tests sobre `lib.js` (`npm test`), lint a 0 |
 | T-H11 | Exportación del territorio | Menú **⋮** de la ficha: **Exportar GeoJSON** (polígono + puntos con estado/notas) y **Exportar puntos (CSV)**; items visibles para todos, acciones de admin reservadas (`territorioFeatureCollection` en `lib.js`) |
 | T-H12 | PWA de terreno | `manifest.webmanifest` + iconos PNG (`scripts/gen-icons.js`, sin dependencias) + `sw.js`: precache del shell, red-primero con caché para Supabase y *stale-while-revalidate* para los CDN. Registrada solo en `movil.html`, con recarga única al actualizar |
+| T-H13 | Geocaching | Caché de Nominatim en `localStorage` (7 días, 200 entradas, clave normalizada) + ≤1 petición/s; `geoClave`/`geoCacheLeer`/`geoCachePoner` en `lib.js` |
 
 ---
 
@@ -72,10 +73,17 @@ La bitácora por punto y la vista Historial ya se exportan en CSV (T-H9).
 - Hoy: todo cabe en memoria y se repinta completo; el cuello de botella
   real es el número de nodos DOM de marcadores.
 
-### T15 · Geocodificación robusta
-- Debounce + caché de Nominatim y respeto de su política de uso
-  (identificación de la app, ≤1 req/s).
-- Alternativa: proxy propio o MapLibre/Photon; sin clave no hay SLA.
+### T15 · Geocodificación robusta — ✅ hecha
+- Caché local (`localStorage`, `gps_geo_cache`): clave normalizada
+  (minúsculas, sin acentos, espacios colapsados), TTL de 7 días y tope de
+  200 entradas descartando las más antiguas. También cachea los «sin
+  resultados», para no repetir una dirección inexistente.
+- **≤1 petición/s** a Nominatim (`GEO_MIN_MS = 1000` en `lib.js`), que es lo
+  que pide su política de uso; la identificación va por el `Referer` que el
+  navegador envía solo (no se puede fijar `User-Agent` desde `fetch`).
+- `format=jsonv2` en lugar del `json` deprecado. Helpers puros en `lib.js`
+  (`geoClave`, `geoCacheLeer`, `geoCachePoner`) con 4 tests.
+- Pendiente opcional: proxy propio o MapLibre/Photon si hace falta SLA.
 
 ### Mejoras menores — ✅ cerradas (ronda 1)
 - Exportar el historial (CSV) desde Historial (Territorios/Puntos), Usuarios
@@ -89,9 +97,8 @@ La bitácora por punto y la vista Historial ya se exportan en CSV (T-H9).
   bloqueaba, así que era engañoso. Migración **012** revoca el privilegio
   para `authenticated` y lo deja en `service_role` (scripts).
 
-Quedan abiertas **T14** (clustering/lista virtualizada) y **T15**
-(geocodificación); la exportación de la comuna visible queda como ampliación
-opcional de **T12**.
+Queda abierta **T14** (clustering de marcadores y lista virtualizada); la
+exportación de la comuna visible queda como ampliación opcional de **T12**.
 
 ---
 

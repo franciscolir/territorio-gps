@@ -20,6 +20,7 @@ const browser = {
   requestAnimationFrame: 'readonly',
   supabase: 'readonly',
   maplibregl: 'readonly',
+  MutationObserver: 'readonly',
 };
 
 // Lo que lib.js expone a app.js (script clásico, sin módulos)

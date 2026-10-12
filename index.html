@@ -41,7 +41,7 @@
     </nav>
     <div class="tb-user">
       <span class="user" id="userInfo"></span>
-      <button id="logoutBtn" class="ghost icon" title="Cerrar sesión"><span class="ms ms-sm">logout</span></button>
+      <button aria-label="Cerrar sesión" id="logoutBtn" class="ghost icon" title="Cerrar sesión"><span class="ms ms-sm">logout</span></button>
     </div>
   </header>
   <div id="main">
@@ -58,7 +58,7 @@
       <div class="sect-zone" id="sectZone">
         <div class="sect-head">
           <h2>Territorios</h2>
-          <button id="allTerritoriosBtn" class="ghost back" style="display:none" title="Volver a la lista de territorios"><span class="ms ms-sm">list</span>Todos</button>
+          <button aria-label="Volver a la lista de territorios" id="allTerritoriosBtn" class="ghost back" style="display:none" title="Volver a la lista de territorios"><span class="ms ms-sm">list</span>Todos</button>
         </div>
         <div id="territorioList"><div class="empty">Aún no hay territorios</div></div>
         <div id="detailBlock" style="display:none">
@@ -90,34 +90,34 @@
 
     <!-- Riel de borde: colapsar panel, buscador unificado y dibujar territorio -->
     <div id="edgeRail">
-      <button id="toggleSidebar" title="Mostrar/ocultar panel"><span class="ms">menu</span></button>
-      <button id="searchFab" title="Buscar dirección, coordenadas o link"><span class="ms">search</span></button>
-      <button id="drawBtn" title="Dibujar un territorio a mano (elige una comuna)" style="display:none"><span class="ms">draw</span></button>
+      <button aria-label="Mostrar/ocultar panel" id="toggleSidebar" title="Mostrar/ocultar panel"><span class="ms">menu</span></button>
+      <button aria-label="Buscar dirección, coordenadas o link" id="searchFab" title="Buscar dirección, coordenadas o link"><span class="ms">search</span></button>
+      <button aria-label="Dibujar un territorio a mano (elige una comuna)" id="drawBtn" title="Dibujar un territorio a mano (elige una comuna)" style="display:none"><span class="ms">draw</span></button>
     </div>
     <div id="searchOverlay">
       <span class="ms ms-sm search-ic">search</span>
       <input id="smartSearch" type="text" placeholder="Buscar dirección, coordenadas o link…" />
-      <button id="searchCloseBtn" title="Cerrar búsqueda"><span class="ms ms-sm">close</span></button>
+      <button aria-label="Cerrar búsqueda" id="searchCloseBtn" title="Cerrar búsqueda"><span class="ms ms-sm">close</span></button>
     </div>
 
     <!-- Controles flotantes del mapa (estilo front) -->
     <div class="map-fabs">
       <div class="fab-group">
-        <button id="zoomInBtn" title="Acercar"><span class="ms">add</span></button>
-        <button id="zoomOutBtn" title="Alejar"><span class="ms">remove</span></button>
-        <button id="locateBtn" title="Mi ubicación"><span class="ms">my_location</span></button>
+        <button aria-label="Acercar" id="zoomInBtn" title="Acercar"><span class="ms">add</span></button>
+        <button aria-label="Alejar" id="zoomOutBtn" title="Alejar"><span class="ms">remove</span></button>
+        <button aria-label="Mi ubicación" id="locateBtn" title="Mi ubicación"><span class="ms">my_location</span></button>
       </div>
       <div class="fab-group">
-        <button id="fitViewBtn" title="Ajustar vista a la comuna o territorio"><span class="ms">center_focus_strong</span></button>
+        <button aria-label="Ajustar vista a la comuna o territorio" id="fitViewBtn" title="Ajustar vista a la comuna o territorio"><span class="ms">center_focus_strong</span></button>
       </div>
     </div>
 
     <!-- Acciones del panel → mapa abajo-derecha (L invertida) -->
     <div class="map-fabs bottom">
       <div class="fab-group fab-col">
-        <button id="newPointFab" title="Nuevo punto"><span class="ms">add_location</span></button>
-        <button id="refBtn" title="Modo referencia"><span class="ms">target</span></button>
-        <button id="settingsBtn" title="Ajustes"><span class="ms">settings</span></button>
+        <button aria-label="Nuevo punto" id="newPointFab" title="Nuevo punto"><span class="ms">add_location</span></button>
+        <button aria-label="Modo referencia" id="refBtn" title="Modo referencia"><span class="ms">target</span></button>
+        <button aria-label="Ajustes" id="settingsBtn" title="Ajustes"><span class="ms">settings</span></button>
       </div>
       <div class="fab-group">
         <div class="scope-seg" id="scopeSeg" title="Alcance de puntos en el mapa">
@@ -129,7 +129,7 @@
     </div>
 
     <div id="refPanel">
-      <button class="close" id="refClose">×</button>
+      <button class="close" id="refClose" aria-label="Cerrar punto de referencia">×</button>
       <h3>🎯 Puntos cercanos a referencia</h3>
       <div class="coord" id="refCoord">—</div>
       <label>Radio: <span class="radius-val" id="refRadiusVal">500 m</span></label>

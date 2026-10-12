@@ -1606,7 +1606,7 @@ function renderTerritorioDetail() {
           <span class="who${quien ? '' : ' none'}"${asigTitle}>${escapeHtml(quien || (asigTitle ? 'Devuelta' : 'Sin asignar'))}</span>
           ${isAdmin ? `
           <div class="sd-menu-wrap">
-            <button id="sdMenu" class="sd-iconbtn" title="Opciones del territorio"><span class="ms ms-sm">more_vert</span></button>
+            <button id="sdMenu" class="sd-iconbtn" title="Opciones del territorio" aria-label="Opciones del territorio"><span class="ms ms-sm">more_vert</span></button>
             <div class="sd-menu-pop" id="sdMenuPop">
               <button id="sdAssign"><span class="ms ms-sm">group_add</span>Asignar</button>
               <button id="sdRename"><span class="ms ms-sm">edit</span>Renombrar</button>
@@ -1614,7 +1614,7 @@ function renderTerritorioDetail() {
               <button id="sdDel" class="danger-text"><span class="ms ms-sm">delete</span>Eliminar</button>
             </div>
           </div>` : ''}
-          <button id="sdFocus" class="sd-iconbtn" title="Ver en el mapa"><span class="ms ms-sm">center_focus_strong</span></button>
+          <button id="sdFocus" class="sd-iconbtn" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">center_focus_strong</span></button>
         </div>
       </div>
       <div class="stats4">
@@ -1708,8 +1708,8 @@ function renderAssign() {
   panel.innerHTML = `
     <div class="assign-panel">
       <div class="a-head">
-        <span><button id="assignBack" class="sd-iconbtn" title="Volver a la ficha del territorio"><span class="ms ms-sm">arrow_back</span></button>Asignación</span>
-        <button id="assignClose" type="button" title="Cerrar">✕</button>
+        <span><button id="assignBack" class="sd-iconbtn" title="Volver a la ficha del territorio" aria-label="Volver a la ficha del territorio"><span class="ms ms-sm">arrow_back</span></button>Asignación</span>
+        <button id="assignClose" type="button" title="Cerrar" aria-label="Cerrar">✕</button>
       </div>
       <p class="a-territorio">${s.comuna ? escapeHtml(s.comuna) + ' · ' : ''}<b>${escapeHtml(s.nombre)}</b></p>
       ${act ? `
@@ -2270,6 +2270,68 @@ document.getElementById('territorioCancelBtn').addEventListener('click', () => {
 });
 document.getElementById('territorioSaveBtn').addEventListener('click', saveTerritorio);
 document.getElementById('allTerritoriosBtn').addEventListener('click', () => setTerritorioSelected(null));
+
+// --- Accesibilidad de modales ---------------------------------------------
+// Tab/Shift+Tab giran dentro del panel abierto, el foco entra al abrir y
+// vuelve al botón que lo abrió al cerrar. Para cerrar, Esc está en el
+// listener que sigue a este bloque.
+const MODALES = ['modal', 'pointDetail', 'territorioModal', 'settingsModal', 'puntoHistorial'];
+const FOCOABLE = 'a[href], button:not([disabled]), input:not([disabled]), '
+  + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function modalVisible() {
+  for (const id of MODALES) {
+    const el = document.getElementById(id);
+    if (el && el.classList.contains('visible')) return el;
+  }
+  return null;
+}
+
+function enfocarPrimero(cont) {
+  const el = [...cont.querySelectorAll(FOCOABLE)]
+    .find((x) => x.offsetParent !== null);   // los ocultos no reciben foco
+  if (el) el.focus();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab') return;
+  const cont = modalVisible();
+  if (!cont) return;
+  const items = [...cont.querySelectorAll(FOCOABLE)].filter((x) => x.offsetParent !== null);
+  if (!items.length) return;
+  const primero = items[0];
+  const ultimo = items[items.length - 1];
+  const activo = document.activeElement;
+  if (cont.contains(activo)) {
+    if (e.shiftKey && activo === primero) { e.preventDefault(); ultimo.focus(); }
+    else if (!e.shiftKey && activo === ultimo) { e.preventDefault(); primero.focus(); }
+  } else {
+    e.preventDefault();
+    (e.shiftKey ? ultimo : primero).focus();
+  }
+});
+
+// Al cambiar la clase .visible: guardar quién tenía el foco, enfocar el
+// panel; al cerrar, devolverlo. Un único observer para los cinco modales.
+let modalActual = null;
+let modalOpener = null;
+const modalObs = new MutationObserver(() => {
+  const cont = modalVisible();
+  if (cont && cont !== modalActual) {
+    modalOpener = document.activeElement;
+    modalActual = cont;
+    enfocarPrimero(cont);
+  } else if (!cont && modalActual) {
+    const volver = modalOpener;
+    modalActual = null;
+    modalOpener = null;
+    if (volver && volver !== document.body && document.contains(volver)) volver.focus();
+  }
+});
+MODALES.forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) modalObs.observe(el, { attributes: true, attributeFilter: ['class'] });
+});
 
 document.addEventListener('keydown', (e) => {
   const typing = e.target && e.target.matches && e.target.matches('input, textarea');

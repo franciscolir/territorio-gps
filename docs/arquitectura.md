@@ -4,23 +4,23 @@ Visión general de cómo está organizado Territorio GPS y por qué.
 
 ## Forma de entrega
 
-Sitio estático sin build, con **dos aplicaciones** que comparten `lib.js` y
-la misma base Supabase:
+Sitio estático sin build, **una sola aplicación**:
 
 - `index.html` — app de **escritorio/central** (admin y visualización).
-- `movil.html` + `movil.js` — app de **terreno/colaborador** (territorio único).
+
+La app de terreno/colaborador vive en un repositorio aparte; ambas comparten
+`lib.js` y la misma base Supabase.
 
 `index.html` carga, en este orden:
 
 ```html
 <link  rel="stylesheet" href="styles.css" />
 <script src="https://unpkg.com/maplibre-gl@4.7.1/...">   <!-- mapa -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/...">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/...">
 <script src="lib.js"></script>   <!-- funciones puras (globales) -->
 <script src="app.js"></script>   <!-- todo el comportamiento -->
 ```
 
-`movil.html` hace lo mismo con Tailwind CDN (en línea) + `lib.js` + `movil.js`.
 Los archivos son **scripts clásicos** (no `type="module"`): así la app
 también funciona abierta desde disco (`file://`), donde los módulos están
 bloqueados por CORS. La "interfaz" entre ambos son los nombres de función
@@ -31,15 +31,10 @@ cruce archivos.
 
 | Archivo | Responsabilidad |
 |---|---|
-| `index.html` | Estructura semántica de la app de escritorio: login, barra de vistas (**Territorios · Historial · Usuarios**), panel lateral, mapa, modales, toasts. Sin lógica. |
-| `styles.css` | Todo el estilo de la app de escritorio. Tokens Material-3 al inicio; responsive al final (`@media 860px`, `480px`). |
-| `movil.html` | Shell de la app de terreno: login, tarjeta del territorio, lista/mapa/sync, bottom sheets. Estilo con Tailwind CDN + tokens del mockup. |
-| `movil.js` | Lógica de terreno: territorio único, fichas de punto, estados, devolución y **cola offline**. |
+| `index.html` | Estructura semántica de la app: login, barra de vistas (**Territorios · Historial · Usuarios**), panel lateral, mapa, modales, toasts. Sin lógica. |
+| `styles.css` | Todo el estilo de la app. Tokens Material-3 al inicio; responsive al final (`@media 860px`, `480px`). |
 | `lib.js` | Funciones **puras**: escaping, geometría EWKB/GeoJSON, punto-en-polígono, EWKT, círculos, parseo de links/coordenadas, etiquetas de estado, cola offline, avance de territorio, duplicados, escapado CSV, GeoJSON de territorio, geocaché de Nominatim y agrupación de marcadores. Sin DOM ni estado. |
-| `app.js` | Estado global de escritorio, cliente Supabase, mapa, eventos, RPCs, UI y vistas (Historial/Usuarios). |
-| `sw.js` | Service worker de la app de terreno (PWA): precache del shell, red-primero para navegación y Supabase, *stale-while-revalidate* para CDN. |
-| `manifest.webmanifest` | Manifest PWA: nombre, `start_url: movil.html`, colores y iconos (se registra desde `movil.html`). |
-| `icons/` · `scripts/gen-icons.js` | Iconos PNG del manifest, generados sin dependencias (`node scripts/gen-icons.js`). |
+| `app.js` | Estado global, cliente Supabase, mapa, eventos, RPCs, UI y vistas (Historial/Usuarios). |
 | `supabase/functions/` | Edge Functions (p. ej. `crear-usuario`, con `service_role`). |
 
 ## Estado global (`app.js`)
@@ -116,6 +111,11 @@ login) y `SIGNED_IN` (sesión abierta en otra pestaña → arranque perezoso).
 
 Orden de pintado (debajo → arriba):
 
+0. **Basemap** — OpenFreeMap `positron`; el botón `#btnSatelite` intercambia
+   esa fuente por un raster de Esri World Imagery (`ESRI_IMAGERY`,
+   `tileSize: 256`, `maxzoom: 19`) con atribución `ESRI_ATTR`. El raster se
+   inserta con `beforeLayer: antesDeLosRotulos()` (antes de la primera capa
+   `symbol`), así los rótulos de comunas/territorios quedan siempre encima.
 1. `comunas-fill` / `comunas-outline` / `comunas-labels`
 2. `territorios-fill` / `territorios-outline` / `territorios-labels` (feature-state `selected`/`hover`)
 3. `ref-circle-fill` / `ref-circle-line` (modo referencia)
@@ -173,25 +173,17 @@ estado ya se hacían en local.
 - Los permisos se chequean en la DB; el chequeo de `isAdmin` en el front es
   solo para no mostrar acciones que fallarían.
 
-## App de terreno (`movil.js`)
+## App de terreno (repo aparte)
 
-Mismo patrón (scripts clásicos, estado en `let` top-level, renders
-imperativos) pero con un alcance mucho menor: **un colaborador, un territorio
-activo, sus puntos**.
+`movil.html`, `movil.js`, `sw.js`, `manifest.webmanifest` e `icons/` se
+mudaron a un repositorio propio; este repo quedó solo con la app de
+administración. Lo que se conserva aquí:
 
-```
-boot() → getSession() ─┬─ con sesión → entrar(user)
-                       └─ vista login
-
-entrar()
-  ├─ leerCola()            (localStorage: cola offline)
-  ├─ refrescar()
-  │    ├─ territorios_asignaciones (estado='activa', con territorios(*) anidado)
-  │    └─ puntos (territorio_id = mi territorio; RLS ya limita igual)
-  └─ pintarTodo()
-
-tabs: ruta (lista) · mapa (MapLibre: polígono + pins) · sync (cola)
-```
+- `lib.js` mantiene la **cola offline** (`nuevaOpCola`, `colaAgregar`,
+  `colaQuitar`, `colaResumen`): helpers puros, testeados, compartidos.
+- Las policies de RLS y las RPCs de la migración 003 siguen vigentes en la
+  DB: son las que gobiernan lo que el colaborador puede hacer, venga de la
+  app que venga.
 
 ### Permisos del colaborador (la DB manda)
 
@@ -206,15 +198,3 @@ servidor devuelve:
 | Editar punto | `actualizar_punto_terreno` | punto de su territorio; coordenadas dentro del polígono |
 | Borrar punto | `eliminar_punto_propio` | solo puntos con `user_id = auth.uid()` |
 | Devolver territorio | `devolver_territorio` | su asignación activa → `estado='devuelta'` |
-
-### Cola offline
-
-- Cada acción fallida por red se encola en `localStorage` con
-  `nuevaOpCola`/`colaAgregar` (helpers puros de `lib.js`, testeados).
-- `colaAgregar` deduplica por `(tipo, clave)`: dos cambios de estado del
-  mismo punto = solo el último viaja.
-- `sincronizar()` reproduce la cola en orden (`ejecutarOp`): si la red
-  falla se corta; si el servidor rechaza (p. ej. territorio devuelto) se
-  descarta la operación y se sigue.
-- Disparadores: botón *Sincronizar ahora*, evento `online`, e intervalo
-  de 45 s mientras haya cola.

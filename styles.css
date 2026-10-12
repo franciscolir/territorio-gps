@@ -948,6 +948,9 @@
     transition: background .12s;
   }
   .map-fabs button:hover { background: var(--surface-mid); }
+  /* Estado activo (p. ej. vista satélite). `>` directo: no debe pisar a los
+     botones del .scope-seg, que van dentro de un div dentro del grupo. */
+  .map-fabs .fab-group > button.active { background: var(--secondary); color: var(--on-secondary); }
   .map-fabs button .ms { font-size: 20px; }
 
   /* Acciones del panel → mapa abajo-derecha (L invertida: columna + fila) */

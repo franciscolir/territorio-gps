@@ -8,8 +8,11 @@ Aplicación web de trabajo en terreno para levantar, clasificar y agrupar
 - Estados por punto (`pendiente`, `visitado`, `erróneo`, `no_pasar`) con barra de avance y deshacer.
 - Asignación de territorios a cuadrillas con ciclo de vida **en proceso / devuelto / completado** (un colaborador, un territorio a la vez; se cierra al 100 % o manualmente).
 - **Vistas de escritorio**: *Territorios* (mapa + panel), *Historial* (todos los territorios por comuna + puntos agrupados por comuna/territorio con **bitácora por punto**) y *Usuarios* (alta y estado del equipo de terreno).
-- **App de terreno** (`movil.html`) para el colaborador: ve solo su territorio, crea/edita puntos, cambia estados, **devuelve el territorio** y opera con **cola offline**.
 - Backend en Supabase (PostgreSQL + PostGIS + RLS).
+
+> La **app de terreno** (la que usa el colaborador en el celular) vive en un
+> repositorio aparte; este repo es solo la app de administración. Comparten
+> `lib.js` y la misma base de datos.
 
 ---
 
@@ -34,8 +37,8 @@ Aplicación web de trabajo en terreno para levantar, clasificar y agrupar
 - Una cuenta [Supabase](https://supabase.com) con la extensión **PostGIS** habilitada.
 - Navegador moderno (Chrome/Edge/Firefox/Safari recientes).
 
-No hay build ni bundler: el front son archivos estáticos que se sirven tal cual
-(`index.html` para central, `movil.html` para terreno).
+No hay build ni bundler: el front son archivos estáticos que se sirven tal
+cual (`index.html`).
 
 ---
 
@@ -71,13 +74,12 @@ No hay build ni bundler: el front son archivos estáticos que se sirven tal cual
 
 ### 3. Front
 
-Edita la configuración en la parte superior de `index.html` y de `movil.js`
-(misma Supabase para ambas apps):
+Edita la configuración en la parte superior de `index.html`:
 
 ```js
 const SUPABASE_URL = 'https://TU-PROYECTO.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_...'; // clave publicable/anon
-const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron'; // solo index
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 ```
 
 Luego sirve la carpeta (cualquier servidor estático sirve):
@@ -87,8 +89,8 @@ npx serve .          # o python -m http.server, o el hosting de tu elección
 ```
 
 > Abrir `index.html` con `file://` funciona en la mayoría de casos, pero se
-> recomienda servirlo por HTTP (localStorage, service workers y políticas de
-> CORS se comportan mejor).
+> recomienda servirlo por HTTP (localStorage y políticas de CORS se
+> comportan mejor).
 
 ---
 
@@ -106,22 +108,16 @@ npx serve .          # o python -m http.server, o el hosting de tu elección
 ## Estructura del repo
 
 ```
-index.html            Shell HTML de escritorio: login, panel, mapa, modales
-styles.css            CSS de escritorio (tokens Material-3 + responsive)
-movil.html            App de terreno (colaborador): login, territorio único, tabs
-movil.js              Lógica de terreno: fichas, estados, devolución, cola offline
+index.html            Shell HTML: login, panel, mapa, modales
+styles.css            CSS (tokens Material-3 + responsive)
 lib.js                Funciones puras: geometría, EWKB, estados, escaping, links, cola offline
-app.js                Estado global de escritorio, capas del mapa, renders, RPCs
+app.js                Estado global, capas del mapa, renders, RPCs
 schema.sql            Esquema completo (instalación nueva)
 migrations/           Cambios incrementales para bases ya desplegadas
 seed-comunas.js       Seed de comunas RM (ArcGIS → Supabase)
 tests/lib.test.js     Tests unitarios de lib.js (Vitest)
-eslint.config.js      Configuración de lint (browser + node + service worker)
+eslint.config.js      Configuración de lint (browser + node)
 supabase/functions/   Edge Functions (crear-usuario)
-sw.js                 Service worker: cachea el shell de terreno (offline)
-manifest.webmanifest  Manifest PWA (app instalable)
-icons/                Iconos PWA (PNG generados por scripts/gen-icons.js)
-scripts/              Utilidades de mantenimiento (gen-icons.js)
 fonts/                Material Symbols (woff2 autoalojado)
 docs/                 Arquitectura, base de datos, manual y roadmap
 .env.example          Variables para el seed
@@ -138,6 +134,8 @@ lint detecte usos/definiciones.
 ## Roles y permisos
 
 La regla está en la base de datos (RLS + RPCs); el front solo la refleja.
+La app del colaborador vive en otro repositorio, pero las mismas policies y
+RPCs siguen gobernando lo que ese rol puede hacer.
 
 | Acción | Admin | Colaborador (terreno) |
 |---|---|---|
@@ -242,12 +240,12 @@ Detalle en [`supabase/functions/crear-usuario/README.md`](supabase/functions/cre
 | [docs/arquitectura.md](docs/arquitectura.md) | Cómo está organizado el código, estado global y flujo de datos |
 | [docs/base-de-datos.md](docs/base-de-datos.md) | Tablas, policies, RPCs, triggers e índices |
 | [docs/manual-usuario.md](docs/manual-usuario.md) | Manual de uso por rol |
-| [docs/roadmap.md](docs/roadmap.md) | Trabajo pendiente (P2) y decisiones abiertas |
+| [docs/roadmap.md](docs/roadmap.md) | Trabajo cerrado (P2) y decisiones registradas |
 
 ---
 
 ## Roadmap
 
-Lo que queda fuera de esta rama (ver [docs/roadmap.md](docs/roadmap.md)):
-exportación CSV/GeoJSON, PWA instalable con
-service worker, clustering de marcadores y proxy de Nominatim.
+El P1 y el P2 están cerrados (ver [docs/roadmap.md](docs/roadmap.md)):
+exportación CSV/GeoJSON, vista satélite, agrupación de marcadores y
+geocaché de Nominatim. La app de terreno se mantiene en su propio repo.

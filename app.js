@@ -211,6 +211,53 @@ db.auth.onAuthStateChange((event, session) => {
 });
 
 // ============================================================
+// VISTA SATÉLITE (toggle)
+// ============================================================
+// Foto de Esri encima del mapa base y debajo de todo lo nuestro: se inserta
+// antes de la primera capa `symbol` del estilo, así los rótulos de calles
+// siguen legibles sobre la foto y el polígono del territorio, los pines y el
+// punto azul (capas añadidas después en el stack) quedan encima.
+// Sin persistencia: al (re)crear el mapa se arranca en claro.
+const ESRI_IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const ESRI_ATTR = 'Esri, Maxar, Earthstar Geographics';
+let sateliteActiva = false;
+
+// Dónde insertar la foto: antes del primer rótulo del estilo base. Si el
+// estilo no tuviera símbolos, justo encima del background (capa 0).
+function antesDeLosRotulos() {
+  const capas = map && map.getStyle() ? (map.getStyle().layers || []) : [];
+  const i = capas.findIndex((l) => l.type === 'symbol');
+  if (i >= 0) return capas[i].id;
+  return capas.length > 1 ? capas[1].id : undefined;
+}
+
+function alternarSatelite() {
+  if (!map) return;
+  const btn = document.getElementById('btnSatelite');
+
+  if (sateliteActiva) {
+    if (map.getLayer('satelite')) map.removeLayer('satelite');
+    if (map.getSource('satelite')) map.removeSource('satelite');
+    sateliteActiva = false;
+  } else {
+    if (!map.getSource('satelite')) {
+      map.addSource('satelite', {
+        type: 'raster',
+        tiles: [ESRI_IMAGERY],
+        tileSize: 256,
+        maxzoom: 19,   // más allá de z19 MapLibre hace overzoom solo
+        attribution: ESRI_ATTR,
+      });
+    }
+    if (!map.getLayer('satelite')) {
+      map.addLayer({ id: 'satelite', type: 'raster', source: 'satelite' }, antesDeLosRotulos());
+    }
+    sateliteActiva = true;
+  }
+  if (btn) btn.classList.toggle('active', sateliteActiva);
+}
+
+// ============================================================
 // MAPA
 // ============================================================
 function initMap() {
@@ -232,6 +279,10 @@ function initMap() {
 
   map = new maplibregl.Map(options);
   map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
+  // El satélite no persiste: cada mapa nuevo arranca en claro (también al
+  // salir de sesión, que recarga la página).
+  sateliteActiva = false;
+  document.getElementById('btnSatelite').classList.remove('active');
 
   // Controles flotantes (reemplazan la NavigationControl nativa)
   document.getElementById('zoomInBtn').addEventListener('click', () => map.zoomIn());
@@ -255,6 +306,7 @@ function initMap() {
       toast('Selecciona una comuna o territorio para ajustar la vista', true);
     }
   });
+  document.getElementById('btnSatelite').addEventListener('click', alternarSatelite);
 
   map.on('load', async () => {
     // Se captura ANTES de onComunaChange(), que limpia la selección al

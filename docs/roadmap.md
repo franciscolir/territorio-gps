@@ -1,7 +1,13 @@
 # Roadmap
 
-Estado de la rama `feat/plan-p0-p1`: **P0 y P1 ejecutados**. Este documento
-deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
+Estado de la rama `feat/plan-p0-p1`: **P0, P1 y P2 ejecutados**. Este
+documento cierra lo hecho y abre las decisiones que conviene tratar después.
+
+> **Separación de repos:** la app de terreno (`movil.html`, `movil.js`,
+> `sw.js`, `manifest.webmanifest`, `icons/` y `scripts/gen-icons.js`) se
+> mudó a un repositorio propio. Aquí queda solo la app de administración;
+> comparten `lib.js` y la misma base de datos. Las tareas T9, T11 y T-H12
+> se marcan como *trasladadas*, no revertidas.
 
 ---
 
@@ -17,7 +23,7 @@ deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
 | T6 | Rendimiento | `puntos.territorio_id` con triggers + índices (estado/territorio_id), actualización local en `savePoint`/`deletePoint`, debounce del filtro, `pointsInTerritorio` por id |
 | T7 | Tests | Vitest: 30 tests sobre `lib.js` (`npm test`) |
 | T8 | Responsive | `@media 860px/480px`, panel como overlay en móvil, arranque colapsado, clic en mapa para cerrar |
-| T9 | App de terreno | `movil.html`/`movil.js`: territorio único asignado, lista/mapa/fichas de punto, alta y edición dentro del polígono, estados con deshacer, **devolución de territorio** y **cola offline** en `localStorage` con auto-sync. Falta solo PWA (service worker + manifest) |
+| T9 | App de terreno | `movil.html`/`movil.js`: territorio único asignado, lista/mapa/fichas de punto, alta y edición dentro del polígono, estados con deshacer, **devolución de territorio** y **cola offline** en `localStorage` con auto-sync. **→ Trasladada a un repositorio aparte** |
 | T10 | RLS por territorio | `territorio_activo_usuario`, policies de `puntos`/`territorios` por territorio activo, trigger `puntos_bloquear_columnas`, RPCs `devolver_territorio`/`actualizar_punto_terreno`/`eliminar_punto_propio` (migración 003) |
 | T-H | Vistas e historial | Rename `sectores` → `territorios` (007), barra **Territorios · Historial · Usuarios**, cierre de procesos (**auto al 100 %** + manual), `notas` por proceso, `puntos.ultima_visita`, `listar_usuarios` y alta de usuarios con Edge Function `crear-usuario` (008) |
 | T-H2 | Historial y bitácora | Pestaña *Territorios* con **todos** los territorios por comuna; pestaña *Puntos* agrupada por comuna/territorio con **texto vertical en filas combinadas** y botón **Ver**; tabla `puntos_historial` (log por movimiento, trigger security definer) + RPC `punto_historial` (009) |
@@ -25,22 +31,31 @@ deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
 | T-H4 | Filtros persistentes | `prefGet`/`prefSet` recuerdan comuna, territorio, estado, texto de búsqueda y alcance del mapa entre sesiones |
 | T-H5 | Historial navegable | Botón **Ver** en *Historial → Territorios*: abre la bitácora de procesos del territorio (nº, usuario, cierre, estado, notas) |
 | T-H6 | Ciclo de vida cerrado | `visitado` → `pendiente` al reasignar (010) y cierre **inmediato** como `completado` si no queda nada pendiente (011): ya no hay procesos eternos |
-| T-H7 | Duplicados | `duplicadoCercano` avisa al crear un punto con el mismo nombre a <10 m (web y móvil) |
+| T-H7 | Duplicados | `duplicadoCercano` avisa al crear un punto con el mismo nombre a <10 m (la regla vive en `lib.js`, compartida con la app de terreno) |
 | T-H8 | Accesibilidad | `aria-label` en 16 botones de solo ícono, foco atrapado en modales + foco devuelto al cerrar, `--outline`/`--est-erroneo` a `#6e727a` (4,8:1 WCAG AA) |
 | T-H9 | Exportación CSV | Botón **Exportar CSV** en Historial (ambas pestañas), Usuarios y el modal de bitácora; `csvEscape` con BOM y anti-fórmula |
 | T-H10 | Lint y tests estrictos | `no-unused-vars: error` con `caughtErrors`; 54 tests sobre `lib.js` (`npm test`), lint a 0 |
 | T-H11 | Exportación del territorio | Menú **⋮** de la ficha: **Exportar GeoJSON** (polígono + puntos con estado/notas) y **Exportar puntos (CSV)**; items visibles para todos, acciones de admin reservadas (`territorioFeatureCollection` en `lib.js`) |
-| T-H12 | PWA de terreno | `manifest.webmanifest` + iconos PNG (`scripts/gen-icons.js`, sin dependencias) + `sw.js`: precache del shell, red-primero con caché para Supabase y *stale-while-revalidate* para los CDN. Registrada solo en `movil.html`, con recarga única al actualizar |
+| T-H12 | PWA de terreno | `manifest.webmanifest` + iconos PNG (`scripts/gen-icons.js`, sin dependencias) + `sw.js`: precache del shell, red-primero con caché para Supabase y *stale-while-revalidate* para los CDN. **→ Trasladada a un repositorio aparte** |
 | T-H13 | Geocaching | Caché de Nominatim en `localStorage` (7 días, 200 entradas, clave normalizada) + ≤1 petición/s; `geoClave`/`geoCacheLeer`/`geoCachePoner` en `lib.js` |
 | T-H14 | Agrupación de marcadores | `agruparPuntos` en `lib.js` (6 tests): clustering voraz en píxeles con `proyectar` inyectado; burbujas con conteo, recálculo en `moveend`, y el punto de `focusPoint` + los del modo referencia siempre sueltos |
 | T-H15 | Lista paginada | `PAGINA_PUNTOS = 100` + botón **Cargar más**; la página vuelve a 1 al cambiar territorio o filtro |
 | T-H16 | Historial por comuna | `<select id="histComunaSel">` en el encabezado: filtra **ambas pestañas** y también el **CSV**; recuerda la elección (`prefGet('histComuna')`) y lista **todas** las comunas, incluso las desactivadas (desactivar no borra historial) |
+| T-H17 | Vista satélite | Botón **🛰️** (`#btnSatelite`) apilado sobre *Ajustar vista*: alterna un raster de **Esri World Imagery** (`ESRI_IMAGERY`, `tileSize: 256`, `maxzoom: 19`) debajo de los rótulos (`antesDeLosRotulos()`), con `ESRI_ATTR`; estado `.active` con `--secondary`. Ícono `satellite_alt` ya estaba en el subconjunto de fuentes |
 
 ---
 
 ## P2 — ✅ cerrado
 
-### T11 · PWA para terreno — ✅ hecha
+### T11 · PWA para terreno — ✅ hecha y **trasladada**
+
+> **Todo lo de esta T11 salió de este repo** junto con la app de terreno:
+> `manifest.webmanifest`, `icons/`, `scripts/gen-icons.js` y `sw.js`. Se
+> borraron enteros (sin stub auto-destructivo): los navegadores que ya
+> tienen el SW viejo lo conservan, pero con estrategia red-primero no hay
+> regresión apreciable. Quedan en el repositorio de terreno.
+
+Cómo quedó cuando vivía aquí (por si hay que replicarlo allá):
 - `manifest.webmanifest` con `start_url: movil.html`, `display: standalone`,
   colores del proyecto y 3 iconos (192, 512 y maskable) generados por
   `scripts/gen-icons.js` **sin dependencias** (PNG escrito a mano con zlib).
@@ -56,8 +71,9 @@ deja pendiente lo de P2 y abre las decisiones que conviene tratar después.
   escritorio no cambia. Recarga única cuando hay un SW nuevo.
 - Ojo: `movil.html` carga todo desde CDN; sin la caché del SW no hay offline.
 
-Queda opcional: **push notifications** y pantalla de «sin conexión» propia
-(hoy el shell se abre directamente, que es lo que importa en terreno).
+Queda opcional (en el repo de terreno): **push notifications** y pantalla
+de «sin conexión» propia (hoy el shell se abre directamente, que es lo que
+importa en terreno).
 
 ### T12 · Exportación del territorio — ✅ hecha
 Menú **⋮** de la ficha del territorio: **Exportar GeoJSON** (polígono +
@@ -112,9 +128,10 @@ La bitácora por punto y la vista Historial ya se exportan en CSV (T-H9).
   bloqueaba, así que era engañoso. Migración **012** revoca el privilegio
   para `authenticated` y lo deja en `service_role` (scripts).
 
-Todos los ítems del P2 están cerrados (T11–T15). Quedan opcionales: la
-exportación de la **comuna visible** (ampliación de T12), **push
-notifications** y pantalla propia de «sin conexión» (T11).
+Todos los ítems del P2 están cerrados (T11–T15) y se añadió **T-H17**
+(vista satélite). Quedan opcionales: la exportación de la **comuna visible**
+(ampliación de T12); *push notifications* y pantalla de «sin conexión»
+quedaron como opcionales del repo de terreno.
 
 ---
 
@@ -137,9 +154,20 @@ notifications** y pantalla propia de «sin conexión» (T11).
    clave/valor y la app solo lee y hace `upsert`. Tener el grant sin
    policy daba un falso «está permitido»; con `revoke` el privilegio queda
    solo en `service_role`, que es quien limpia filas desde scripts.
-7. **Un solo service worker, registrado solo por `movil.html`** (T11): su
-   scope es `/` porque `sw.js` vive en la raíz, así que también intercepta
-   navegaciones del escritorio. Por eso el handler es conservador — red
-   primero y, sin red, solo sirve `movil.html` para rutas que terminan en
-   `movil.html`; el escritorio nunca recibe el shell de terreno. No se
-   precachea nada del escritorio: no es el objetivo de la T11.
+7. **Un solo service worker, registrado solo por `movil.html`** (T11) —
+   *ya no aplica a este repo*: `sw.js` se fue con la app de terreno. La
+   decisión sigue siendo válida allá (scope `/`, handler conservador red
+   primero, sin precache del escritorio), pero aquí ya no se registra
+   ningún SW y no hay que vigilarlo.
+8. **El repo de administración no lleva PWA.** `manifest.webmanifest`,
+   `icons/`, `scripts/gen-icons.js` y `sw.js` salieron con la app de
+   terreno: este sitio es una herramienta interna de escritorio y el
+   mantenimiento de una caché instalable no compensaba. La cola offline
+   (`localStorage`) vive en `lib.js` por ser código compartido y estar
+   testeada, pero sin SW no hay arranque sin red.
+9. **Satélite como raster conmutado, no como estilo alternativo.**
+   `alternarSatelite()` añade/quita un source + layer de Esri World
+   Imagery en vez de cargar un `style` completo: se ahorra un `setStyle()`
+   (que borraría capas, fuentes y features-state) y las capas dibujadas
+   encima quedan intactas. El único punto delicado es meter el raster
+   *antes* de los rótulos, por eso existe `antesDeLosRotulos()`.

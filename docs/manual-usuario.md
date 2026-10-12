@@ -207,7 +207,7 @@ de color.
 
 Cada tarjeta trae 4 botones: **Pendiente · Visitado · Erróneo · No pasar**.
 Tras marcar aparece un aviso con **Deshacer** (5 segundos). El mismo flujo
-existe en la app de terreno (`movil.html`).
+existe en la app de terreno (otro repositorio).
 
 > Los estados los puede marcar cualquier usuario con acceso a la app: es la
 > operación de terreno. Editar nombre, dirección, notas, coordenadas o
@@ -234,6 +234,17 @@ Con **Toda RM** y más de 150 puntos visibles, el mapa agrupa los que están
 cerca: verás una **burbuja azul con el número** de puntos que contiene. Haz
 clic para acercarte y el grupo se abre solo. Al elegir un punto desde la
 lista, ese punto siempre aparece suelto y resaltado.
+
+### Vista satélite
+
+El botón **🛰️** (arriba a la derecha, bajo *Ajustar vista*) cambia el mapa
+a **foto satélite**; vuelve a tocarlo para regresar al mapa normal. El botón
+queda azul mientras está activo.
+
+Sirve para ubicarte con referencias reales (techos, caminos, terreno
+vacío) cuando el mapa plano no basta. Los rótulos de comunas y territorios
+se dibujan encima de la foto, igual que en el mapa normal, y el resto de los
+controles (alcance, referencia, modo dibujo) siguen funcionando igual.
 
 ---
 
@@ -269,10 +280,9 @@ Sirve para responder «¿qué direcciones tengo alrededor de esta esquina?».
 
 ## 8. App de terreno (celular)
 
-La app de terreno es **`movil.html`** (misma URL + `/movil.html`, ver
-sección 11): el colaborador ve su territorio asignado, cambia estados y sincroniza
-incluso sin señal. El botón de vista terreno del panel de escritorio fue
-eliminado.
+La app de terreno está en un **repositorio aparte** (otra URL, misma base de
+datos): el colaborador ve su territorio asignado, cambia estados y
+sincroniza incluso sin señal. Ver sección 12.
 
 ---
 
@@ -310,68 +320,21 @@ Botón **⚙️**:
 
 ---
 
-## 12. App de terreno (colaboradores) — `movil.html`
+## 12. App de terreno (colaboradores)
 
-Es la app de la cuadrilla: se abre en el celular con la misma URL + `/movil.html`
-(mismo hosting que la de escritorio). Ve **solo su territorio asignado y sus puntos**.
+Se mudó a un **repositorio propio**; esta app quedó solo con la vista de
+administración. Lo que el colaborador sigue teniendo (misma base de datos,
+otra URL):
 
-### Ingreso y territorio
+- **Ingreso** con la misma cuenta y su **territorio asignado** (o
+  «Sin territorio asignado» si aún no tienen).
+- **Ruta y mapa** del territorio, con el polígono y los pins por estado.
+- **Crear / editar / borrar** puntos dentro del polígono (solo puede borrar
+  los que él creó; la base de datos lo hace cumplir).
+- **Cambiar estado** con aviso de **Deshacer**.
+- **Devolver** el territorio a central en cualquier momento.
+- **Sin señal**: los cambios quedan en una cola local que se sincroniza
+  sola al volver la red, con botón *Sincronizar ahora (N)* y pestaña *Sync*.
 
-- Entra con tu correo y contraseña (la misma cuenta que te dio central).
-- Si no tienes territorio asignado ves **«Sin territorio asignado»**; pulsa
-  *Actualizar* cuando te lo hayan dado.
-- La tarjeta superior muestra tu territorio, comuna y el avance
-  (visitados / erróneos / no pasar / pendientes).
-
-### Lista y mapa
-
-- **Ruta**: lista de puntos con filtros (Todos, Visitados, Incidencias,
-  Pendientes). Cada tarjeta tiene *Cómo llegar* (abre Google Maps) y
-  *Cambiar estado* (hoja con los 4 estados).
-- **Mapa**: el polígono de tu territorio con los pins de estado. Toca un pin
-  para abrir su ficha; toca el mapa para **crear un punto nuevo** (solo
-  dentro del polígono).
-- Toca el nombre de un punto para ver/editar su ficha: nombre, dirección,
-  notas y coordenadas (hay botón *Usar mi ubicación actual*).
-
-### Crear, editar y borrar
-
-- **Nuevo punto**: en el mapa, toca la ubicación → completa el nombre
-  (obligatorio) → *Guardar punto*. Las coordenadas deben quedar dentro
-  del territorio.
-- **Editar**: desde la ficha. Si mueves el punto fuera del polígono, la
-  base de datos lo rechaza.
-- **Borrar**: solo puedes borrar los puntos **que tú creaste** (sale el
-  botón en su ficha).
-
-### Cambiar estado y deshacer
-
-- *Cambiar estado* → Visitado / Erróneo / No pasar / Pendiente. Tras el
-  cambio aparece un aviso con **Deshacer** (unos segundos).
-
-### Devolver el territorio
-
-- Botón **Devolver** en la tarjeta del territorio. Funciona aunque no hayas
-  terminado el 100 %: al confirmar, el territorio vuelve a central y **dejas
-  de verlo al instante** (puntos incluidos). Pídele a tu jefe que te
-  asigne otro.
-
-### Instalar en el celular (app instalable)
-
-- **Android / Chrome**: menú ⋮ → *Instalar aplicación* (o *Añadir a pantalla
-  de inicio*). **iPhone / Safari**: compartir → *Añadir a pantalla de inicio*.
-- Queda un ícono con el pin blanco sobre azul marino y la app abre a pantalla
-  completa, sin barra del navegador.
-- La primera vez que la abres se descarga una copia de la app (**service
-  worker**). A partir de ahí abre aunque no haya señal: ya está guardada.
-
-### Sin señal (modo offline)
-
-- Los cambios (estado, nuevo punto, edición, borrado) se guardan en el
-  teléfono y aparece el botón flotante **Sincronizar ahora (N)**.
-- Al volver la señal se sincronizan solas cada cierto tiempo; si un
-  cambio ya no aplica (p. ej. devolviste el territorio) se descarta con aviso.
-- La pestaña **Sync** muestra el detalle de lo pendiente.
-- Los datos que ves también se guardan: si abres la app sin conexión se
-  muestran los **últimos puntos y territorios cargados**. Con la cola de la
-  sección anterior, el trabajo de terreno no se detiene.
+Los permisos exactos de ese rol están en
+[roles y permisos](../README.md#roles-y-permisos).

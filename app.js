@@ -1490,13 +1490,10 @@ function renderTerritorioResumen(box) {
     return;
   }
 
-  box.innerHTML =
-    `<div class="sect-resumen-head"><span class="ms ms-sm">assignment_ind</span>` +
-    `${asignados.length} territorio${asignados.length === 1 ? '' : 'es'} asignado${asignados.length === 1 ? '' : 's'}</div>` +
-    asignados.map((s) => {
-      const st = territorioBreakdown(s);
-      const act = asigActiva(s.id);
-      return `
+  const cards = asignados.map((s) => {
+    const st = territorioBreakdown(s);
+    const act = asigActiva(s.id);
+    return `
       <div class="territorio-card" data-id="${escapeHtml(s.id)}" data-comuna="${escapeHtml(s.comuna)}">
         <div class="s-top">
           <span class="dot" style="background:${escapeHtml(s.color || '#1d4ed8')}"></span>
@@ -1510,7 +1507,17 @@ function renderTerritorioResumen(box) {
         </div>
         ${progressBarHtml(st)}
       </div>`;
-    }).join('');
+  }).join('');
+
+  box.innerHTML = `
+    <div class="activos-frame">
+      <div class="sect-resumen-head">
+        <span class="ms ms-sm">bolt</span>
+        <span>Territorios activos</span>
+        <span class="activos-count">${asignados.length}</span>
+      </div>
+      ${cards}
+    </div>`;
 
   box.querySelectorAll('.territorio-card').forEach((el) => {
     el.addEventListener('click', () => abrirComunaTerritorio(el.dataset.comuna, el.dataset.id));

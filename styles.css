@@ -578,6 +578,28 @@
     color: var(--on-surface-variant);
   }
   #territorioList .sect-resumen-head .ms { font-size: 15px; color: var(--primary); }
+
+  /* Resumen sin comuna: marco verde que señala que estos territorios están ACTIVOS */
+  #territorioList .activos-frame {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 9px 9px 10px;
+    border: 2px solid var(--est-visitado);
+    background: rgba(149, 248, 167, .22);
+    border-radius: var(--r-lg);
+  }
+  #territorioList .activos-frame .sect-resumen-head {
+    padding: 0 2px 2px; color: var(--est-visitado-on);
+  }
+  #territorioList .activos-frame .sect-resumen-head .ms { color: var(--est-visitado-on); }
+  #territorioList .activos-count {
+    margin-left: auto; padding: 1px 8px; border-radius: 999px;
+    background: var(--est-visitado); color: var(--est-visitado-on);
+    font-size: 10.5px; letter-spacing: 0;
+  }
+  #territorioList .activos-frame .territorio-card {
+    background: var(--surface-lowest); border-color: rgba(0, 33, 10, .12);
+  }
+  #territorioList .activos-frame .territorio-card:hover { background: #ffffff; }
   .territorio-card {
     background: var(--surface-low); border: 1px solid transparent; border-radius: var(--r-lg);
     padding: 11px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 6px;

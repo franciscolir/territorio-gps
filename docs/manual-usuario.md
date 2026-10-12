@@ -62,9 +62,10 @@ Usa el selector **Comuna** en la cabecera. Solo aparecen las comunas
 habilitadas (las desactiva un admin desde ⚙️ Ajustes). La vista salta a esa
 comuna y **solo se muestran sus territorios**.
 
-Sin comuna elegida, el panel muestra un **resumen de los territorios
-asignados** (los que tienen un proceso de trabajo en curso) con su comuna,
-colaborador y avance; al pulsar uno se abre esa comuna y queda el territorio
+Sin comuna elegida, el panel muestra los **territorios activos** (los que tienen
+un proceso de trabajo en curso) dentro de un **marco verde** con ese título y el
+total, para que se distinga de un vistazo; cada tarjeta trae su comuna,
+colaborador y avance. Al pulsar una se abre esa comuna y queda el territorio
 seleccionado.
 
 ### Abrir / cerrar el panel

@@ -22,10 +22,19 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     persistSession: true,
     autoRefreshToken: true,
     storageKey: 'gps-desktop-session',
-    lock: (name, acquireTimeout, fn) =>
-      (typeof navigator !== 'undefined' && navigator.locks)
-        ? navigator.locks.request(name, () => fn())
-        : fn(),
+  },
+  // Token POR PETICIÓN: al recargar, las consultas REST/RPC salen siempre con
+  // el token vigente de la sesión (antes podían salir con el token viejo o
+  // anónimo → RLS respondía 0 filas hasta que el cliente sincronizaba headers).
+  // Sin lock custom: navigator.locks no soporta re-entrada y podía
+  // auto-bloquear los flujos de auth al recargar.
+  accessToken: async () => {
+    try {
+      const { data } = await db.auth.getSession();
+      return data?.session?.access_token ?? null;
+    } catch (_) {
+      return null;
+    }
   },
 });
 

@@ -195,7 +195,17 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 
 // T4: si la sesión caduca o se revoca (otra pestaña, refresh fallido),
 // volvemos al login en vez de dejar la UI operando con un cliente inválido.
-db.auth.onAuthStateChange((event, session) => {
+// Con la opción accessToken el cliente principal NO permite onAuthStateChange
+// (lanza en supabase-js ≥ 2.83): se usa un cliente de eventos ligero con el
+// MISMO storageKey, que ve la misma sesión sin refrescar tokens él mismo.
+const authEventos = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: false,
+    storageKey: 'gps-desktop-session',
+  },
+});
+authEventos.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT') {
     if (document.getElementById('appView').style.display === 'flex') location.reload();
     return;

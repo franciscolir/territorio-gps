@@ -15,6 +15,7 @@ create table public.puntos (
   notas text,
   geom geography(Point, 4326) not null,
   deleted_at timestamptz,
+  ultima_visita timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -55,16 +56,24 @@ create policy "profiles_select_self" on public.profiles
   for select to authenticated
   using (auth.uid() = id);
 
+grant select on public.profiles to authenticated;
+
 -- Comunas: lectura para todos los autenticados
 create policy "comunas_select_all" on public.comunas_rm
   for select to authenticated using (true);
 
+-- Proyectos nuevos de Supabase ya no otorgan privilegios por defecto a
+-- anon/authenticated en el esquema public: sin este grant, PostgREST
+-- responde "permission denied for table comunas_rm" y el selector de
+-- comunas queda vacío.
+grant select on public.comunas_rm to authenticated;
+
 -- PUNTOS — permisos por rol (el detalle vive en §12, porque las policies
--- referencian la columna sector_id y la tabla de asignaciones, que se
+-- referencian la columna territorio_id y la tabla de asignaciones, que se
 -- crean más abajo):
 --   · admin: ve todo y edita todo
---   · colaborador: ve solo su SECTOR ACTIVO y los puntos que él creó;
---     crea/edita solo dentro de ese sector (ver §12).
+--   · colaborador: ve solo su TERRITORIO ACTIVO y los puntos que él creó;
+--     crea/edita solo dentro de ese territorio (ver §12).
 drop policy if exists "puntos_select_all" on public.puntos;
 drop policy if exists "puntos_insert_auth" on public.puntos;
 drop policy if exists "puntos_update_admin" on public.puntos;
@@ -199,46 +208,46 @@ end;
 $$;
 
 -- ============================================================
--- 6. SECTORES (dibujados a mano en el mapa)
+-- 6. TERRITORIOS (dibujados a mano en el mapa)
 -- ============================================================
-create table if not exists public.sectores (
+create table if not exists public.territorios (
   id uuid primary key default gen_random_uuid(),
   comuna text,
-  nombre text not null default 'Sector',
+  nombre text not null default 'Territorio',
   color text not null default '#3b82f6',
   geom geometry(Polygon, 4326) not null,
   created_by uuid references auth.users(id),
   created_at timestamptz default now()
 );
 
-create index if not exists sectores_geom_idx on public.sectores using gist (geom);
+create index if not exists territorios_geom_idx on public.territorios using gist (geom);
 
-alter table public.sectores enable row level security;
+alter table public.territorios enable row level security;
 
 -- Permisos de tabla para los roles de PostgREST (sin esto da
--- "permission denied for table sectores" aunque las policies existan)
+-- "permission denied for table territorios" aunque las policies existan)
 grant usage on schema public to anon, authenticated;
-grant select, insert, update, delete on public.sectores to authenticated;
-grant select on public.sectores to anon;
+grant select, insert, update, delete on public.territorios to authenticated;
+grant select on public.territorios to anon;
 
--- SECTORES: admin ve todos; el colaborador solo su sector activo (§12).
-drop policy if exists "sectores_select_all" on public.sectores;
-drop policy if exists "sectores_insert_auth" on public.sectores;
-drop policy if exists "sectores_insert_admin" on public.sectores;
-create policy "sectores_insert_admin" on public.sectores
+-- TERRITORIOS: admin ve todos; el colaborador solo su territorio activo (§12).
+drop policy if exists "territorios_select_all" on public.territorios;
+drop policy if exists "territorios_insert_auth" on public.territorios;
+drop policy if exists "territorios_insert_admin" on public.territorios;
+create policy "territorios_insert_admin" on public.territorios
   for insert to authenticated
   with check (public.is_admin() and auth.uid() = created_by);
 
 -- Solo admin renombra / recolorea
-drop policy if exists "sectores_update_admin" on public.sectores;
-create policy "sectores_update_admin" on public.sectores
+drop policy if exists "territorios_update_admin" on public.territorios;
+create policy "territorios_update_admin" on public.territorios
   for update to authenticated
   using (public.is_admin())
   with check (public.is_admin());
 
 -- Solo admin elimina
-drop policy if exists "sectores_delete_admin" on public.sectores;
-create policy "sectores_delete_admin" on public.sectores
+drop policy if exists "territorios_delete_admin" on public.territorios;
+create policy "territorios_delete_admin" on public.territorios
   for delete to authenticated
   using (public.is_admin());
 
@@ -255,7 +264,9 @@ create table if not exists public.app_config (
 alter table public.app_config enable row level security;
 
 grant usage on schema public to anon, authenticated;
-grant select, insert, update, delete on public.app_config to authenticated;
+-- Sin `delete`: la app solo lee y hace upsert (insert + update). El DELETE
+-- queda para service_role (scripts). Migración 012 si la tabla ya existía.
+grant select, insert, update on public.app_config to authenticated;
 grant select on public.app_config to anon;
 -- service_role (scripts con SERVICE_ROLE_KEY) también necesita acceso,
 -- si no PostgREST responde "permission denied for table app_config"
@@ -284,11 +295,11 @@ values ('comunas_activas', null)
 on conflict (key) do nothing;
 
 -- ============================================================
--- 8. GUARDAR SECTOR CON RECORTE GARANTIZADO
+-- 8. GUARDAR TERRITORIO CON RECORTE GARANTIZADO
 -- ============================================================
 -- Pieza poligonal de mayor área: makevalid / intersection / difference
 -- pueden devolver colecciones o varios trozos (p.ej. un vecino parte el
--- sector en dos). Se usa dentro de guardar_sector.
+-- territorio en dos). Se usa dentro de guardar_territorio.
 create or replace function public.mayor_poligono(g geometry)
 returns geometry
 language sql
@@ -306,11 +317,11 @@ $$;
 
 -- Recorta el polígono nuevo antes de insertarlo:
 --   1. nunca fuera de la comuna elegida (o de la RM si no hay comuna)
---   2. nunca solapando sectores existentes (se resta la unión de vecinos)
---   3. misma rejilla de coordenadas (≈1 cm) en todos los sectores
+--   2. nunca solapando territorios existentes (se resta la unión de vecinos)
+--   3. misma rejilla de coordenadas (≈1 cm) en todos los territorios
 -- Devuelve { id, pct, recortado }: pct = % del área dibujada que sobrevivió
 -- al recorte; si es < 2% se rechaza (caso "lo dibujó casi sobre otro").
-create or replace function public.guardar_sector(
+create or replace function public.guardar_territorio(
   p_comuna text,
   p_nombre text,
   p_color text,
@@ -333,15 +344,15 @@ begin
     raise exception 'La geometría dibujada está vacía';
   end if;
 
-  -- T2: solo administración crea sectores (defensa en profundidad: ya lo
+  -- T2: solo administración crea territorios (defensa en profundidad: ya lo
   -- exige la policy de insert, aquí se avisa antes de recortar nada)
   if not public.is_admin() then
-    raise exception 'Solo un administrador puede crear sectores';
+    raise exception 'Solo un administrador puede crear territorios';
   end if;
 
   -- Serializa los guardados: el chequeo de solape (st_union de vecinos)
   -- deja de ser correcto si dos usuarios guardan a la vez.
-  perform pg_advisory_xact_lock(hashtext('public.sectores'));
+  perform pg_advisory_xact_lock(hashtext('public.territorios'));
 
   -- Polígono válido (si el trazo se autointersecta, nos quedamos con la
   -- pieza mayor) y su área de referencia
@@ -365,35 +376,35 @@ begin
   if v_base is not null then
     v_geom := public.mayor_poligono(st_intersection(v_geom, v_base));
     if v_geom is null or st_isempty(v_geom) then
-      raise exception 'El sector queda completamente fuera de la comuna';
+      raise exception 'El territorio queda completamente fuera de la comuna';
     end if;
   end if;
 
-  -- 2) Contra los sectores existentes (cero solapes)
+  -- 2) Contra los territorios existentes (cero solapes)
   select st_union(public.mayor_poligono(s.geom))
   into v_nb
-  from public.sectores s;
+  from public.territorios s;
   if v_nb is not null then
     v_geom := public.mayor_poligono(st_difference(v_geom, v_nb));
     if v_geom is null or st_isempty(v_geom) then
-      raise exception 'El sector queda completamente dentro de otro sector';
+      raise exception 'El territorio queda completamente dentro de otro territorio';
     end if;
   end if;
 
   -- 3) Regla: como mínimo el 2% del área dibujada debe sobrevivir
   v_pct := st_area(v_geom::geography) / nullif(v_area0, 0);
   if v_pct is null or v_pct < 0.02 then
-    raise exception 'Quedó menos del 2%% del área dibujada (se solapa casi por completo con otro sector)';
+    raise exception 'Quedó menos del 2%% del área dibujada (se solapa casi por completo con otro territorio)';
   end if;
 
-  -- 4) Misma rejilla que el resto de los sectores e insert
+  -- 4) Misma rejilla que el resto de los territorios e insert
   v_geom := st_snaptogrid(v_geom, 1e-7);
   v_geom := public.mayor_poligono(v_geom);
   if v_geom is null or st_isempty(v_geom) then
     raise exception 'No se pudo preparar la geometría para guardar';
   end if;
 
-  insert into public.sectores (comuna, nombre, color, geom, created_by)
+  insert into public.territorios (comuna, nombre, color, geom, created_by)
   values (p_comuna, p_nombre, p_color, v_geom, auth.uid())
   returning id into v_id;
 
@@ -406,7 +417,7 @@ end;
 $$;
 
 -- ============================================================
--- 9. ESTADO DE PUNTOS Y ASIGNACIÓN DE SECTORES
+-- 9. ESTADO DE PUNTOS Y ASIGNACIÓN DE TERRITORIOS
 -- ============================================================
 -- Migración para bases que ya tenían la versión con "categoria".
 -- Deja todos los puntos existentes en estado 'pendiente'.
@@ -508,52 +519,56 @@ begin
 end;
 $$;
 
--- 9.3 Asignación de sector a un usuario (uno por sector).
+-- 9.3 Asignación de territorio a un usuario (uno por territorio).
 --     Ciclo de vida (T-colaborador): estado 'activa' | 'devuelta'. Un
---     colaborador devuelve el sector aunque no cubra el 100%; al devolverlo
+--     colaborador devuelve el territorio aunque no cubra el 100%; al devolverlo
 --     desaparece de su app (RLS) y queda libre para reasignar. El historial
 --     se conserva con devuelta_at / devuelta_por.
-create table if not exists public.sectores_asignaciones (
-  sector_id uuid primary key references public.sectores(id) on delete cascade,
+create table if not exists public.territorios_asignaciones (
+  id uuid primary key default gen_random_uuid(),
+  territorio_id uuid not null references public.territorios(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   assigned_by uuid references auth.users(id),
   assigned_at timestamptz default now(),
   estado text not null default 'activa',
+  notas text,
   devuelta_at timestamptz,
   devuelta_por uuid references auth.users(id),
-  constraint sectores_asig_estado_chk check (estado in ('activa', 'devuelta'))
+  completado_at timestamptz,
+  completado_por uuid references auth.users(id),
+  constraint territorios_asig_estado_chk check (estado in ('activa', 'devuelta', 'completado'))
 );
 
--- Un sector solo puede estar con UN usuario activo a la vez, y un usuario
--- solo puede tener UN sector activo (índices parciales: no bloquean el
+-- Un territorio solo puede estar con UN usuario activo a la vez, y un usuario
+-- solo puede tener UN territorio activo (índices parciales: no bloquean el
 -- historial de devueltas).
-create unique index if not exists sectores_asig_activa_sector
-  on public.sectores_asignaciones (sector_id) where estado = 'activa';
-create unique index if not exists sectores_asig_activa_user
-  on public.sectores_asignaciones (user_id) where estado = 'activa';
+create unique index if not exists territorios_asig_activa_territorio
+  on public.territorios_asignaciones (territorio_id) where estado = 'activa';
+create unique index if not exists territorios_asig_activa_user
+  on public.territorios_asignaciones (user_id) where estado = 'activa';
 
-alter table public.sectores_asignaciones enable row level security;
+alter table public.territorios_asignaciones enable row level security;
 
 grant usage on schema public to anon, authenticated;
-grant select, insert, update, delete on public.sectores_asignaciones to authenticated;
-grant select, insert, update, delete on public.sectores_asignaciones to service_role;
+grant select, insert, update, delete on public.territorios_asignaciones to authenticated;
+grant select, insert, update, delete on public.territorios_asignaciones to service_role;
 
 -- Admin ve todas (activas y devueltas); el colaborador solo la suya.
-drop policy if exists "asig_select" on public.sectores_asignaciones;
-create policy "asig_select_propia" on public.sectores_asignaciones
+drop policy if exists "asig_select" on public.territorios_asignaciones;
+create policy "asig_select_propia" on public.territorios_asignaciones
   for select to authenticated
   using (public.is_admin() or user_id = auth.uid());
 
-drop policy if exists "asig_insert_admin" on public.sectores_asignaciones;
-create policy "asig_insert_admin" on public.sectores_asignaciones
+drop policy if exists "asig_insert_admin" on public.territorios_asignaciones;
+create policy "asig_insert_admin" on public.territorios_asignaciones
   for insert to authenticated with check (public.is_admin());
 
-drop policy if exists "asig_update_admin" on public.sectores_asignaciones;
-create policy "asig_update_admin" on public.sectores_asignaciones
+drop policy if exists "asig_update_admin" on public.territorios_asignaciones;
+create policy "asig_update_admin" on public.territorios_asignaciones
   for update to authenticated using (public.is_admin()) with check (public.is_admin());
 
-drop policy if exists "asig_delete_admin" on public.sectores_asignaciones;
-create policy "asig_delete_admin" on public.sectores_asignaciones
+drop policy if exists "asig_delete_admin" on public.territorios_asignaciones;
+create policy "asig_delete_admin" on public.territorios_asignaciones
   for delete to authenticated using (public.is_admin());
 
 -- 9.4 Listar usuarios para asignar (los perfiles solo son visibles por su dueño;
@@ -592,15 +607,15 @@ set search_path = public
 as $$
 declare
   v_prev public.estado_punto;
-  v_sector uuid;
+  v_territorio uuid;
   v_owner uuid;
 begin
   if auth.uid() is null then
     raise exception 'No autenticado';
   end if;
 
-  select puntos.estado, puntos.sector_id, puntos.user_id
-  into v_prev, v_sector, v_owner
+  select puntos.estado, puntos.territorio_id, puntos.user_id
+  into v_prev, v_territorio, v_owner
   from public.puntos
   where puntos.id = p_id and puntos.deleted_at is null
   for update;
@@ -609,12 +624,12 @@ begin
     raise exception 'Punto no encontrado';
   end if;
 
-  -- T-colaborador: solo su sector activo (o puntos que él mismo creó).
+  -- T-colaborador: solo su territorio activo (o puntos que él mismo creó).
   -- Antes cualquier autenticado podía cambiar el estado de cualquier punto.
   if not public.is_admin()
      and v_owner is distinct from auth.uid()
-     and v_sector is distinct from public.sector_activo_usuario(auth.uid()) then
-    raise exception 'Punto fuera de tu sector';
+     and v_territorio is distinct from public.territorio_activo_usuario(auth.uid()) then
+    raise exception 'Punto fuera de tu territorio';
   end if;
 
   if v_prev = p_estado then
@@ -623,6 +638,8 @@ begin
 
   update public.puntos
   set estado = p_estado,
+      -- "última visita" = último cambio a un estado no pendiente
+      ultima_visita = case when p_estado = 'pendiente' then ultima_visita else now() end,
       updated_at = now()
   where id = p_id;
 
@@ -634,36 +651,36 @@ revoke execute on function public.marcar_estado(uuid, public.estado_punto) from 
 grant execute on function public.marcar_estado(uuid, public.estado_punto) to authenticated;
 
 -- ============================================================
--- 11. SECTOR_ID + ÍNDICES (T6)
+-- 11. TERRITORIO_ID + ÍNDICES (T6)
 -- ============================================================
--- La pertenencia punto→sector se calculaba en el cliente con ray-casting en
+-- La pertenencia punto→territorio se calculaba en el cliente con ray-casting en
 -- cada render. Ahora la mantiene la DB: la lista, los contadores y los
 -- avances pasan a ser una comparación de ids.
 alter table public.puntos
-  add column if not exists sector_id uuid references public.sectores(id) on delete set null;
+  add column if not exists territorio_id uuid references public.territorios(id) on delete set null;
 
 create index if not exists puntos_estado_idx
   on public.puntos (estado) where deleted_at is null;
-create index if not exists puntos_sector_idx
-  on public.puntos (sector_id) where deleted_at is null;
+create index if not exists puntos_territorio_idx
+  on public.puntos (territorio_id) where deleted_at is null;
 
 -- Poblado inicial de los puntos existentes
 update public.puntos p
-set sector_id = s.id
-from public.sectores s
+set territorio_id = s.id
+from public.territorios s
 where p.deleted_at is null
-  and p.sector_id is null
+  and p.territorio_id is null
   and st_covers(s.geom, p.geom::geometry);
 
--- Recalcula el sector al insertar o mover un punto
-create or replace function public.puntos_sync_sector()
+-- Recalcula el territorio al insertar o mover un punto
+create or replace function public.puntos_sync_territorio()
 returns trigger
 language plpgsql
 set search_path = public
 as $$
 begin
-  select s.id into new.sector_id
-  from public.sectores s
+  select s.id into new.territorio_id
+  from public.territorios s
   where st_covers(s.geom, new.geom::geometry)
   order by st_area(s.geom) desc
   limit 1;
@@ -671,23 +688,23 @@ begin
 end;
 $$;
 
-drop trigger if exists puntos_sync_sector on public.puntos;
-create trigger puntos_sync_sector
+drop trigger if exists puntos_sync_territorio on public.puntos;
+create trigger puntos_sync_territorio
   before insert or update of geom on public.puntos
-  for each row execute function public.puntos_sync_sector();
+  for each row execute function public.puntos_sync_territorio();
 
--- Al crear o borrar un sector hay que reasignar los puntos afectados.
--- OJO: este trigger solo toca sector_id (nunca geom), así que no vuelve a
--- disparar puntos_sync_sector y no hay bucle.
-create or replace function public.sectores_resync_puntos()
+-- Al crear o borrar un territorio hay que reasignar los puntos afectados.
+-- OJO: este trigger solo toca territorio_id (nunca geom), así que no vuelve a
+-- disparar puntos_sync_territorio y no hay bucle.
+create or replace function public.territorios_resync_puntos()
 returns trigger
 language plpgsql
 set search_path = public
 as $$
 begin
   update public.puntos p
-  set sector_id = (
-    select s.id from public.sectores s
+  set territorio_id = (
+    select s.id from public.territorios s
     where st_covers(s.geom, p.geom::geometry)
     order by st_area(s.geom) desc
     limit 1
@@ -697,39 +714,39 @@ begin
 end;
 $$;
 
-drop trigger if exists sectores_resync_puntos on public.sectores;
-create trigger sectores_resync_puntos
-  after insert or delete on public.sectores
-  for each row execute function public.sectores_resync_puntos();
+drop trigger if exists territorios_resync_puntos on public.territorios;
+create trigger territorios_resync_puntos
+  after insert or delete on public.territorios
+  for each row execute function public.territorios_resync_puntos();
 
 -- ============================================================
--- 12. COLABORADOR: SECTOR ÚNICO + DEVOLUCIÓN (T-colaborador)
+-- 12. COLABORADOR: TERRITORIO ÚNICO + DEVOLUCIÓN (T-colaborador)
 -- ============================================================
--- Modelo: el admin asigna un sector a un colaborador (§9.3); el
--- colaborador ve SOLO ese sector y sus puntos, puede crear/editar puntos
+-- Modelo: el admin asigna un territorio a un colaborador (§9.3); el
+-- colaborador ve SOLO ese territorio y sus puntos, puede crear/editar puntos
 -- dentro de él y devolverlo aunque no cubra el 100%. Al devolverlo deja
--- de verlo y el sector queda libre para reasignar.
+-- de verlo y el territorio queda libre para reasignar.
 
 -- Helper security definer: las policies de §4/§6 llaman a esta función y
--- no pueden consultar sectores_asignaciones con su propio RLS (círculo
+-- no pueden consultar territorios_asignaciones con su propio RLS (círculo
 -- vicioso); ejecutando como owner se resuelve, igual que is_admin().
-create or replace function public.sector_activo_usuario(p_uid uuid)
+create or replace function public.territorio_activo_usuario(p_uid uuid)
 returns uuid
 language sql
 security definer
 set search_path = public
 as $$
-  select a.sector_id
-  from public.sectores_asignaciones a
+  select a.territorio_id
+  from public.territorios_asignaciones a
   where a.user_id = p_uid and a.estado = 'activa'
   limit 1;
 $$;
 
-revoke execute on function public.sector_activo_usuario(uuid) from public, anon;
-grant execute on function public.sector_activo_usuario(uuid) to authenticated;
+revoke execute on function public.territorio_activo_usuario(uuid) from public, anon;
+grant execute on function public.territorio_activo_usuario(uuid) to authenticated;
 
--- Policies de puntos (sector_id y asignaciones ya existen aquí):
---   SELECT: admin ve todo; colaborador su sector activo + lo que él creó
+-- Policies de puntos (territorio_id y asignaciones ya existen aquí):
+--   SELECT: admin ve todo; colaborador su territorio activo + lo que él creó
 drop policy if exists "puntos_select_colab" on public.puntos;
 create policy "puntos_select_colab" on public.puntos
   for select to authenticated
@@ -738,12 +755,12 @@ create policy "puntos_select_colab" on public.puntos
     and (
       public.is_admin()
       or user_id = auth.uid()
-      or sector_id = public.sector_activo_usuario(auth.uid())
+      or territorio_id = public.territorio_activo_usuario(auth.uid())
     )
   );
 
---   INSERT: el colaborador solo dentro de su sector activo (el trigger
---   puntos_sync_sector ya seteó sector_id antes de la comprobación)
+--   INSERT: el colaborador solo dentro de su territorio activo (el trigger
+--   puntos_sync_territorio ya seteó territorio_id antes de la comprobación)
 drop policy if exists "puntos_insert_colab" on public.puntos;
 create policy "puntos_insert_colab" on public.puntos
   for insert to authenticated
@@ -751,29 +768,34 @@ create policy "puntos_insert_colab" on public.puntos
     auth.uid() = user_id
     and (
       public.is_admin()
-      or sector_id = public.sector_activo_usuario(auth.uid())
+      or territorio_id = public.territorio_activo_usuario(auth.uid())
     )
   );
 
---   UPDATE: colaborador sobre puntos de su sector activo; el trigger
---   puntos_bloquear_columnas impide tocar user_id/deleted_at/estado
+--   UPDATE: colaborador sobre puntos de su territorio activo; el trigger
+--   puntos_bloquear_columnas impide tocar user_id (y deleted_at ajeno),
+--   pero deja pasar cambios de estado dentro del territorio
 drop policy if exists "puntos_update_colab" on public.puntos;
 create policy "puntos_update_colab" on public.puntos
   for update to authenticated
   using (
     public.is_admin()
-    or sector_id = public.sector_activo_usuario(auth.uid())
+    or territorio_id = public.territorio_activo_usuario(auth.uid())
   )
   with check (
     public.is_admin()
-    or sector_id = public.sector_activo_usuario(auth.uid())
+    or territorio_id = public.territorio_activo_usuario(auth.uid())
   );
 
--- Policy de sectores: admin ve todos; colaborador solo su sector activo
-drop policy if exists "sectores_select_colab" on public.sectores;
-create policy "sectores_select_colab" on public.sectores
+-- Grants de puntos: el front hoy solo lee la tabla (las escrituras van por
+-- RPCs), pero insert/update quedan por si se usan writes directos.
+grant select, insert, update on public.puntos to authenticated;
+
+-- Policy de territorios: admin ve todos; colaborador solo su territorio activo
+drop policy if exists "territorios_select_colab" on public.territorios;
+create policy "territorios_select_colab" on public.territorios
   for select to authenticated
-  using (public.is_admin() or id = public.sector_activo_usuario(auth.uid()));
+  using (public.is_admin() or id = public.territorio_activo_usuario(auth.uid()));
 
 -- Trigger: un no-admin no puede tocar user_id / deleted_at / estado con un
 -- UPDATE normal (el estado pasa solo por marcar_estado; el borrado lógico
@@ -787,11 +809,18 @@ begin
   if public.is_admin() then
     return new;
   end if;
-  if new.user_id is distinct from old.user_id
-     or new.deleted_at is distinct from old.deleted_at
-     or new.estado is distinct from old.estado then
-    raise exception 'Sin permiso para modificar user_id, deleted_at o estado';
+  -- user_id: un no-admin nunca lo toca (no "robar" puntos)
+  if new.user_id is distinct from old.user_id then
+    raise exception 'Sin permiso para modificar user_id';
   end if;
+  -- deleted_at: solo sobre puntos propios (las RPCs security definer
+  -- validan lo mismo; esto cubre también actualizaciones directas)
+  if new.deleted_at is distinct from old.deleted_at
+     and old.user_id is distinct from auth.uid() then
+    raise exception 'Solo puedes eliminar puntos que tú creaste';
+  end if;
+  -- estado: el colaborador SÍ puede cambiarlo dentro de su territorio
+  -- (lo validan RLS y la RPC marcar_estado)
   return new;
 end;
 $$;
@@ -801,39 +830,39 @@ create trigger puntos_bloquear_columnas
   before update on public.puntos
   for each row execute function public.puntos_bloquear_columnas();
 
--- Devolver el sector asignado (el colaborador, aunque no cubra el 100%).
--- Devuelve el sector_id para que el front refresque al instante.
-create or replace function public.devolver_sector()
+-- Devolver el territorio asignado (el colaborador, aunque no cubra el 100%).
+-- Devuelve el territorio_id para que el front refresque al instante.
+create or replace function public.devolver_territorio()
 returns uuid
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_sector uuid;
+  v_territorio uuid;
 begin
   if auth.uid() is null then
     raise exception 'No autenticado';
   end if;
 
-  update public.sectores_asignaciones
+  update public.territorios_asignaciones
   set estado = 'devuelta',
       devuelta_at = now(),
       devuelta_por = auth.uid()
   where user_id = auth.uid() and estado = 'activa'
-  returning sector_id into v_sector;
+  returning territorio_id into v_territorio;
 
-  if v_sector is null then
-    raise exception 'No tienes un sector asignado';
+  if v_territorio is null then
+    raise exception 'No tienes un territorio asignado';
   end if;
-  return v_sector;
+  return v_territorio;
 end;
 $$;
 
-revoke execute on function public.devolver_sector() from public, anon;
-grant execute on function public.devolver_sector() to authenticated;
+revoke execute on function public.devolver_territorio() from public, anon;
+grant execute on function public.devolver_territorio() to authenticated;
 
--- Editar campos de terreno de un punto del sector activo (nombre,
+-- Editar campos de terreno de un punto del territorio activo (nombre,
 -- dirección, notas y coordenadas). Las coordenadas nuevas deben seguir
 -- dentro del polígono; estado y borrado tienen sus propias RPCs.
 create or replace function public.actualizar_punto_terreno(
@@ -850,23 +879,23 @@ security definer
 set search_path = public, extensions
 as $$
 declare
-  v_sector uuid;
+  v_territorio uuid;
 begin
   if auth.uid() is null then
     raise exception 'No autenticado';
   end if;
 
-  select public.sector_activo_usuario(auth.uid()) into v_sector;
-  if v_sector is null then
-    raise exception 'No tienes un sector asignado';
+  select public.territorio_activo_usuario(auth.uid()) into v_territorio;
+  if v_territorio is null then
+    raise exception 'No tienes un territorio asignado';
   end if;
 
   if not exists (
-    select 1 from public.sectores s
-    where s.id = v_sector
+    select 1 from public.territorios s
+    where s.id = v_territorio
       and st_covers(s.geom, st_setsrid(st_makepoint(p_lng, p_lat), 4326))
   ) then
-    raise exception 'Las coordenadas quedan fuera de tu sector';
+    raise exception 'Las coordenadas quedan fuera de tu territorio';
   end if;
 
   update public.puntos
@@ -877,10 +906,10 @@ begin
       updated_at = now()
   where id = p_id
     and deleted_at is null
-    and sector_id = v_sector;
+    and territorio_id = v_territorio;
 
   if not found then
-    raise exception 'Punto no disponible en tu sector';
+    raise exception 'Punto no disponible en tu territorio';
   end if;
   return p_id;
 end;
@@ -915,3 +944,337 @@ $$;
 
 revoke execute on function public.eliminar_punto_propio(uuid) from public, anon;
 grant execute on function public.eliminar_punto_propio(uuid) to authenticated;
+
+-- 12.x Reinicio al (re)asignar: cada asignación activa inicia un proceso
+--      nuevo. Los puntos 'visitado' vuelven a 'pendiente'; 'erroneo' y
+--      'no_pasar' se heredan tal cual. Si tras eso no queda ningún punto
+--      por visitar, el proceso recién abierto se cierra como 'completado'
+--      (sin esto, un territorio 100 % erróneo/no_pasar o vacío quedaría
+--      'En proceso' para siempre: el UPDATE de arriba no tocaría ninguna
+--      fila y territorios_autocompletar no llegaría a dispararse).
+create or replace function public.territorio_reiniciar_visitados()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.estado <> 'activa' then
+    return new;
+  end if;
+
+  update public.puntos
+  set estado = 'pendiente',
+      updated_at = now()
+  where territorio_id = new.territorio_id
+    and deleted_at is null
+    and estado = 'visitado';
+
+  if not exists (
+    select 1
+    from public.puntos p
+    where p.territorio_id = new.territorio_id
+      and p.deleted_at is null
+      and p.estado = 'pendiente'
+  ) then
+    update public.territorios_asignaciones
+    set estado = 'completado',
+        completado_at = coalesce(completado_at, now())
+    where id = new.id;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists territorios_asig_reiniciar on public.territorios_asignaciones;
+create trigger territorios_asig_reiniciar
+  after insert on public.territorios_asignaciones
+  for each row
+  execute function public.territorio_reiniciar_visitados();
+
+-- ============================================================
+-- 13. CIERRE DE TERRITORIOS E HISTORIAL (T-historial)
+-- ============================================================
+-- El proceso de un territorio se cierra cuando ya no quedan puntos
+-- pendientes (automático) o cuando el admin lo decide (manual).
+
+-- 13.1 Autocompletar: al cambiar el estado de un punto, si al territorio no
+--      le quedan 'pendiente', su asignación activa pasa a 'completado'.
+create or replace function public.territorios_autocompletar()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_territorio uuid;
+begin
+  v_territorio := coalesce(new.territorio_id, old.territorio_id);
+  if v_territorio is null then
+    return new;
+  end if;
+
+  if not exists (
+    select 1 from public.puntos p
+    where p.territorio_id = v_territorio
+      and p.deleted_at is null
+      and p.estado = 'pendiente'
+  ) then
+    update public.territorios_asignaciones
+    set estado = 'completado',
+        completado_at = coalesce(completado_at, now())
+    where territorio_id = v_territorio
+      and estado = 'activa';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists territorios_autocompletar on public.puntos;
+create trigger territorios_autocompletar
+  after update of estado on public.puntos
+  for each row execute function public.territorios_autocompletar();
+
+-- 13.2 Cierre manual (solo admin): marca la asignación activa como completada
+--      y guarda las notas del proceso.
+create or replace function public.completar_territorio(
+  p_territorio uuid,
+  p_notas text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Solo un administrador puede completar territorios';
+  end if;
+
+  update public.territorios_asignaciones
+  set estado = 'completado',
+      completado_at = coalesce(completado_at, now()),
+      completado_por = auth.uid(),
+      notas = coalesce(p_notas, notas)
+  where territorio_id = p_territorio
+    and estado = 'activa';
+
+  if not found then
+    raise exception 'El territorio no tiene un proceso en curso';
+  end if;
+  return p_territorio;
+end;
+$$;
+
+revoke execute on function public.completar_territorio(uuid, text) from public, anon;
+grant execute on function public.completar_territorio(uuid, text) to authenticated;
+
+-- 13.3 Listar usuarios con su estado (solo admin): perfil + territorio activo.
+create or replace function public.listar_usuarios()
+returns table (
+  id uuid,
+  email text,
+  is_admin boolean,
+  territorio_id uuid,
+  territorio text,
+  desde timestamptz
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select p.id,
+         coalesce(p.email, '')::text as email,
+         coalesce(p.is_admin, false) as is_admin,
+         a.territorio_id,
+         t.nombre as territorio,
+         a.assigned_at as desde
+  from public.profiles p
+  left join public.territorios_asignaciones a
+    on a.user_id = p.id and a.estado = 'activa'
+  left join public.territorios t
+    on t.id = a.territorio_id
+  where public.is_admin()
+  order by p.email;
+$$;
+
+revoke execute on function public.listar_usuarios() from public, anon;
+grant execute on function public.listar_usuarios() to authenticated;
+
+-- ============================================================
+-- 14. Bitácora de movimientos por punto (historial de un punto)
+-- ============================================================
+-- Una fila por movimiento del punto (creación, cambio de estado, cambio de
+-- territorio, borrado/restauración y edición de notas). La escribe un trigger
+-- (security definer) y la lee la RPC punto_historial(); el cliente no tiene
+-- insert/update/delete sobre la tabla.
+
+create table if not exists public.puntos_historial (
+  id uuid primary key default gen_random_uuid(),
+  punto_id uuid not null references public.puntos(id) on delete cascade,
+  tipo text not null,
+  estado_anterior text,
+  estado_nuevo text,
+  territorio_anterior uuid,
+  territorio_nuevo uuid,
+  user_id uuid references auth.users(id),
+  at timestamptz not null default now(),
+  constraint puntos_historial_tipo_chk check (
+    tipo in ('creado', 'estado', 'territorio', 'borrado', 'restaurado', 'nota')
+  )
+);
+
+create index if not exists puntos_hist_punto_idx
+  on public.puntos_historial (punto_id, at desc);
+
+alter table public.puntos_historial enable row level security;
+
+create or replace function public.puntos_historial_log()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    insert into public.puntos_historial
+      (punto_id, tipo, estado_nuevo, territorio_nuevo, user_id)
+    values
+      (new.id, 'creado', new.estado::text, new.territorio_id, auth.uid());
+    return new;
+  end if;
+
+  if new.estado is distinct from old.estado then
+    insert into public.puntos_historial
+      (punto_id, tipo, estado_anterior, estado_nuevo, user_id)
+    values
+      (new.id, 'estado', old.estado::text, new.estado::text, auth.uid());
+  end if;
+
+  if new.territorio_id is distinct from old.territorio_id then
+    insert into public.puntos_historial
+      (punto_id, tipo, territorio_anterior, territorio_nuevo, user_id)
+    values
+      (new.id, 'territorio', old.territorio_id, new.territorio_id, auth.uid());
+  end if;
+
+  if new.deleted_at is distinct from old.deleted_at then
+    insert into public.puntos_historial
+      (punto_id, tipo, user_id)
+    values
+      (new.id, case when new.deleted_at is not null then 'borrado' else 'restaurado' end,
+       auth.uid());
+  end if;
+
+  if new.notas is distinct from old.notas then
+    insert into public.puntos_historial
+      (punto_id, tipo, user_id)
+    values
+      (new.id, 'nota', auth.uid());
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists puntos_historial_ins on public.puntos;
+create trigger puntos_historial_ins
+  after insert on public.puntos
+  for each row execute function public.puntos_historial_log();
+
+drop trigger if exists puntos_historial_upd on public.puntos;
+create trigger puntos_historial_upd
+  after update on public.puntos
+  for each row execute function public.puntos_historial_log();
+
+create or replace function public.punto_historial(p_punto uuid)
+returns table (
+  ev_at timestamptz,
+  ev_tipo text,
+  ev_actor text,
+  ev_detalle text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_territorio uuid;
+  v_owner uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'No autenticado';
+  end if;
+
+  select puntos.territorio_id, puntos.user_id
+  into v_territorio, v_owner
+  from public.puntos
+  where puntos.id = p_punto and puntos.deleted_at is null;
+
+  if not found then
+    raise exception 'Punto no encontrado';
+  end if;
+
+  if not public.is_admin()
+     and v_owner is distinct from auth.uid()
+     and v_territorio is distinct from public.territorio_activo_usuario(auth.uid()) then
+    raise exception 'Sin permiso para ver este punto';
+  end if;
+
+  return query
+    select h.at,
+           h.tipo,
+           coalesce(p.email, 'Sistema'),
+           case h.tipo
+             when 'creado' then 'Punto creado'
+             when 'estado' then 'Estado: ' || coalesce(h.estado_anterior, '—') ||
+                                ' → ' || coalesce(h.estado_nuevo, '—')
+             when 'territorio' then 'Territorio: ' || coalesce(tn.nombre, '(ninguno)')
+             when 'borrado' then 'Marcado como eliminado'
+             when 'restaurado' then 'Restaurado'
+             when 'nota' then 'Notas actualizadas'
+             else h.tipo
+           end
+    from public.puntos_historial h
+    left join public.profiles p on p.id = h.user_id
+    left join public.territorios tn on tn.id = h.territorio_nuevo
+    where h.punto_id = p_punto
+
+    union all
+
+    select a.assigned_at,
+           'asignado',
+           coalesce(p.email, '—'),
+           'Asignado a ' || coalesce(p.email, '—')
+    from public.territorios_asignaciones a
+    left join public.profiles p on p.id = a.user_id
+    where a.territorio_id = v_territorio and a.assigned_at is not null
+
+    union all
+
+    select a.devuelta_at,
+           'devuelto',
+           coalesce(p.email, '—'),
+           'Territorio devuelto'
+    from public.territorios_asignaciones a
+    left join public.profiles p on p.id = a.devuelta_por
+    where a.territorio_id = v_territorio and a.devuelta_at is not null
+
+    union all
+
+    select a.completado_at,
+           'completado',
+           coalesce(p.email, '—'),
+           'Territorio completado'
+    from public.territorios_asignaciones a
+    left join public.profiles p on p.id = a.completado_por
+    where a.territorio_id = v_territorio and a.completado_at is not null
+
+    order by 1 desc nulls last;
+end;
+$$;
+
+revoke execute on function public.punto_historial(uuid) from public, anon;
+grant execute on function public.punto_historial(uuid) to authenticated;

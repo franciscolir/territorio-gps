@@ -20,6 +20,9 @@ const browser = {
   requestAnimationFrame: 'readonly',
   supabase: 'readonly',
   maplibregl: 'readonly',
+  MutationObserver: 'readonly',
+  Blob: 'readonly',
+  URL: 'readonly',
 };
 
 // Lo que lib.js expone a app.js (script clásico, sin módulos)
@@ -28,7 +31,11 @@ const libGlobals = Object.fromEntries(
     'SEGMENTOS', 'ESTADOS', 'PIN_ICONS', 'estadoLabel', 'estadoClass',
     'escapeHtml', 'pointFromGeom', 'pointInGeometry', 'inRing',
     'ringArea', 'ringToEwkt', 'createCircle', 'coordsFromLink', 'parseCoordQuery',
-    'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'sectorAvance',
+    'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'territorioAvance',
+    'distMeters', 'duplicadoCercano', 'DUP_METROS', 'csvEscape',
+    'territorioFeatureCollection',
+    'GEO_MIN_MS', 'GEO_MAX', 'GEO_TTL_MS', 'geoClave', 'geoCacheLeer', 'geoCachePoner',
+    'agruparPuntos',
   ].map((k) => [k, 'readonly'])
 );
 
@@ -67,9 +74,9 @@ export default [
     },
   },
 
-  // app.js (escritorio) y movil.js (terreno): código del navegador
+  // app.js: código del navegador
   {
-    files: ['app.js', 'movil.js'],
+    files: ['app.js'],
     ...recommended,
     languageOptions: {
       ecmaVersion: 2022,
@@ -78,7 +85,7 @@ export default [
     },
     rules: {
       ...recommended.rules,
-      'no-unused-vars': ['warn', { args: 'none', varsIgnorePattern: '^_', caughtErrors: 'all', caughtErrorsIgnorePattern: '^_' }],
+      'no-unused-vars': ['error', { args: 'none', varsIgnorePattern: '^_', caughtErrors: 'all', caughtErrorsIgnorePattern: '^_' }],
       'no-empty': ['error', { allowEmptyCatch: true }],
       'no-console': 'off',
     },
@@ -95,7 +102,7 @@ export default [
     },
     rules: {
       ...recommended.rules,
-      'no-unused-vars': ['warn', { args: 'none' }],
+      'no-unused-vars': ['error', { args: 'none', varsIgnorePattern: '^_', caughtErrors: 'all', caughtErrorsIgnorePattern: '^_' }],
     },
   },
 ];

@@ -18,10 +18,17 @@
     --surface-lowest: #ffffff; --surface-low: #eff4ff; --surface-mid: #e6eeff;
     --surface-high: #dce9ff; --surface-highest: #d5e3fc;
     --on-surface: #0d1c2e; --on-surface-variant: #42474e;
-    --outline: #73777f; --outline-variant: #c3c7cf;
+    /* #6e727a y no #73777f: con blanco daba 4,49:1 y el texto fino (chips de
+       10-11 px, .muted, .empty) exige 4,5:1 en WCAG AA. Ahora 4,83:1. */
+    --outline: #6e727a; --outline-variant: #c3c7cf;
     --error: #ba1a1a; --error-container: #ffdad6; --on-error-container: #93000a;
     --green: #79db8d; --on-green: #005323;
     --green-strong: #95f8a7; --on-green-strong: #00210a; --tertiary-container: #003f19;
+    /* Semáforo de estados: pendiente azul · visitado verde · erróneo gris · no pasar rojo */
+    --est-pendiente: #4069f2; --est-pendiente-on: #ffffff;
+    --est-visitado: #95f8a7; --est-visitado-on: #00210a;
+    --est-erroneo: #6e727a; --est-erroneo-on: #ffffff;
+    --est-no_pasar: #ba1a1a; --est-no_pasar-on: #ffffff;
     --inverse-surface: #233144; --inverse-on-surface: #eaf1ff; --inverse-primary: #a7caf3;
     --r-sm: 4px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px;
     --shadow-1: 0 1px 2px rgba(13,28,46,.07), 0 1px 3px rgba(13,28,46,.05);
@@ -71,10 +78,149 @@
   /* ============ APP ============ */
   #appView { display: none; flex-direction: column; height: 100%; }
 
+  /* ============ BARRA SUPERIOR / VISTAS ============ */
+  #topbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 8px 14px; background: var(--primary); color: #fff;
+    box-shadow: var(--shadow-1); z-index: 60; flex-shrink: 0;
+  }
+  #topbar .tb-brand { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  #topbar .tb-brand .ms { font-size: 20px; }
+  #mainNav { display: flex; gap: 4px; flex: 1; }
+  #mainNav button {
+    border: 0; background: transparent; color: var(--inverse-primary);
+    font-family: inherit; font-weight: 600; font-size: 13px; cursor: pointer;
+    padding: 7px 12px; border-radius: var(--r-md); display: inline-flex; align-items: center; gap: 5px;
+  }
+  #mainNav button .ms { font-size: 16px; }
+  #mainNav button:hover { background: rgba(255,255,255,.12); color: #fff; }
+  #mainNav button.active { background: #fff; color: var(--primary); }
+  #topbar .tb-user { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  #topbar .tb-user .user { color: var(--inverse-primary); }
+  #topbar #logoutBtn { background: rgba(255,255,255,.14); color: #fff; }
+  #topbar #logoutBtn:hover { background: rgba(255,255,255,.28); }
+
+  .view-page {
+    display: none; flex: 1; flex-direction: column; min-height: 0;
+    padding: 16px; overflow: hidden; background: var(--surface);
+  }
+  .vp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .vp-head h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .07em; color: var(--on-surface-variant); }
+  .vp-tabs { display: flex; gap: 4px; background: var(--surface-mid); padding: 3px; border-radius: var(--r-md); }
+  .vp-head-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .vp-tabs button {
+    border: 0; background: transparent; font-family: inherit; font-weight: 700;
+    font-size: 12.5px; color: var(--on-surface-variant); padding: 6px 14px; border-radius: var(--r-sm); cursor: pointer;
+  }
+  .vp-tabs button.active { background: var(--surface-lowest); color: var(--primary); box-shadow: var(--shadow-1); }
+  /* Filtro por comuna del Historial (encabezado, junto a las pestañas) */
+  .vp-head-tools select {
+    border: 1px solid var(--outline-variant); background: var(--surface-lowest);
+    color: var(--on-surface); font-family: inherit; font-size: 12.5px; font-weight: 600;
+    padding: 7px 10px; border-radius: var(--r-sm); cursor: pointer; max-width: 210px;
+  }
+  .vp-head-tools select:focus { outline: 2px solid var(--secondary); outline-offset: 1px; }
+  .vp-body { flex: 1; min-height: 0; overflow: auto; }
+  .vp-body .empty { color: var(--outline); padding: 24px 4px; font-size: 13px; }
+
+  .hist-table {
+    width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--surface-lowest);
+    border-radius: var(--r-lg);
+    /* Recorta las esquinas redondeadas SIN crear un contenedor de scroll.
+       Con overflow:hidden la tabla se volvía el scrollport de la cabecera y
+       sticky dejaba de pegarse al .vp-body (encabezado que se perdía al bajar). */
+    overflow: hidden;
+    overflow: clip;
+    box-shadow: var(--shadow-1);
+  }
+  .hist-table th, .hist-table td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
+  .hist-table th {
+    position: sticky; top: 0; z-index: 3;
+    background: var(--surface-mid);
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--on-surface-variant);
+    box-shadow: inset 0 -1px 0 var(--outline-variant);
+  }
+  .hist-table tr:hover td { background: var(--surface-low); }
+  .hist-table .notas { max-width: 300px; color: var(--on-surface-variant); }
+  .hist-table .chip-est { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .hist-table .chip-est.activa { background: var(--est-pendiente); color: #fff; }
+  .hist-table .chip-est.devuelta { background: var(--surface-high); color: var(--on-surface-variant); }
+  .hist-table .chip-est.completado { background: var(--est-visitado); color: var(--est-visitado-on); }
+  .hist-table .mark.yes { color: var(--est-visitado); font-weight: 800; }
+  .hist-table .mark.no { color: var(--outline); }
+
+  /* Historial de puntos: filas combinadas con comuna/territorio en vertical */
+  .hist-table td.grp {
+    padding: 0; width: 30px; min-width: 30px; text-align: center; overflow: hidden;
+    border-right: 1px solid var(--outline-variant);
+  }
+  .hist-table .grp-h { width: 30px; min-width: 30px; padding-left: 6px; padding-right: 6px; }
+
+  /* Bandas por territorio (solo la tabla de puntos, .hist-grp):
+     un territorio con color, el siguiente sin color, y así sucesivamente,
+     para separar visualmente los puntos de cada sector. */
+  .hist-table.hist-grp tbody tr td { background: var(--surface-lowest); }
+  .hist-table.hist-grp tbody tr.band td { background: var(--surface-low); }
+  .hist-table.hist-grp td.grp.comuna { background: var(--surface-high); }
+  .hist-table.hist-grp tbody tr:hover td { background: var(--surface-mid); }
+  .hist-table.hist-grp tbody tr.band:hover td { background: var(--surface-high); }
+  .hist-table.hist-grp tbody tr:hover td.grp.comuna { background: var(--surface-highest); }
+
+  .hist-table td.grp span {
+    display: inline-block; white-space: nowrap; padding: 12px 0;
+    writing-mode: vertical-rl; transform: rotate(180deg);
+    font-size: 11px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--on-surface-variant);
+  }
+  .hist-table td.grp.terr span { color: var(--primary); }
+  .hist-table td.grp.comuna span { color: var(--primary); }
+  .hist-table .col-ver { text-align: right; white-space: nowrap; }
+  .hist-table .col-ver-h { width: 58px; }
+  .hist-table .ver-btn {
+    background: transparent; color: var(--primary); border: 1px solid var(--outline-variant);
+    border-radius: var(--r-md); padding: 4px 10px; font-size: 11.5px; font-weight: 700;
+  }
+  .hist-table .ver-btn:hover { background: var(--secondary); color: #fff; border-color: var(--secondary); }
+
+  /* Bitácora de movimientos de un punto */
+  .log-table .log-det { color: var(--on-surface); }
+  .log-table .log-tipo {
+    display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 9px;
+    border-radius: 999px; background: var(--surface-high); color: var(--on-surface-variant);
+    white-space: nowrap;
+  }
+  .log-table .log-tipo.estado { background: var(--est-pendiente); color: #fff; }
+  .log-table .log-tipo.creado { background: var(--surface-high); color: var(--on-surface); }
+  .log-table .log-tipo.territorio { background: var(--primary-container); color: var(--on-primary-container); }
+  .log-table .log-tipo.asignado { background: var(--est-pendiente); color: #fff; }
+  .log-table .log-tipo.devuelta,
+  .log-table .log-tipo.devuelto { background: var(--surface-high); color: var(--on-surface-variant); }
+  .log-table .log-tipo.completado { background: var(--est-visitado); color: var(--est-visitado-on); }
+  .log-table .log-tipo.borrado { background: rgba(186,26,26,.14); color: var(--error); }
+  /* Log de procesos de un territorio: nº de proceso y leyenda bajo la tabla */
+  .log-table .log-num { color: var(--outline); font-variant-numeric: tabular-nums; text-align: right; }
+  #puntoHistorial .ph-leyenda { margin-top: 10px; font-size: 12px; color: var(--on-surface-variant); }
+  .muted { color: var(--outline); }
+
+  .user-form {
+    display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;
+    background: var(--surface-lowest); padding: 12px; border-radius: var(--r-lg);
+    box-shadow: var(--shadow-1); margin-bottom: 8px;
+  }
+  .user-form label { display: block; font-size: 11px; font-weight: 700; color: var(--on-surface-variant); margin-bottom: 4px; }
+  .user-form input { padding: 8px 10px; border: 1px solid var(--outline-variant); border-radius: var(--r-md); font-family: inherit; font-size: 13px; background: var(--surface); }
+  #userFormErr { color: var(--error); font-size: 12px; margin: 0 0 8px; }
+  #userFormNote { color: var(--outline); font-size: 11.5px; margin-bottom: 10px; }
+
   /* ============ PANEL LATERAL ============ */
   button { font-family: inherit; cursor: pointer; }
   button.primary { background: var(--primary); color: var(--on-primary); border: 0; padding: 8px 12px; border-radius: var(--r-md); font-size: 13px; font-weight: 600; }
   button.primary:hover { background: var(--secondary); }
+  button.secondary {
+    background: transparent; color: var(--primary); border: 1px solid var(--outline-variant);
+    padding: 8px 12px; border-radius: var(--r-md); font-size: 13px; font-weight: 600;
+  }
+  button.secondary:hover { background: var(--surface-mid); }
   button.ghost { background: var(--surface-mid); color: var(--on-surface); border: 1px solid transparent; padding: 8px 12px; border-radius: var(--r-md); font-size: 13px; font-weight: 600; }
   button.ghost:hover { background: var(--surface-high); }
   button.ghost.active { background: var(--secondary); color: var(--on-secondary); }
@@ -99,14 +245,14 @@
   #sidebar .panel-head > * { flex-shrink: 0; }
   #sidebar .panel-head h2 { font-size: 12px; margin: 4px 0 2px; text-transform: uppercase; letter-spacing: .07em; color: var(--on-surface-variant); font-weight: 700; }
 
-  /* Zona de sectores: crece para llenar el panel cuando no hay sector elegido */
+  /* Zona de territorios: crece para llenar el panel cuando no hay territorio elegido */
   #sidebar .sect-zone {
     flex: 1; min-height: 0; overflow-y: auto;
     padding: 8px 14px; display: flex; flex-direction: column; gap: 7px;
   }
   #sidebar .sect-zone.compact { flex: 0 1 auto; min-height: 0; max-height: 58%; overflow-y: auto; }
 
-  /* Zona de puntos: fondo con mayor contraste para distinguirla de los sectores */
+  /* Zona de puntos: fondo con mayor contraste para distinguirla de los territorios */
   #sidebar .pts-zone {
     flex: 1; min-height: 0; overflow-y: auto;
     background: var(--surface-high); border-top: 2px solid var(--secondary);
@@ -215,12 +361,22 @@
   }
   .point-card .pd-btn:hover { color: var(--primary); }
 
+  /* Paginación de la lista (T14) */
+  .list-more {
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    width: 100%; margin-top: 6px; padding: 10px 8px;
+    border: 1px dashed var(--outline); border-radius: 12px;
+    background: var(--surface-low); color: var(--secondary);
+    font-size: 12px; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+  .list-more:hover { border-style: solid; border-color: var(--secondary); background: #eff6ff; }
+
   /* ============ ESTADO DEL PUNTO + DETALLE ============ */
   .estado-tag { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; }
-  .estado-pendiente { background: var(--surface-high); color: var(--on-surface-variant); }
-  .estado-visitado { background: rgba(121,219,141,.4); color: var(--on-green); }
-  .estado-erroneo { background: var(--error-container); color: var(--on-error-container); }
-  .estado-no_pasar { background: var(--primary-container); color: #fff; }
+  .estado-pendiente { background: var(--est-pendiente); color: var(--est-pendiente-on); }
+  .estado-visitado { background: var(--est-visitado); color: var(--est-visitado-on); }
+  .estado-erroneo { background: var(--est-erroneo); color: var(--est-erroneo-on); }
+  .estado-no_pasar { background: var(--est-no_pasar); color: var(--est-no_pasar-on); }
 
   /* Segmented control de estados */
   .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin-top: 9px; background: var(--surface-mid); border-radius: var(--r-md); padding: 3px; }
@@ -233,10 +389,10 @@
   .seg button .ic { font-size: 15px; line-height: 1; }
   .seg button:hover { color: var(--on-surface); }
   .seg button.active { box-shadow: var(--shadow-1); }
-  .seg button[data-estado="pendiente"].active { background: var(--surface-lowest); color: var(--primary); }
-  .seg button[data-estado="visitado"].active { background: var(--green); color: var(--on-green); }
-  .seg button[data-estado="erroneo"].active { background: var(--error); color: #fff; }
-  .seg button[data-estado="no_pasar"].active { background: var(--primary-container); color: #fff; }
+  .seg button[data-estado="pendiente"].active { background: var(--est-pendiente); color: var(--est-pendiente-on); }
+  .seg button[data-estado="visitado"].active { background: var(--est-visitado); color: var(--est-visitado-on); }
+  .seg button[data-estado="erroneo"].active { background: var(--est-erroneo); color: var(--est-erroneo-on); }
+  .seg button[data-estado="no_pasar"].active { background: var(--est-no_pasar); color: var(--est-no_pasar-on); }
 
   /* Chips de filtro por estado */
   .estado-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -251,9 +407,9 @@
   /* Barra de avance multicolor (paleta front) */
   .progress.multi { display: flex; }
   .progress.multi > i { height: 100%; display: block; }
-  .progress .seg-visited { background: var(--green); }
-  .progress .seg-erroneo { background: var(--error); }
-  .progress .seg-no_pasar { background: var(--primary-container); }
+  .progress .seg-visited { background: var(--est-visitado); }
+  .progress .seg-erroneo { background: var(--est-erroneo); }
+  .progress .seg-no_pasar { background: var(--est-no_pasar); }
 
   /* Toast con Deshacer (pill inferior-derecha, estilo front) */
   #undoToast {
@@ -272,127 +428,117 @@
   #undoToast #undoBtn:hover { background: rgba(255,255,255,.2); }
   #undoToast #undoBtn .ic { font-size: 15px; }
 
-  /* Vista terreno móvil */
-  #mobileView { position: fixed; inset: 0; z-index: 700; background: var(--surface); display: none; flex-direction: column; max-width: 460px; margin: 0 auto; box-shadow: 0 0 0 100vmax rgba(13,28,46,.5); }
-  #mobileView.visible { display: flex; }
-  #mobileView .mv-top { background: var(--primary-container); color: #fff; padding: 14px 16px; }
-  #mobileView .mv-head { display: flex; align-items: center; gap: 12px; }
-  #mobileView .mv-head > div:first-child { flex: 1; min-width: 0; }
-  #mobileView .mv-comuna { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--inverse-primary); }
-  #mobileView .mv-sector { font-size: 15px; font-weight: 700; }
-  #mobileView .mv-prog { text-align: right; }
-  #mobileView .mv-count { font-size: 20px; font-weight: 800; color: var(--green-strong); line-height: 1; }
-  #mobileView .mv-pct { font-size: 11px; color: var(--surface-highest); }
-  #mobileView #mvClose { background: rgba(255,255,255,.15); border: 0; color: #fff; width: 30px; height: 30px; border-radius: var(--r-md); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-  #mobileView .mv-bar { height: 8px; background: rgba(255,255,255,.2); border-radius: 5px; margin-top: 10px; overflow: hidden; }
-  #mobileView .mv-bar > i { display: block; height: 100%; background: var(--green-strong); }
-  #mobileView .mv-list { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-  #mobileView .mv-card { background: var(--surface-lowest); border-radius: var(--r-lg); padding: 12px; box-shadow: var(--shadow-1); }
-  #mobileView .mv-card .mv-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-  #mobileView .mv-card .mv-id { font-size: 11px; font-weight: 700; color: var(--secondary); }
-  #mobileView .mv-card .mv-nombre { font-size: 14px; font-weight: 700; color: var(--on-surface); }
-  #mobileView .mv-card .mv-dir { font-size: 12px; color: var(--on-surface-variant); }
-  #mobileView .mv-nav { width: 40px; height: 40px; border-radius: var(--r-lg); background: var(--surface-mid); color: var(--secondary); display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 20px; flex-shrink: 0; }
-  #mobileView .mv-nav:hover { background: var(--secondary); color: #fff; }
-  #mobileView .mv-warn { background: var(--error-container); color: var(--on-error-container); font-size: 11px; font-weight: 700; padding: 5px 8px; border-radius: var(--r-md); margin-top: 8px; }
-  #mobileView .mv-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
-  #mobileView .mv-actions button { border: 0; border-radius: var(--r-lg); padding: 12px 4px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; background: var(--surface-mid); color: var(--on-surface-variant); font-family: inherit; }
-  #mobileView .mv-actions button.on-visitado { background: var(--green); color: var(--on-green); }
-  #mobileView .mv-actions button.on-erroneo { background: var(--error); color: #fff; }
-  #mobileView .mv-actions button.on-no_pasar { background: var(--primary-container); color: #fff; }
-  #mobileView .mv-empty { text-align: center; color: var(--on-surface-variant); padding: 40px 16px; font-size: 13px; }
-
-  /* ============ PANEL DE SECTORES (resumen / detalle / asignación) ============ */
+  /* ============ PANEL DE TERRITORIOS (resumen / detalle / asignación) ============ */
   #detailBlock { display: flex; flex-direction: column; gap: 7px; }
-  .detail-top { display: flex; align-items: center; justify-content: space-between; }
   button.ghost.back {
     background: transparent; color: var(--on-surface-variant); border: 0;
     padding: 5px 7px; font-size: 12px; font-weight: 700;
     display: inline-flex; align-items: center; gap: 4px; border-radius: var(--r-md);
   }
   button.ghost.back:hover { background: var(--surface-mid); color: var(--secondary); }
-  #sidebar .sect-btns { display: flex; gap: 5px; flex-wrap: wrap; }
-  #sidebar .sect-btns button {
-    padding: 6px 9px; border: 1px solid transparent; background: var(--surface-mid);
-    color: var(--on-surface); border-radius: var(--r-md); font-size: 11.5px; font-weight: 600;
-    display: inline-flex; align-items: center; gap: 4px;
-  }
-  #sidebar .sect-btns button:hover { background: var(--surface-high); }
-  #sidebar .sect-btns button.active { background: var(--secondary); color: var(--on-secondary); }
 
   /* Chip de cuadrilla / sin asignar */
-  .sector-card .who, #sectorDetail .who {
+  .territorio-card .who, #territorioDetail .who {
     display: inline-flex; align-items: center; gap: 3px;
     font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
     background: rgba(121,219,141,.38); color: var(--on-green);
     max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;
   }
-  .sector-card .who.none, #sectorDetail .who.none { background: var(--error-container); color: var(--on-error-container); }
-  .sector-card .s-adv { display: flex; justify-content: space-between; font-size: 11px; color: var(--on-surface-variant); }
+  .territorio-card .who.none, #territorioDetail .who.none { background: var(--error-container); color: var(--on-error-container); }
+  .territorio-card .s-adv { display: flex; justify-content: space-between; font-size: 11px; color: var(--on-surface-variant); }
   .s-pct { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 700; color: var(--primary); }
 
-  /* Detalle del sector (estilo front) */
-  #sectorDetail .detail-card {
+  /* Detalle del territorio (estilo front) */
+  #territorioDetail .detail-card {
     background: var(--surface-low); border: 1px solid transparent; border-radius: var(--r-lg);
     padding: 12px; display: flex; flex-direction: column; gap: 9px; box-shadow: var(--shadow-1);
   }
-  #sectorDetail .dc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-  #sectorDetail .dc-names { min-width: 0; }
-  #sectorDetail .dc-comuna { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--secondary); font-weight: 700; }
-  #sectorDetail .detail-card h3 { font-size: 14.5px; display: flex; align-items: center; gap: 7px; color: var(--primary); line-height: 1.25; margin-top: 2px; }
-  #sectorDetail .dot { width: 13px; height: 13px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-  #sectorDetail .stats4 {
+  #territorioDetail .dc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  #territorioDetail .dc-names { min-width: 0; }
+  #territorioDetail .dc-comuna { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--secondary); font-weight: 700; }
+  #territorioDetail .detail-card h3 { font-size: 14.5px; display: flex; align-items: center; gap: 7px; color: var(--primary); line-height: 1.25; margin-top: 2px; }
+  #territorioDetail .dot { width: 13px; height: 13px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  #territorioDetail .stats4 {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;
     background: var(--surface-lowest); border-radius: var(--r-md); padding: 8px 5px; text-align: center;
   }
-  #sectorDetail .stats4 span { display: block; font-size: 10px; color: var(--on-surface-variant); }
-  #sectorDetail .stats4 b { font-size: 16px; color: var(--primary); }
-  #sectorDetail .stats4 .st-v b { color: var(--tertiary-container); }
-  #sectorDetail .stats4 .st-e b { color: var(--error); }
-  #sectorDetail .stats4 .st-b b { color: var(--secondary); }
-  #sectorDetail .dc-prog-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--on-surface-variant); }
-  #sectorDetail .progress { width: 100%; height: 9px; background: var(--surface-high); border-radius: 999px; margin: 0; overflow: hidden; display: flex; }
-  #sectorDetail .progress > i { display: block; height: 100%; }
-  #sectorDetail .dc-tools { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-  #sectorDetail .sd-iconbtn {
+  #territorioDetail .stats4 span { display: block; font-size: 10px; color: var(--on-surface-variant); }
+  #territorioDetail .stats4 b { font-size: 16px; color: var(--primary); }
+  #territorioDetail .stats4 .st-v b { color: var(--tertiary-container); }
+  #territorioDetail .stats4 .st-e b { color: var(--error); }
+  #territorioDetail .stats4 .st-b b { color: var(--secondary); }
+  #territorioDetail .dc-prog-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--on-surface-variant); }
+  #territorioDetail .progress { width: 100%; height: 9px; background: var(--surface-high); border-radius: 999px; margin: 0; overflow: hidden; display: flex; }
+  #territorioDetail .progress > i { display: block; height: 100%; }
+  #territorioDetail .dc-tools { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+  #territorioDetail .sd-iconbtn {
     width: 30px; height: 30px; border: 1px solid var(--outline-variant); background: var(--surface-lowest);
     color: var(--primary); border-radius: var(--r-md); cursor: pointer; flex-shrink: 0;
     display: inline-flex; align-items: center; justify-content: center; font-family: inherit;
   }
-  #sectorDetail .sd-iconbtn:hover { background: var(--surface-high); }
-  #sectorDetail .sd-menu-wrap { position: relative; }
-  #sectorDetail .sd-menu-pop {
+  #territorioDetail .sd-iconbtn:hover { background: var(--surface-high); }
+  #territorioDetail .sd-menu-wrap { position: relative; }
+  #territorioDetail .sd-menu-pop {
     position: absolute; top: 34px; right: 0; z-index: 5;
     background: var(--surface-lowest); border: 1px solid var(--outline-variant);
     border-radius: var(--r-md); box-shadow: var(--shadow-2); padding: 4px;
     display: none; flex-direction: column; gap: 2px; min-width: 150px;
   }
-  #sectorDetail .sd-menu-pop.visible { display: flex; }
-  #sectorDetail .sd-menu-pop button {
+  #territorioDetail .sd-menu-pop.visible { display: flex; }
+  #territorioDetail .sd-menu-pop button {
     display: flex; align-items: center; gap: 6px; border: 0; background: transparent;
     color: var(--on-surface); font-size: 12.5px; font-weight: 600; padding: 8px 10px;
     border-radius: var(--r-sm); cursor: pointer; text-align: left; font-family: inherit; white-space: nowrap;
   }
-  #sectorDetail .sd-menu-pop button:hover { background: var(--surface-mid); }
-  #sectorDetail .sd-menu-pop button.danger-text { color: var(--error); }
-  #sectorDetail .sd-menu-pop button.danger-text:hover { background: var(--error-container); }
-  #sectorDetail .sd-palette {
+  #territorioDetail .sd-menu-pop button:hover { background: var(--surface-mid); }
+  #territorioDetail .sd-menu-sep { height: 1px; background: var(--outline-variant); margin: 4px 2px; }
+  #territorioDetail .sd-menu-pop button.danger-text { color: var(--error); }
+  #territorioDetail .sd-menu-pop button.danger-text:hover { background: var(--error-container); }
+  #territorioDetail .sd-palette {
     display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px;
     border-top: 1px dashed var(--outline-variant);
   }
-  #sectorDetail .sd-palette .chip { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
-  #sectorDetail .sd-palette .chip.selected { border-color: var(--on-surface); }
+  #territorioDetail .sd-palette .chip { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+  #territorioDetail .sd-palette .chip.selected { border-color: var(--on-surface); }
 
   .assign-panel { border: 1px solid var(--outline-variant); border-radius: var(--r-lg); padding: 10px; background: var(--surface-lowest); box-shadow: var(--shadow-1); }
-  .assign-panel .a-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12px; font-weight: 700; color: var(--primary); }
+  .assign-panel .a-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; font-weight: 700; color: var(--primary); }
+  .assign-panel .a-head > span { display: inline-flex; align-items: center; gap: 4px; }
+  .assign-panel .sd-iconbtn {
+    width: 26px; height: 26px; border: 0; border-radius: var(--r-md); background: transparent;
+    color: var(--on-surface-variant); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .assign-panel .sd-iconbtn:hover { background: var(--surface-high); color: var(--secondary); }
+  .assign-panel .a-territorio { margin: 0 0 8px; font-size: 11.5px; color: var(--on-surface-variant); }
+  .assign-panel .asig-actual {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    background: var(--surface-low); border: 1px solid var(--outline-variant);
+    border-radius: var(--r-md); padding: 8px 10px; margin-bottom: 8px;
+  }
+  .assign-panel .asig-actual .asig-quien { min-width: 0; }
+  .assign-panel .asig-actual b { display: block; font-size: 12px; color: var(--on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .assign-panel .asig-actual small { font-size: 10.5px; color: var(--on-surface-variant); }
+  .assign-panel .asig-actual button.danger-text {
+    border: 1px solid var(--error); background: transparent; color: var(--error);
+    padding: 5px 10px; border-radius: var(--r-md); font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; flex-shrink: 0;
+  }
+  .assign-panel .asig-actual button.danger-text:hover { background: var(--error); color: #fff; }
+  .assign-panel .asig-actual .asig-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .assign-panel .asig-nueva { display: flex; gap: 6px; margin-bottom: 8px; }
+  .assign-panel .asig-nueva select { flex: 1; }
+  .assign-panel .asig-nueva button { white-space: nowrap; }
+  .assign-panel .chip-est {
+    display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  }
+  .assign-panel .chip-est.activa { background: var(--est-pendiente); color: #fff; }
+  .assign-panel .chip-est.devuelta { background: var(--surface-high); color: var(--on-surface-variant); }
+  .assign-panel .chip-est.completado { background: var(--est-visitado); color: var(--est-visitado-on); }
   .assign-panel table { width: 100%; border-collapse: collapse; font-size: 11px; }
   .assign-panel th, .assign-panel td { text-align: left; padding: 5px 4px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
   .assign-panel th { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--on-surface-variant); }
   .assign-panel select { width: 100%; font-size: 11px; padding: 4px; border: 1px solid var(--outline-variant); border-radius: var(--r-sm); font-family: inherit; background: var(--surface); }
   .assign-panel button { font-size: 11px; padding: 3px 7px; border-radius: var(--r-sm); border: 1px solid var(--secondary); background: rgba(29,78,216,.08); color: var(--secondary); cursor: pointer; font-family: inherit; }
   .assign-panel button:hover { background: var(--secondary); color: #fff; }
-  .assign-panel button.clear-assign { border-color: var(--outline-variant); background: var(--surface-lowest); color: var(--on-surface-variant); }
-  .assign-panel button.clear-assign:hover { background: var(--surface-high); color: var(--on-surface); }
   .assign-panel .assign-hint { margin: 0 0 8px; font-size: 10.5px; line-height: 1.4; color: var(--on-surface-variant); }
 
   /* ============ MODAL DETALLE DE PUNTO ============ */
@@ -434,49 +580,98 @@
   #pointDetail button.danger:hover { background: var(--error-container); }
   #modal select { width: 100%; padding: 9px 12px; border: 1px solid var(--outline-variant); border-radius: var(--r-md); font-size: 14px; font-family: inherit; background: var(--surface-lowest); }
 
+  /* ============ MODAL HISTORIAL DE PUNTO ============ */
+  #puntoHistorial {
+    position: fixed; inset: 0; z-index: 520; background: rgba(13,28,46,.55);
+    display: none; align-items: center; justify-content: center; padding: 16px;
+  }
+  #puntoHistorial.visible { display: flex; }
+  #puntoHistorial .box {
+    background: var(--surface-lowest); border-radius: var(--r-xl); padding: 22px;
+    width: 100%; max-width: 760px; max-height: 84vh; overflow: auto;
+    box-shadow: 0 24px 60px rgba(0,0,0,.35);
+  }
+  #puntoHistorial h2 { font-size: 17px; margin-bottom: 14px; color: var(--on-surface); }
+  #puntoHistorial .empty { color: var(--outline); padding: 22px 4px; font-size: 13px; }
+  #puntoHistorial .buttons { display: flex; gap: 10px; margin-top: 18px; }
+  #puntoHistorial button { flex: 1; padding: 10px; border-radius: var(--r-md); font-size: 13.5px; font-weight: 700; }
+  #puntoHistorial button.primary { background: var(--primary); color: #fff; }
+  #puntoHistorial button.primary:hover { background: #003050; }
+  #puntoHistorial button.secondary { background: transparent; color: var(--primary); border: 1px solid var(--outline-variant); }
+  #puntoHistorial button.secondary:hover { background: var(--surface-mid); }
+  #puntoHistorial .hist-table { box-shadow: none; border: 1px solid var(--outline-variant); }
+
   #sidebar .empty { padding: 30px 16px; text-align: center; color: #94a3b8; font-size: 13px; }
 
-  /* ============ SECTORES (lista lateral) ============ */
+  /* ============ TERRITORIOS (lista lateral) ============ */
   #sidebar .sect-head {
     display: flex; justify-content: space-between; align-items: center;
     margin-top: 8px; gap: 6px;
   }
   #sidebar .sect-head h2 { margin: 0; }
-  #sectorList {
+  #territorioList {
     flex: 1; min-height: 0; margin-top: 2px;
     display: flex; flex-direction: column; gap: 8px; padding-right: 2px;
   }
-  #sectorList .empty { font-size: 12px; color: var(--outline); padding: 10px 4px; }
-  .sector-card {
+  #territorioList .empty { font-size: 12px; color: var(--outline); padding: 10px 4px; }
+  #territorioList .sect-resumen-head {
+    display: flex; align-items: center; gap: 5px; padding: 2px 4px 0;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--on-surface-variant);
+  }
+  #territorioList .sect-resumen-head .ms { font-size: 15px; color: var(--primary); }
+
+  /* Resumen sin comuna: marco verde que señala que estos territorios están ACTIVOS */
+  #territorioList .activos-frame {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 9px 9px 10px;
+    border: 2px solid var(--est-visitado);
+    background: rgba(149, 248, 167, .22);
+    border-radius: var(--r-lg);
+  }
+  #territorioList .activos-frame .sect-resumen-head {
+    padding: 0 2px 2px; color: var(--est-visitado-on);
+  }
+  #territorioList .activos-frame .sect-resumen-head .ms { color: var(--est-visitado-on); }
+  #territorioList .activos-count {
+    margin-left: auto; padding: 1px 8px; border-radius: 999px;
+    background: var(--est-visitado); color: var(--est-visitado-on);
+    font-size: 10.5px; letter-spacing: 0;
+  }
+  #territorioList .activos-frame .territorio-card {
+    background: var(--surface-lowest); border-color: rgba(0, 33, 10, .12);
+  }
+  #territorioList .activos-frame .territorio-card:hover { background: #ffffff; }
+  .territorio-card {
     background: var(--surface-low); border: 1px solid transparent; border-radius: var(--r-lg);
     padding: 11px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 6px;
     box-shadow: var(--shadow-1); transition: all .15s;
   }
-  .sector-card:hover { background: var(--surface-mid); }
-  .sector-card.selected {
+  .territorio-card:hover { background: var(--surface-mid); }
+  .territorio-card.selected {
     border-color: var(--secondary); background: var(--surface-lowest);
     box-shadow: 0 0 0 2px rgba(29,78,216,.25);
   }
-  .sector-card .s-top { display: flex; align-items: center; gap: 7px; }
-  .sector-card .dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 2px var(--surface-lowest); }
-  .sector-card .s-top b {
+  .territorio-card .s-top { display: flex; align-items: center; gap: 7px; }
+  .territorio-card .dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 2px var(--surface-lowest); }
+  .territorio-card .s-top b {
     flex: 1; min-width: 0; font-size: 13px; color: var(--primary);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .sector-card > small { font-size: 11px; color: var(--on-surface-variant); }
-  .sector-card .progress {
+  .territorio-card > small { font-size: 11px; color: var(--on-surface-variant); }
+  .territorio-card .progress {
     width: 100%; height: 7px; background: var(--surface-high);
     border-radius: 999px; overflow: hidden; display: flex; margin-top: 1px;
   }
-  .sector-card .progress > i { display: block; height: 100%; }
-  .sector-card .s-actions { display: flex; gap: 4px; justify-content: flex-end; }
-  .sector-card .s-actions button {
+  .territorio-card .progress > i { display: block; height: 100%; }
+  .territorio-card .s-actions { display: flex; gap: 4px; justify-content: flex-end; }
+  .territorio-card .s-actions button {
     border: none; background: var(--surface-mid); cursor: pointer; padding: 4px 7px;
     border-radius: var(--r-md); color: var(--on-surface-variant); display: inline-flex;
   }
-  .sector-card .s-actions button:hover { background: var(--surface-high); color: var(--primary); }
-  .sector-card .palette-row { display: none; gap: 6px; flex-wrap: wrap; }
-  .sector-card.editing .palette-row { display: flex; }
+  .territorio-card .s-actions button:hover { background: var(--surface-high); color: var(--primary); }
+  .territorio-card .palette-row { display: none; gap: 6px; flex-wrap: wrap; }
+  .territorio-card.editing .palette-row { display: flex; }
   .chip {
     width: 20px; height: 20px; padding: 0; border-radius: 50%;
     border: 2px solid #fff; box-shadow: 0 0 0 1px var(--outline-variant); cursor: pointer;
@@ -512,7 +707,7 @@
 
   /* ============ REFERENCE PANEL ============ */
   #refPanel {
-    position: absolute; bottom: 136px; right: 20px;
+    position: absolute; bottom: 160px; right: 20px;
     background: var(--surface-lowest); padding: 16px; border-radius: var(--r-lg);
     box-shadow: var(--shadow-2); z-index: 15;
     width: 300px; display: none;
@@ -597,42 +792,42 @@
   }
   #settingsModal button.primary:hover { background: #003050; }
 
-  /* ============ MODAL NUEVO SECTOR ============ */
-  #sectorModal {
+  /* ============ MODAL NUEVO TERRITORIO ============ */
+  #territorioModal {
     position: fixed; inset: 0; z-index: 520; background: rgba(13,28,46,.55);
     display: none; align-items: center; justify-content: center; padding: 20px;
   }
-  #sectorModal.visible { display: flex; }
-  #sectorModal .box {
+  #territorioModal.visible { display: flex; }
+  #territorioModal .box {
     background: var(--surface-lowest); border-radius: var(--r-xl); padding: 24px;
     width: 100%; max-width: 360px; box-shadow: var(--shadow-2);
   }
-  #sectorModal h2 { font-size: 16px; margin-bottom: 12px; color: var(--on-surface); }
-  #sectorModal .count-badge {
+  #territorioModal h2 { font-size: 16px; margin-bottom: 12px; color: var(--on-surface); }
+  #territorioModal .count-badge {
     display: flex; align-items: center; gap: 8px;
     background: var(--surface-mid); border: 1px solid var(--surface-high); color: var(--secondary);
     font-size: 13px; font-weight: 700; padding: 10px 12px; border-radius: var(--r-md);
   }
-  #sectorModal .swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
-  #sectorModal label {
+  #territorioModal .swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  #territorioModal label {
     display: block; font-size: 12px; font-weight: 600; color: var(--on-surface-variant);
     margin: 12px 0 4px; text-transform: uppercase;
   }
-  #sectorModal input {
+  #territorioModal input {
     width: 100%; padding: 9px 12px; border: 1px solid var(--outline-variant);
     border-radius: var(--r-md); font-size: 14px; font-family: inherit; background: var(--surface-lowest);
   }
-  #sectorModal input:focus { outline: 2px solid var(--secondary); }
-  #sectorModal .err { color: var(--error); font-size: 13px; min-height: 18px; margin-top: 8px; }
-  #sectorModal .buttons { display: flex; gap: 10px; margin-top: 16px; }
-  #sectorModal button {
+  #territorioModal input:focus { outline: 2px solid var(--secondary); }
+  #territorioModal .err { color: var(--error); font-size: 13px; min-height: 18px; margin-top: 8px; }
+  #territorioModal .buttons { display: flex; gap: 10px; margin-top: 16px; }
+  #territorioModal button {
     flex: 1; padding: 11px; border-radius: var(--r-md); font-size: 14px;
     font-weight: 600; cursor: pointer; border: none; font-family: inherit;
   }
-  #sectorModal button.primary { background: var(--primary); color: #fff; }
-  #sectorModal button.primary:hover { background: #003050; }
-  #sectorModal button.secondary { background: transparent; color: var(--primary); border: 1px solid var(--outline-variant); }
-  #sectorModal button.secondary:hover { background: var(--surface-mid); }
+  #territorioModal button.primary { background: var(--primary); color: #fff; }
+  #territorioModal button.primary:hover { background: #003050; }
+  #territorioModal button.secondary { background: transparent; color: var(--primary); border: 1px solid var(--outline-variant); }
+  #territorioModal button.secondary:hover { background: var(--surface-mid); }
 
   /* ============ MODAL ============ */
   #modal {
@@ -704,13 +899,32 @@
   }
   .pin-wrap:active .pin { scale: 1.05; }
   .pin .pin-ic { font-size: 15px; line-height: 1; }
-  .pin[data-est="pendiente"] { background: var(--primary); color: var(--on-primary); }
-  .pin[data-est="visitado"] { background: var(--green); color: var(--on-green); }
-  .pin[data-est="erroneo"] { background: var(--error); color: #fff; }
-  .pin[data-est="no_pasar"] { background: var(--primary-container); color: #fff; }
+  .pin[data-est="pendiente"] { background: var(--est-pendiente); color: var(--est-pendiente-on); }
+  .pin[data-est="visitado"] { background: var(--est-visitado); color: var(--est-visitado-on); }
+  .pin[data-est="erroneo"] { background: var(--est-erroneo); color: var(--est-erroneo-on); }
+  .pin[data-est="no_pasar"] { background: var(--est-no_pasar); color: var(--est-no_pasar-on); }
   .pin[data-est="ref"] { background: #f59e0b; color: #422006; }
   .pin-wrap.is-ref .pin { outline: 3px solid #f59e0b; outline-offset: 2px; }
   .pin-wrap.pin-focus .pin { outline: 3px solid var(--secondary); outline-offset: 3px; }
+  /* Burbuja de agrupación (T14): agrandar el wrap porque la cuenta mide más
+     que los 28 px del pin; el dibujo sigue viviendo en un hijo por lo mismo
+     que .pin (MapLibre escribe `transform` inline en el elemento marcador). */
+  .pin-group-wrap { width: 44px; height: 44px; }
+  .pin-group {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--secondary); color: #fff;
+    font-size: 15px; font-weight: 700; line-height: 1;
+    border: 2px solid #fff; box-shadow: 0 3px 9px rgba(13,28,46,.4);
+    cursor: pointer;
+    transition: scale .14s ease, box-shadow .14s ease, filter .14s ease;
+  }
+  .pin-wrap:hover .pin-group {
+    scale: 1.12;
+    box-shadow: 0 7px 16px rgba(13,28,46,.45);
+    filter: brightness(1.07);
+  }
+  .pin-wrap:active .pin-group { scale: 1.04; }
   .pin.pin-temp {
     width: 24px; height: 24px; background: var(--error); color: #fff;
     border-radius: 50% 50% 50% 0; rotate: -45deg;
@@ -734,11 +948,15 @@
     transition: background .12s;
   }
   .map-fabs button:hover { background: var(--surface-mid); }
+  /* Estado activo (p. ej. vista satélite). `>` directo: no debe pisar a los
+     botones del .scope-seg, que van dentro de un div dentro del grupo. */
+  .map-fabs .fab-group > button.active { background: var(--secondary); color: var(--on-secondary); }
   .map-fabs button .ms { font-size: 20px; }
 
   /* Acciones del panel → mapa abajo-derecha (L invertida: columna + fila) */
+  /* bottom 40px: deja ver la atribución del mapa (píldora ~10-34px) */
   .map-fabs.bottom {
-    top: auto; bottom: 16px; right: 16px; flex-direction: column; align-items: flex-end; gap: 8px;
+    top: auto; bottom: 40px; right: 16px; flex-direction: column; align-items: flex-end; gap: 8px;
   }
   .map-fabs.bottom .fab-group { flex-direction: row; align-items: center; }
   .map-fabs.bottom .fab-group.fab-col { flex-direction: column; }
@@ -765,6 +983,7 @@
     box-shadow: 0 4px 14px rgba(13,28,46,.18); transition: all .12s;
   }
   #edgeRail button:hover { background: var(--surface-mid); }
+  #edgeRail button.active { background: var(--secondary); border-color: var(--secondary); color: var(--on-secondary); }
   #edgeRail button .ms { font-size: 18px; }
   #sidebar .comuna-row { display: flex; gap: 8px; align-items: center; }
   #sidebar .comuna-row .row-label {
@@ -798,7 +1017,7 @@
 
   /* ============ TOAST ============ */
   #toast {
-    position: fixed; bottom: 140px; right: 32px;
+    position: fixed; bottom: 164px; right: 32px;
     display: flex; align-items: center; gap: 10px;
     background: var(--inverse-surface); color: var(--inverse-on-surface);
     padding: 12px 18px; border-radius: var(--r-lg); box-shadow: 0 10px 30px rgba(0,0,0,.35);
@@ -830,19 +1049,19 @@
     .map-fabs { top: 10px; right: 10px; }
     .map-fabs .fab-group { padding: 3px; }
     .map-fabs button { width: 36px; height: 36px; }
-    .map-fabs.bottom { bottom: 10px; right: 10px; }
+    .map-fabs.bottom { bottom: 34px; right: 10px; }
     .map-fabs.bottom .scope-seg button { padding: 7px 9px; font-size: 11px; }
 
-    #refPanel { right: 10px; bottom: 130px; width: min(300px, calc(100vw - 20px)); }
-    #toast { left: 12px; right: 12px; bottom: 130px; max-width: none; }
+    #refPanel { right: 10px; bottom: 154px; width: min(300px, calc(100vw - 20px)); }
+    #toast { left: 12px; right: 12px; bottom: 154px; max-width: none; }
 
     #drawToolbar { max-width: calc(100% - 20px); flex-wrap: wrap; justify-content: center; }
     #sidebar .comuna-row select { max-width: none; }
   }
 
   @media (max-width: 480px) {
-    #modal, #pointDetail, #sectorModal, #settingsModal { padding: 10px; }
-    #modal .box, #pointDetail .box, #sectorModal .box, #settingsModal .box { padding: 16px; }
+    #modal, #pointDetail, #territorioModal, #settingsModal, #puntoHistorial { padding: 10px; }
+    #modal .box, #pointDetail .box, #territorioModal .box, #settingsModal .box, #puntoHistorial .box { padding: 16px; }
     .map-fabs.bottom .scope-seg button { padding: 6px 7px; font-size: 10px; }
-    #refPanel { bottom: 118px; }
+    #refPanel { bottom: 142px; }
   }

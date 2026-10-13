@@ -18,14 +18,15 @@ Para bases ya desplegadas: [`migrations/`](../migrations) (idempotentes).
 | `estado` | `estado_punto` NOT NULL | enum: `pendiente`, `visitado`, `erroneo`, `no_pasar` (default `pendiente`) |
 | `notas` | text | admin: libre · colaborador: vía `actualizar_punto_terreno` |
 | `geom` | `geography(Point,4326)` NOT NULL | índice GiST |
-| `sector_id` | uuid → `sectores` `on delete set null` | lo mantiene un trigger (T6) |
+| `territorio_id` | uuid → `territorios` `on delete set null` | lo mantiene un trigger (T6) |
+| `ultima_visita` | timestamptz | último cambio a un estado no `pendiente` (lo fija `marcar_estado`) |
 | `deleted_at` | timestamptz | borrado lógico (nunca se borra filas) |
 | `created_at` / `updated_at` | timestamptz | |
 
 > La columna histórica `categoria` fue reemplazada por `estado`
 > (sección 9 de `schema.sql`).
 
-### `public.sectores`
+### `public.territorios`
 
 Polígonos dibujados a mano. `geom` es `geometry(Polygon,4326)`, nunca se
 **edita** (solo se crea/borra; rename/color no tocan geometría).
@@ -36,23 +37,50 @@ Polígonos dibujados a mano. `geom` es `geometry(Polygon,4326)`, nunca se
 | `nombre`, `color` | editable por admin |
 | `created_by` | creador |
 
-### `public.sectores_asignaciones`
+### `public.territorios_asignaciones`
 
-Ciclo de vida de la asignación de un sector a un colaborador.
+Ciclo de vida de la asignación de un territorio a un colaborador.
 
 | Columna | Notas |
 |---|---|
-| `sector_id` | PK → `sectores`; un sector se asigna a una sola persona |
-| `user_id` | colaborador asignado |
+| `id` | PK surrogate (`gen_random_uuid()`) |
+| `territorio_id` | → `territorios`; un territorio solo con 1 proceso activo |
+| `user_id` | colaborador asignado; un usuario solo con 1 territorio activo |
 | `assigned_by` / `assigned_at` | quién asignó y cuándo |
-| `estado` | `'activa'` \| `'devuelta'` (check + default `'activa'`) |
+| `estado` | `'activa'` \| `'devuelta'` \| `'completado'` (check + default `'activa'`) |
+| `notas` | notas del proceso (se fijan al completar) |
 | `devuelta_at` / `devuelta_por` | auditoría de la devolución |
+| `completado_at` / `completado_por` | auditoría del cierre |
 
-Índices parciales: **un sector solo con 1 asignación activa** y **un usuario
-solo con 1 sector activo** (`where estado = 'activa'`). Las filas devueltas
-se conservan como historial. El colaborador devuelve el sector con la RPC
-`devolver_sector()` aunque no cubra el 100 %: al devolverlo deja de verlo
-(RLS) y el sector queda libre para reasignar.
+Índices parciales: **un territorio solo con 1 proceso activo** y **un usuario
+solo con 1 territorio activo** (`where estado = 'activa'`). Las filas devueltas
+y completadas se conservan como historial. El colaborador devuelve el territorio
+con la RPC `devolver_territorio()` aunque no cubra el 100 %: al devolverlo deja
+de verlo (RLS) y el territorio queda libre para reasignar. El proceso se cierra
+solo cuando no quedan puntos `pendiente` (trigger `territorios_autocompletar`) o
+manualmente con `completar_territorio()` (admin). Al iniciar un proceso nuevo
+(trigger `territorios_asig_reiniciar`) los puntos `visitado` vuelven a
+`pendiente`; `erroneo` y `no_pasar` se heredan tal cual. Si tras ese reinicio
+no queda ningún punto `pendiente`, la asignación se cierra en el mismo
+instante (migración 011), porque el trigger de autocompletar no llegaría a
+dispararse sin un `UPDATE` de puntos.
+
+### `public.puntos_historial`
+
+Bitácora **append-only** de movimientos de un punto (una fila por movimiento).
+
+| Columna | Notas |
+|---|---|
+| `punto_id` | → `puntos` (`on delete cascade`) |
+| `tipo` | check: `creado` \| `estado` \| `territorio` \| `borrado` \| `restaurado` \| `nota` |
+| `estado_anterior` / `estado_nuevo` | en los cambios de estado |
+| `territorio_anterior` / `territorio_nuevo` | en los cambios de territorio |
+| `user_id` | quién lo movió (`auth.uid()`) |
+| `at` | cuándo |
+
+La escribe el trigger `puntos_historial_ins`/`_upd` (security definer) y la lee
+la RPC `punto_historial()`. **RLS habilitado sin policies**: el cliente no tiene
+ningún permiso directo sobre la tabla, solo puede consultarla vía la RPC.
 
 ### `public.comunas_rm`
 
@@ -67,7 +95,9 @@ se conservan como historial. El colaborador devuelve el sector con la RPC
 ### `public.app_config`
 
 Clave/valor JSON. Fila única relevante: `comunas_activas` (`null` = todas).
-Lectura para todos, escritura solo admin.
+Lectura para todos, escritura solo admin. **Sin `DELETE`**: la app solo hace
+`select` + `upsert` (insert+update); la 012 revoca el grant de `delete` para
+`authenticated` y lo deja en `service_role`, reservado a scripts.
 
 ---
 
@@ -75,27 +105,28 @@ Lectura para todos, escritura solo admin.
 
 | Tabla | Select | Insert | Update | Delete |
 |---|---|---|---|---|
-| `puntos` | admin: todo · colaborador: su **sector activo** + lo que él creó | `auth.uid() = user_id` y (admin o dentro de su sector activo) | admin, o colaborador sobre puntos de su sector activo (ver trigger `puntos_bloquear_columnas`) | — (borrado lógico vía RPC) |
-| `sectores` | admin: todos · colaborador: solo su sector activo | **solo admin** (+ `created_by = auth.uid()`) | solo admin | solo admin |
-| `sectores_asignaciones` | admin: todas · colaborador: solo la suya | solo admin | solo admin | solo admin |
+| `puntos` | admin: todo · colaborador: su **territorio activo** + lo que él creó | `auth.uid() = user_id` y (admin o dentro de su territorio activo) | admin, o colaborador sobre puntos de su territorio activo (ver trigger `puntos_bloquear_columnas`) | — (borrado lógico vía RPC) |
+| `territorios` | admin: todos · colaborador: solo su territorio activo | **solo admin** (+ `created_by = auth.uid()`) | solo admin | solo admin |
+| `territorios_asignaciones` | admin: todas · colaborador: solo la suya | solo admin | solo admin | solo admin |
 | `comunas_rm` | autenticado | — | — | — |
 | `profiles` | solo la propia | (trigger, definer) | — | — |
 | `app_config` | autenticado | solo admin | solo admin | — |
 
 Notas:
 
-- `public.is_admin()` y `public.sector_activo_usuario(uid)` (`security
-  definer`) son las fuentes de verdad del rol y del sector vigente; las
-  policies las usan. `sector_activo_usuario` debe ser definer porque sus
-  policy consultan `sectores_asignaciones`, que tiene su propio RLS
+- `public.is_admin()` y `public.territorio_activo_usuario(uid)` (`security
+  definer`) son las fuentes de verdad del rol y del territorio vigente; las
+  policies las usan. `territorio_activo_usuario` debe ser definer porque sus
+  policy consultan `territorios_asignaciones`, que tiene su propio RLS
   (círculo vicioso).
 - El trigger `puntos_bloquear_columnas` impide que un no-admin toque
-  `user_id`, `deleted_at` o `estado` en un UPDATE normal: el estado pasa
-  por `marcar_estado` y el borrado por `eliminar_punto` /
-  `eliminar_punto_propio`.
-- Sin `grant` de tabla no basta con la policy: `sectores`,
-  `app_config` y `sectores_asignaciones` tienen grants explícitos (si no,
-  PostgREST responde `permission denied for table …`).
+  `user_id` (ni `deleted_at` ajeno); el `estado` sí lo puede cambiar dentro
+  de su territorio: pasa por `marcar_estado` (o UPDATE directo bajo RLS).
+- Sin `grant` de tabla no basta con la policy: `territorios`, `app_config`,
+  `territorios_asignaciones`, `comunas_rm`, `profiles` y `puntos` tienen grants
+  explícitos (si no, PostgREST responde `permission denied for table …`).
+  Los proyectos nuevos de Supabase ya no otorgan privilegios por defecto a
+  `anon`/`authenticated` en el esquema `public`; la migración `004` los aplica.
 
 ---
 
@@ -105,14 +136,17 @@ Notas:
 |---|---|---|
 | `guardar_punto(id, nombre, direccion, estado, notas, lat, lng)` | invoker | Inserta (cualquier autenticado) o actualiza (solo admin). Devuelve el id. |
 | `eliminar_punto(id)` | invoker | Solo admin; borrado lógico (`deleted_at`). |
-| `marcar_estado(id, estado)` → `estado_anterior` | **definer** | Cualquier autenticado cambia únicamente `estado`/`updated_at`; devuelve el valor anterior para el «Deshacer». Valida que el punto pertenezca al sector activo del colaborador (o que él lo haya creado). |
+| `marcar_estado(id, estado)` → `estado_anterior` | **definer** | Cualquier autenticado cambia únicamente `estado`/`updated_at` (y fija `ultima_visita` si el estado no es `pendiente`); devuelve el valor anterior para el «Deshacer». Valida que el punto pertenezca al territorio activo del colaborador (o que él lo haya creado). |
 | `puntos_en_radio(lat, lng, radio_m)` | invoker | Puntos vivos dentro de un radio (búsqueda por referencia). |
-| `guardar_sector(comuna, nombre, color, geom)` | invoker | **T2.** Exige admin, serializa con `pg_advisory_xact_lock`, recorta contra la comuna y contra los vecinos (cero solapes), rechaza si sobrevive <2 % del área, `st_snaptogrid(1e-7)` e inserta. Devuelve `{id, pct, recortado}`. |
+| `guardar_territorio(comuna, nombre, color, geom)` | invoker | **T2.** Exige admin, serializa con `pg_advisory_xact_lock`, recorta contra la comuna y contra los vecinos (cero solapes), rechaza si sobrevive <2 % del área, `st_snaptogrid(1e-7)` e inserta. Devuelve `{id, pct, recortado}`. |
 | `usuarios_asignables()` | **definer** | **T3.** Devuelve `id, email` de todos los perfiles **solo si el llamador es admin**; si no, 0 filas. |
-| `sector_activo_usuario(uid)` → uuid | **definer** | Sector asignado activo de un usuario (la usan las policies). |
-| `devolver_sector()` → uuid | **definer** | El colaborador devuelve su sector activa (`estado='devuelta'` + auditoría) y recibe el `sector_id`. |
-| `actualizar_punto_terreno(id, nombre, direccion, notas, lat, lng)` | **definer** | El colaborador edita campos de terreno de un punto de su sector activo; rechaza coordenadas fuera del polígono. No toca `estado`/`user_id`/`deleted_at`. |
+| `territorio_activo_usuario(uid)` → uuid | **definer** | Territorio asignado activo de un usuario (la usan las policies). |
+| `devolver_territorio()` → uuid | **definer** | El colaborador devuelve su territorio activo (`estado='devuelta'` + auditoría) y recibe el `territorio_id`. |
+| `actualizar_punto_terreno(id, nombre, direccion, notas, lat, lng)` | **definer** | El colaborador edita campos de terreno de un punto de su territorio activo; rechaza coordenadas fuera del polígono. No toca `estado`/`user_id`/`deleted_at`. |
 | `eliminar_punto_propio(id)` | **definer** | Borrado lógico de puntos creados por el propio colaborador. |
+| `completar_territorio(territorio, notas)` | **definer** | Solo admin: cierra el proceso activo como `completado` (auditoría + notas). |
+| `listar_usuarios()` | **definer** | Solo admin: `id, email, is_admin` + territorio activo y fecha de asignación (`desde`). |
+| `punto_historial(punto)` | **definer** | Bitácora de un punto: sus movimientos (creación, estado, territorio, borrado, notas) + las asignaciones de su territorio. Devuelve `ev_at, ev_tipo, ev_actor, ev_detalle`; exige admin, ser el creador o tener ese territorio activo. |
 
 `guardar_punto` y `eliminar_punto` mantienen el chequeo de admin en el cuerpo
 porque son `security invoker` y ejecutan bajo RLS.
@@ -124,12 +158,15 @@ porque son `security invoker` y ejecutan bajo RLS.
 | Trigger | Cuándo | Qué hace |
 |---|---|---|
 | `on_auth_user_created` | INSERT en `auth.users` | Crea `profiles` (definer) |
-| `puntos_sync_sector` | INSERT o UPDATE de `geom` en `puntos` | Calcula `puntos.sector_id` con `st_covers` (sector más pequeño si hay empate) |
-| `sectores_resync_puntos` | INSERT o DELETE en `sectores` | Recalcula `sector_id` de los puntos vivos |
-| `puntos_bloquear_columnas` | UPDATE en `puntos` | Bloquea que un no-admin toque `user_id`, `deleted_at` o `estado` |
+| `puntos_sync_territorio` | INSERT o UPDATE de `geom` en `puntos` | Calcula `puntos.territorio_id` con `st_covers` (territorio más pequeño si hay empate) |
+| `territorios_resync_puntos` | INSERT o DELETE en `territorios` | Recalcula `territorio_id` de los puntos vivos |
+| `puntos_bloquear_columnas` | UPDATE en `puntos` | Bloquea que un no-admin toque `user_id` ni `deleted_at` ajeno; deja pasar cambios de `estado` dentro del territorio |
+| `territorios_asig_reiniciar` | INSERT en `territorios_asignaciones` | Si la asignación nace `activa`: los puntos `visitado` del territorio vuelven a `pendiente` (nuevo proceso); `erroneo` y `no_pasar` se heredan. Si tras eso no queda ningún punto `pendiente`, cierra la asignación recién creada como `completado` (011) |
+| `territorios_autocompletar` | UPDATE de `estado` en `puntos` | Si al territorio no le quedan puntos `pendiente`, cierra su proceso activo como `completado` |
+| `puntos_historial_ins` / `puntos_historial_upd` | INSERT o UPDATE en `puntos` | Escribe una fila en `puntos_historial` por cada movimiento (creación, cambio de estado/territorio, borrado/restauración, edición de notas). **definer**, así que el cliente no necesita permisos sobre la bitácora. |
 
-`sectores_resync_puntos` solo escribe `sector_id` (nunca `geom`), así que no
-vuelve a disparar `puntos_sync_sector`: no hay bucle.
+`territorios_resync_puntos` solo escribe `territorio_id` (nunca `geom`), así que no
+vuelve a disparar `puntos_sync_territorio`: no hay bucle.
 
 ---
 
@@ -140,8 +177,8 @@ vuelve a disparar `puntos_sync_sector`: no hay bucle.
 | `puntos_geom_idx` | `geom` (GiST) | búsquedas espaciales / radio |
 | `puntos_user_idx` | `user_id` WHERE `deleted_at is null` | filtros por usuario |
 | `puntos_estado_idx` | `estado` WHERE `deleted_at is null` | filtros/chips de estado (T6) |
-| `puntos_sector_idx` | `sector_id` WHERE `deleted_at is null` | puntos por sector (T6) |
-| `sectores_geom_idx` | `geom` (GiST) | hit-test y recortes |
+| `puntos_territorio_idx` | `territorio_id` WHERE `deleted_at is null` | puntos por territorio (T6) |
+| `territorios_geom_idx` | `geom` (GiST) | hit-test y recortes |
 | `comunas_rm_geom_idx` | `geom` (GiST) | encuadre de cámara |
 
 ---
@@ -153,42 +190,61 @@ Aplicar en orden sobre una base existente (idempotentes, se pueden repetir):
 ```bash
 psql "$DATABASE_URL" -f migrations/001_seguridad_p0.sql   # T1–T3
 psql "$DATABASE_URL" -f migrations/002_rendimiento_t6.sql  # T6
-psql "$DATABASE_URL" -f migrations/003_colaborador.sql     # sector único + devolución
+psql "$DATABASE_URL" -f migrations/003_colaborador.sql     # territorio único + devolución
+psql "$DATABASE_URL" -f migrations/004_grants_tablas.sql   # grants (nuevos proyectos)
+psql "$DATABASE_URL" -f migrations/005_asignaciones_y_estado.sql  # reasignar + estado
+psql "$DATABASE_URL" -f migrations/006_grants_asignaciones.sql    # grants territorios/asignaciones
+psql "$DATABASE_URL" -f migrations/007_rename_territorios.sql     # sectores → territorios
+psql "$DATABASE_URL" -f migrations/008_historial_usuarios.sql     # completado + historial + usuarios
+psql "$DATABASE_URL" -f migrations/009_puntos_historial.sql       # bitácora de movimientos por punto
+psql "$DATABASE_URL" -f migrations/010_reinicio_visitados.sql     # visitado → pendiente al reasignar
+psql "$DATABASE_URL" -f migrations/011_cierre_inmediato.sql       # cierra el proceso si no queda nada pendiente
+psql "$DATABASE_URL" -f migrations/012_app_config_sin_delete.sql  # app_config sin DELETE para clientes
 ```
 
 o vía SQL Editor de Supabase.
 
 | Archivo | Contenido |
 |---|---|
-| `001_seguridad_p0.sql` | policy `sectores_insert_admin` (reemplaza a `sectores_insert_auth`), `guardar_sector` con chequeo de admin + advisory lock, `usuarios_asignables` restringido, RPC `marcar_estado` + grants |
-| `002_rendimiento_t6.sql` | `puntos.sector_id` + backfill, índices por `estado`/`sector_id`, triggers `puntos_sync_sector` y `sectores_resync_puntos` |
-| `003_colaborador.sql` | ciclo de vida de asignaciones (`estado`/`devuelta_*` + unicidad parcial), helper `sector_activo_usuario`, RLS de `puntos`/`sectores` por sector activo, trigger `puntos_bloquear_columnas`, RPCs `devolver_sector` / `actualizar_punto_terreno` / `eliminar_punto_propio`, `marcar_estado` con validación de sector |
+| `001_seguridad_p0.sql` | policy `territorios_insert_admin` (reemplaza a `territorios_insert_auth`), `guardar_territorio` con chequeo de admin + advisory lock, `usuarios_asignables` restringido, RPC `marcar_estado` + grants |
+| `002_rendimiento_t6.sql` | `puntos.territorio_id` + backfill, índices por `estado`/`territorio_id`, triggers `puntos_sync_territorio` y `territorios_resync_puntos` |
+| `003_colaborador.sql` | ciclo de vida de asignaciones (`estado`/`devuelta_*` + unicidad parcial), helper `territorio_activo_usuario`, RLS de `puntos`/`territorios` por territorio activo, trigger `puntos_bloquear_columnas`, RPCs `devolver_territorio` / `actualizar_punto_terreno` / `eliminar_punto_propio`, `marcar_estado` con validación de territorio |
+| `004_grants_tablas.sql` | grants explícitos de `comunas_rm`, `profiles` y `puntos` (proyectos sin default privileges) |
+| `005_asignaciones_y_estado.sql` | clave surrogate en `territorios_asignaciones` (antes `territorio_id` PK bloqueaba reasignar tras devolver), reasegura unicidad de activos y cierra duplicados; trigger deja pasar `estado` del colaborador |
+| `006_grants_asignaciones.sql` | grants de `territorios` y `territorios_asignaciones` para `authenticated` |
+| `007_rename_territorios.sql` | rename `sectores` → `territorios` (tablas, columna, RPCs, triggers, policies) |
+| `008_historial_usuarios.sql` | estado `completado`, `notas`/`completado_*`, `puntos.ultima_visita`, trigger `territorios_autocompletar`, RPCs `completar_territorio` y `listar_usuarios` |
+| `009_puntos_historial.sql` | tabla `puntos_historial` (bitácora), triggers `puntos_historial_ins`/`_upd`, RPC `punto_historial` |
+| `010_reinicio_visitados.sql` | trigger `territorios_asig_reiniciar` (`territorio_reiniciar_visitados`): al insertar una asignación `activa`, los puntos `visitado` del territorio vuelven a `pendiente` |
+| `011_cierre_inmediato.sql` | misma función, con el paso final: si no queda ningún punto `pendiente` tras el reinicio, la asignación recién creada se cierra como `completado` |
+| `012_app_config_sin_delete.sql` | `revoke delete on public.app_config from authenticated`: la app nunca borra filas de configuración; el privilegio queda solo en `service_role` |
 
 ### Verificación rápida tras migrar
 
 ```sql
 -- las RPCs nuevas existen y son ejecutables por authenticated
 select proname from pg_proc
-where proname in ('marcar_estado','guardar_sector','devolver_sector',
+where proname in ('marcar_estado','guardar_territorio','devolver_territorio',
                   'actualizar_punto_terreno','eliminar_punto_propio',
-                  'sector_activo_usuario');
+                  'territorio_activo_usuario','completar_territorio','listar_usuarios',
+                  'punto_historial','puntos_historial_log');
 
--- todos los puntos vivos tienen sector (o están fuera de todo sector)
-select count(*) from public.puntos where deleted_at is null and sector_id is null;
+-- todos los puntos vivos tienen territorio (o están fuera de todo territorio)
+select count(*) from public.puntos where deleted_at is null and territorio_id is null;
 
--- la policy de sectores es la nueva (solo el sector activo del colaborador)
-select polname from pg_policies where tablename = 'sectores' and cmd = 'SELECT';
+-- la policy de territorios es la nueva (solo el territorio activo del colaborador)
+select polname from pg_policies where tablename = 'territorios' and cmd = 'SELECT';
 
 -- los índices parciales de unicidad activa existen
 select indexname from pg_indexes
-where indexname in ('sectores_asig_activa_sector','sectores_asig_activa_user');
+where indexname in ('territorios_asig_activa_territorio','territorios_asig_activa_user');
 ```
 
 ---
 
 ## Seguridad: qué queda en la DB y qué en el front
 
-- **En la DB (lo que importa):** permisos, unicidad de sectores, recorte
+- **En la DB (lo que importa):** permisos, unicidad de territorios, recorte
   geométrico, integridad de estados (enum), borrado lógico.
 - **En el front (comodidad):** ocultar botones que fallarían, deshacer,
   validación de rangos de lat/lng antes de llamar a la RPC.

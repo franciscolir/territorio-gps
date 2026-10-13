@@ -13,8 +13,22 @@ const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 // CLIENTE SUPABASE
 // ============================================================
 const { createClient } = supabase;
+// Cada app (escritorio / móvil) usa su propia clave de sesión: así pueden
+// coexistir dos pestañas con usuarios distintos sin pisarse. Se usa el lock
+// por defecto de supabase-js (navigator.locks), que serializa el refresh del
+// token entre pestañas de la MISMA app (los refresh tokens son de un solo uso).
+//
+// OJO: no pasar la opción `accessToken` a createClient. Deja el cliente en
+// modo "auth externa" y entonces `db.auth.signInWithPassword` (y el resto de
+// los métodos de auth) lanzan. Aquí la sesión la gestiona supabase-js: el
+// arranque espera `getSession()` antes de consultar, así que las peticiones
+// salen con el token vigente sin necesidad de inyectarlo por petición.
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storageKey: 'gps-desktop-session',
+  },
 });
 
 // ============================================================
@@ -27,17 +41,33 @@ let allPoints = [];
 let allComunas = [];
 let comunaFeatures = null;
 let pointMarkers = {};       // id -> Marker
-let puntosScope = 'comuna';  // marcadores del mapa: region | comuna | sector
+let puntosScope = 'comuna';  // marcadores del mapa: region | comuna | territorio
 try {
   const s = localStorage.getItem('puntosScope');
-  if (s === 'region' || s === 'comuna' || s === 'sector') puntosScope = s;
+  if (s === 'region' || s === 'comuna' || s === 'territorio') puntosScope = s;
 } catch (_) {}
 let usuarios = [];           // [{id, email}] para asignar
-let asignaciones = {};       // sector_id -> { user_id, estado, devuelta_at }
-let assignOpen = false;      // muestra la tabla de asignación
-let estadoFiltro = '';       // chip de estado activo en la lista
+let asignaciones = {};       // territorio_id -> { user_id, estado, devuelta_at }
+let assignOpen = false;      // vista de asignación/historial del territorio elegido
+
+// Preferencias que sobreviven entre sesiones (filtros). Nunca lanzan: en modo
+// privado o con la cuota llena localStorage falla y eso no debe romper la app.
+function prefGet(clave, defecto = '') {
+  try {
+    const v = localStorage.getItem(clave);
+    return v === null ? defecto : v;
+  } catch (_) { return defecto; }
+}
+function prefSet(clave, valor) {
+  try { localStorage.setItem(clave, valor == null ? '' : String(valor)); } catch (_) {}
+}
+
+// Chip de estado activo en la lista (persistido; valor inválido = "Todos")
+const CHIP_ESTADOS = ['', ...ESTADOS.map((e) => e[0])];
+let estadoFiltro = CHIP_ESTADOS.includes(prefGet('estadoFiltro')) ? prefGet('estadoFiltro') : '';
 let lastEstadoUndo = null;   // {id, prev} para el toast "Deshacer"
-let mobileOpen = false;      // vista terreno (móvil)
+let currentView = 'territorios'; // vista activa: territorios | historial | usuarios
+let histTab = 'territorios';     // pestaña del historial: territorios | puntos
 
 let tempMarker = null;       // marker temporal al hacer clic
 let refMarker = null;        // marker de referencia
@@ -46,26 +76,26 @@ let refMode = false;         // modo referencia activo
 let editingId = null;        // id del punto que se edita
 let refResultsIds = new Set();
 
-// --- Sectores (dibujo manual) ---
-let allSectores = [];        // sectores cargados de la DB
+// --- Territorios (dibujo manual) ---
+let allTerritorios = [];        // territorios cargados de la DB
 let drawActive = false;      // ¿modo dibujo activo?
-let drawColor = '#3b82f6';   // color del sector en curso
+let drawColor = '#3b82f6';   // color del territorio en curso
 let drawVerts = [];          // vértices [[lng,lat], ...]
 let drawHover = null;        // última posición del cursor (goma elástica)
 let drawSnap = null;         // { a, b } arista de referencia con la que se enganchó
-let snapRingsCache = null;   // anillos de referencia para el snap (comuna + sectores)
-let pendingSector = null;    // polígono cerrado esperando guardado
-let sectorHoverId = null;    // sector bajo el cursor
-let sectorSelectedId = null; // sector seleccionado (habilita marcar puntos)
+let snapRingsCache = null;   // anillos de referencia para el snap (comuna + territorios)
+let pendingTerritorio = null;    // polígono cerrado esperando guardado
+let territorioHoverId = null;    // territorio bajo el cursor
+let territorioSelectedId = null; // territorio seleccionado (habilita marcar puntos)
 let lastPlaceAt = 0;         // debounce: evita colocar dos veces en un doble clic
-let sectorListError = null;  // mensaje de error al cargar (tabla ausente, etc.)
+let territorioListError = null;  // mensaje de error al cargar (tabla ausente, etc.)
 
 // --- Configuración (app_config) ---
 let comunasActivas = null;   // Set de comunas activas; null = todas
 let configError = null;      // error al cargar app_config (tabla ausente, etc.)
 let setSaveTimer = null;     // debounce del guardado en app_config
 
-const SECTOR_COLORS = [
+const TERRITORIO_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
   '#8b5cf6', '#ec4899', '#14b8a6', '#64748b',
 ];
@@ -80,6 +110,17 @@ function toast(msg, isError = false) {
   t.className = 'visible' + (isError ? ' error' : '');
   setTimeout(() => (t.className = ''), 2600);
 }
+
+// Errores sin catch (red caída, WebGL, CDN) se muestran en pantalla:
+// sin esto, un fallo en el arranque deja la app "en nada" y la consola
+// puede quedar difícil de interpretar.
+window.addEventListener('error', (e) => {
+  if (e?.message) toast('Error: ' + e.message, true);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const m = e?.reason?.message || (typeof e?.reason === 'string' ? e.reason : '');
+  if (m) toast('Error: ' + m, true);
+});
 
 // ============================================================
 // LOGIN
@@ -121,10 +162,15 @@ async function afterLogin() {
     .maybeSingle();
   isAdmin = !!prof?.is_admin;
 
-  // T2: dibujar/editar/asignar sectores es solo administración (también lo
-  // exige la DB): los botones que fallarían ni siquiera se muestran
-  for (const id of ['drawBtn', 'assignSectorsBtn']) {
-    document.getElementById(id).style.display = isAdmin ? '' : 'none';
+  // T2: dibujar/editar/asignar territorios es solo administración (también lo
+  // exige la DB): el botón de dibujar ni siquiera se muestra a los demás
+  if (!isAdmin) document.getElementById('drawBtn').style.display = 'none';
+
+  // Historial y Usuarios son solo de administración
+  if (!isAdmin) {
+    document
+      .querySelectorAll('#mainNav button[data-view="historial"], #mainNav button[data-view="usuarios"]')
+      .forEach((b) => { b.style.display = 'none'; });
   }
 
   // T8: en pantallas angostas el panel arranca colapsado (ver CSS responsive)
@@ -134,7 +180,12 @@ async function afterLogin() {
   // encuadrar la cámara en Santiago sin tener que moverla después.
   await loadConfig();
   await loadComunas();
-  initMap();
+  try {
+    initMap();
+  } catch (e) {
+    console.error(e);
+    toast('No se pudo iniciar el mapa: ' + e.message, true);
+  }
 }
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
@@ -153,9 +204,60 @@ db.auth.onAuthStateChange((event, session) => {
 });
 
 // ============================================================
+// VISTA SATÉLITE (toggle)
+// ============================================================
+// Foto de Esri encima del mapa base y debajo de todo lo nuestro: se inserta
+// antes de la primera capa `symbol` del estilo, así los rótulos de calles
+// siguen legibles sobre la foto y el polígono del territorio, los pines y el
+// punto azul (capas añadidas después en el stack) quedan encima.
+// Sin persistencia: al (re)crear el mapa se arranca en claro.
+const ESRI_IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const ESRI_ATTR = 'Esri, Maxar, Earthstar Geographics';
+let sateliteActiva = false;
+
+// Dónde insertar la foto: antes del primer rótulo del estilo base. Si el
+// estilo no tuviera símbolos, justo encima del background (capa 0).
+function antesDeLosRotulos() {
+  const capas = map && map.getStyle() ? (map.getStyle().layers || []) : [];
+  const i = capas.findIndex((l) => l.type === 'symbol');
+  if (i >= 0) return capas[i].id;
+  return capas.length > 1 ? capas[1].id : undefined;
+}
+
+function alternarSatelite() {
+  if (!map) return;
+  const btn = document.getElementById('btnSatelite');
+
+  if (sateliteActiva) {
+    if (map.getLayer('satelite')) map.removeLayer('satelite');
+    if (map.getSource('satelite')) map.removeSource('satelite');
+    sateliteActiva = false;
+  } else {
+    if (!map.getSource('satelite')) {
+      map.addSource('satelite', {
+        type: 'raster',
+        tiles: [ESRI_IMAGERY],
+        tileSize: 256,
+        maxzoom: 19,   // más allá de z19 MapLibre hace overzoom solo
+        attribution: ESRI_ATTR,
+      });
+    }
+    if (!map.getLayer('satelite')) {
+      map.addLayer({ id: 'satelite', type: 'raster', source: 'satelite' }, antesDeLosRotulos());
+    }
+    sateliteActiva = true;
+  }
+  if (btn) btn.classList.toggle('active', sateliteActiva);
+}
+
+// ============================================================
 // MAPA
 // ============================================================
 function initMap() {
+  const gl = document.createElement('canvas').getContext('webgl2')
+    || document.createElement('canvas').getContext('webgl');
+  if (!gl) throw new Error('WebGL no está disponible (activa la aceleración de hardware del navegador)');
+
   const santiago = allComunas.find((c) => c.nombre === 'Santiago');
   const b = santiago ? boundsFromGeometry(santiago.geom) : null;
 
@@ -170,6 +272,10 @@ function initMap() {
 
   map = new maplibregl.Map(options);
   map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
+  // El satélite no persiste: cada mapa nuevo arranca en claro (también al
+  // salir de sesión, que recarga la página).
+  sateliteActiva = false;
+  document.getElementById('btnSatelite').classList.remove('active');
 
   // Controles flotantes (reemplazan la NavigationControl nativa)
   document.getElementById('zoomInBtn').addEventListener('click', () => map.zoomIn());
@@ -184,26 +290,44 @@ function initMap() {
     );
   });
   document.getElementById('fitViewBtn').addEventListener('click', () => {
-    if (sectorSelectedId) return focusSector(sectorSelectedId);
+    if (territorioSelectedId) return focusTerritorio(territorioSelectedId);
     const comuna = allComunas.find((c) => c.nombre === comunaSel.value);
     const b = comuna ? boundsFromGeometry(comuna.geom) : null;
     if (b && !b.isEmpty()) {
       map.fitBounds([[b.getWest(), b.getSouth()], [b.getEast(), b.getNorth()]], { padding: 40 });
     } else {
-      toast('Selecciona una comuna o sector para ajustar la vista', true);
+      toast('Selecciona una comuna o territorio para ajustar la vista', true);
     }
   });
+  document.getElementById('btnSatelite').addEventListener('click', alternarSatelite);
 
   map.on('load', async () => {
+    // Se captura ANTES de onComunaChange(), que limpia la selección al
+    // reconstruir el filtro de comuna.
+    const terrGuardado = prefGet('territorioSel');
+
     await ensureComunasLoaded();
     await loadUsuarios();
     await loadAsignaciones();
     await loadPoints();
-    initSectorLayers();
-    await loadSectores();
+    initTerritorioLayers();
+    await loadTerritorios();
+
+    // Reaplica el filtro de comuna guardado (encuadre + capas + lista)
+    if (comunaSel.value) onComunaChange();
+
+    // Y deja seleccionado el territorio con el que se cerró la sesión
+    const terr = allTerritorios.find((s) => s.id === terrGuardado);
+    if (terr && terr.comuna && terr.comuna === comunaSel.value) setTerritorioSelected(terr.id);
+
     map.on('click', onMapClick);
     map.on('mousemove', onMapMove);
     map.on('dblclick', onMapDblClick);
+
+    // Los grupos de marcadores se calculan en píxeles: al cambiar de zoom o
+    // desplazar el mapa dejan de ser válidos y hay que volver a agrupar.
+    // Solo si la pintura anterior agrupó, para no repintar de más.
+    map.on('moveend', () => { if (clusterActivo) renderMarkers(); });
   });
 }
 
@@ -217,6 +341,7 @@ async function loadComunas() {
   allComunas = data.map((c) => ({ nombre: c.nombre, geom: c.geom }));
   snapRingsCache = null;
   populateComunaFilter();
+  populateHistComunaFilter(); // el filtro del Historial no depende de "activas"
 
   // Construir FeatureCollection
   comunaFeatures = data.map((c) => ({
@@ -289,7 +414,8 @@ const comunaSel = document.getElementById('comunaSel');
 comunaSel.addEventListener('change', onComunaChange);
 
 function populateComunaFilter() {
-  const prev = comunaSel.value;
+  // Arranca con la comuna guardada en la sesión anterior si sigue disponible
+  const prev = comunaSel.value || prefGet('comunaSel');
   const names = allComunas
     .map((c) => c.nombre)
     .filter(Boolean)
@@ -300,13 +426,22 @@ function populateComunaFilter() {
     names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
   // Conserva la selección si sigue activa; si fue desactivada, vuelve a ""
   comunaSel.value = names.includes(prev) ? prev : '';
+  syncDrawBtn();
+}
+
+// El botón de dibujar vive en el riel del mapa y aparece solo con comuna elegida
+function syncDrawBtn() {
+  const b = document.getElementById('drawBtn');
+  if (b) b.style.display = (isAdmin && comunaSel.value) ? '' : 'none';
 }
 
 function onComunaChange() {
   const nombre = comunaSel.value;
+  prefSet('comunaSel', nombre);
   const comuna = allComunas.find((c) => c.nombre === nombre);
   const hayCapas = map && map.getLayer('comunas-fill');
   snapRingsCache = null;
+  syncDrawBtn();
 
   if (hayCapas) {
     for (const layerId of ['comunas-fill', 'comunas-outline', 'comunas-labels']) {
@@ -331,12 +466,12 @@ function onComunaChange() {
   renderList();
   renderMarkers();
 
-  // Un sector dibujado queda huérfano si cambias de comuna a mitad de trazo
+  // Un territorio dibujado queda huérfano si cambias de comuna a mitad de trazo
   if (drawActive) stopDraw();
   // La selección no sobrevive al cambio de comuna
-  if (sectorSelectedId) setSectorSelected(null);
-  updateSectorsSource();
-  renderSectorList();
+  if (territorioSelectedId) setTerritorioSelected(null);
+  updateTerritoriosSource();
+  renderTerritorioList();
 
   if (comuna) {
     const b = boundsFromGeometry(comuna.geom);
@@ -375,7 +510,7 @@ function boundsFromGeometry(geom) {
 }
 
 
-// Sectores visibles: solo existen si hay comuna elegida y el punto está dentro
+// Territorios visibles: solo existen si hay comuna elegida y el punto está dentro
 function displayedPoints() {
   const nombre = comunaSel.value;
   if (!nombre) return [];
@@ -468,7 +603,7 @@ function syncScopeUI() {
   });
 }
 function setPuntosScope(v) {
-  if (v !== 'region' && v !== 'comuna' && v !== 'sector') return;
+  if (v !== 'region' && v !== 'comuna' && v !== 'territorio') return;
   puntosScope = v;
   try { localStorage.setItem('puntosScope', puntosScope); } catch (_) {}
   syncScopeUI();
@@ -576,16 +711,18 @@ async function loadPoints() {
 
   renderList();
   renderMarkers();
-  renderSectorList(); // los contadores "N puntos" cambian con cada alta/baja
+  renderTerritorioList(); // los contadores "N puntos" cambian con cada alta/baja
 }
 
 // ============================================================
 // RENDER LISTA
 // ============================================================
 const filterText = document.getElementById('filterText');
+filterText.value = prefGet('filtroTexto');
 // T6: el filtro no repinta por cada tecla (con listas grandes era costoso)
 let filterTimer = null;
 filterText.addEventListener('input', () => {
+  prefSet('filtroTexto', filterText.value);
   clearTimeout(filterTimer);
   filterTimer = setTimeout(renderList, 120);
 });
@@ -593,20 +730,29 @@ filterText.addEventListener('input', () => {
 // Chips de filtro por estado
 const estadoChips = document.getElementById('estadoChips');
 estadoChips.querySelectorAll('.chip-f').forEach((btn) => {
+  if (btn.dataset.estado === estadoFiltro) btn.classList.add('active');
   btn.addEventListener('click', () => {
     estadoFiltro = btn.dataset.estado;
+    prefSet('estadoFiltro', estadoFiltro);
     estadoChips.querySelectorAll('.chip-f').forEach((b) => b.classList.toggle('active', b === btn));
     renderList();
   });
 });
-estadoChips.querySelector('.chip-f[data-estado=""]').classList.add('active');
+
+// Ventana de la lista lateral (T14): se pintan tarjetas de a PAGINA_PUNTOS
+// y el resto entra con «Cargar más», para que territorios con miles de puntos
+// no construyan miles de tarjetas de golpe.
+const PAGINA_PUNTOS = 100;
+let listaClave = '';
+let listaPagina = 1;
 
 function renderList() {
   const list = document.getElementById('list');
-  const sec = sectorSelected();
+  const sec = territorioSelected();
 
   if (!sec) {
-    list.innerHTML = '<div class="empty">Selecciona un sector para ver sus puntos</div>';
+    list.innerHTML = '<div class="empty">Selecciona un territorio para ver sus puntos</div>';
+    listaClave = '';
     updateListScope();
     return;
   }
@@ -614,7 +760,7 @@ function renderList() {
   const txt = filterText.value.toLowerCase().trim();
   const est = estadoFiltro;
 
-  const base = pointsInSector(sec);
+  const base = pointsInTerritorio(sec);
   const filtered = base.filter((p) => {
     if (est && (p.estado || 'pendiente') !== est) return false;
     if (txt) {
@@ -625,12 +771,23 @@ function renderList() {
   });
 
   if (!filtered.length) {
-    list.innerHTML = '<div class="empty">No hay puntos en este sector</div>';
+    list.innerHTML = '<div class="empty">No hay puntos en este territorio</div>';
+    listaClave = '';
     updateListScope();
     return;
   }
 
-  list.innerHTML = filtered.map((p) => {
+  // Cambiar de territorio o de filtro vuelve a la primera página.
+  const clave = `${sec.id}|${est}|${txt}`;
+  if (clave !== listaClave) { listaClave = clave; listaPagina = 1; }
+  const visibles = filtered.slice(0, listaPagina * PAGINA_PUNTOS);
+  const restan = filtered.length - visibles.length;
+
+  const paginador = restan > 0
+    ? `<button id="listMore" class="list-more" type="button"><span class="ms ms-sm">add</span>Cargar más · quedan ${restan}</button>`
+    : '';
+
+  list.innerHTML = visibles.map((p) => {
     const e = p.estado || 'pendiente';
     const seg = SEGMENTOS.map(([v, l, ic]) =>
       `<button data-estado="${v}" class="${e === v ? 'active' : ''}"><span class="ic ms">${ic}</span><span>${l}</span></button>`
@@ -658,7 +815,10 @@ function renderList() {
       </div>
       <div class="seg">${seg}</div>
     </div>`;
-  }).join('');
+  }).join('') + paginador;
+
+  const more = document.getElementById('listMore');
+  if (more) more.addEventListener('click', () => { listaPagina += 1; renderList(); });
 
   list.querySelectorAll('.point-card').forEach((el) => {
     const id = el.dataset.id;
@@ -677,44 +837,98 @@ function renderList() {
 // ============================================================
 // MARCADORES EN MAPA
 // ============================================================
-// Puntos que se muestran en el MAPA según la preferencia (region/comuna/sector)
+// Puntos que se muestran en el MAPA según la preferencia (region/comuna/territorio)
 function mapScopePoints() {
   if (puntosScope === 'region') return allPoints;
-  if (puntosScope === 'sector') {
-    const sec = sectorSelected();
+  if (puntosScope === 'territorio') {
+    const sec = territorioSelected();
     if (!sec) return [];
     return allPoints.filter((p) => p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, sec.geom));
   }
   return displayedPoints();
 }
 
+// Marcadores agrupados (T14): solo con alcance «Toda RM» y muchos puntos.
+const UMBRAL_CLUSTER = 150;  // por debajo de esto no se agrupa nada
+const RADIO_CLUSTER = 60;    // px: hasta aquí se cae dentro de un grupo
+let clusterActivo = false;   // ¿la última pintura agrupó? → recalcular al mover
+let pinFocoId = null;        // punto resaltado por focusPoint
+let groupMarkers = [];       // burbujas de agrupación
+
 function renderMarkers() {
   // Limpiar todos
   Object.values(pointMarkers).forEach((m) => m.remove());
   pointMarkers = {};
+  groupMarkers.forEach((m) => m.remove());
+  groupMarkers = [];
+  if (!map) return;
 
-  // Puntos del alcance elegido + puntos del modo referencia (aunque estén fuera)
   const visibleIds = new Set(mapScopePoints().map((p) => p.id));
-  const toShow = allPoints.filter((p) => visibleIds.has(p.id) || refResultsIds.has(p.id));
+  const toShow = allPoints.filter(
+    (p) => p.lat != null && p.lng != null && (visibleIds.has(p.id) || refResultsIds.has(p.id))
+  );
 
-  toShow.forEach((p) => {
-    if (p.lat == null || p.lng == null) return;
-    const el = document.createElement('div');
-    const inRef = refResultsIds.has(p.id);
-    const est = p.estado || 'pendiente';
-    // wrap (lo transforma MapLibre) + .pin interno (el dibujo, con hover)
-    el.className = 'pin-wrap' + (inRef ? ' is-ref' : '');
-    el.innerHTML = `<div class="pin" data-est="${est}"><span class="ms pin-ic">${PIN_ICONS[est] || 'schedule'}</span></div>`;
-    // Sin popup: el clic abre la ficha de detalles (openPointDetail)
-    const marker = new maplibregl.Marker({ element: el })
-      .setLngLat([p.lng, p.lat])
-      .addTo(map);
-    el.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      openPointDetail(p.id);
-    });
-    pointMarkers[p.id] = marker;
+  // El modo referencia va punto por punto: son los resultados de la búsqueda
+  // por radio y tienen que distinguirse. Lo mismo para el punto que pidió
+  // focusPoint: si fuiste a ese punto, tiene que verse aunque esté agrupado.
+  const sueltos = toShow.filter((p) => refResultsIds.has(p.id) || p.id === pinFocoId);
+  const idsSueltos = new Set(sueltos.map((p) => p.id));
+  const enAlcance = toShow.filter((p) => !idsSueltos.has(p.id));
+
+  clusterActivo = puntosScope === 'region' && enAlcance.length > UMBRAL_CLUSTER;
+  const grupos = agruparPuntos(enAlcance, {
+    radio: clusterActivo ? RADIO_CLUSTER : 0,
+    proyectar: (p) => map.project([p.lng, p.lat]),
   });
+
+  for (const g of grupos) {
+    if (g.puntos.length === 1) agregarPin(g.puntos[0]);
+    else agregarGrupo(g);
+  }
+  sueltos.forEach(agregarPin);
+
+  resaltarPinFoco();
+}
+
+function agregarPin(p) {
+  const el = document.createElement('div');
+  const inRef = refResultsIds.has(p.id);
+  const est = p.estado || 'pendiente';
+  // wrap (lo transforma MapLibre) + .pin interno (el dibujo, con hover)
+  el.className = 'pin-wrap' + (inRef ? ' is-ref' : '');
+  el.innerHTML = `<div class="pin" data-est="${est}"><span class="ms pin-ic">${PIN_ICONS[est] || 'schedule'}</span></div>`;
+  // Sin popup: el clic abre la ficha de detalles (openPointDetail)
+  const marker = new maplibregl.Marker({ element: el })
+    .setLngLat([p.lng, p.lat])
+    .addTo(map);
+  el.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    openPointDetail(p.id);
+  });
+  pointMarkers[p.id] = marker;
+}
+
+// Burbuja de agrupación: cuenta de puntos en el centroide. El clic acerca el
+// zoom; al acercarse los puntos se separan en pantalla y el grupo se abre solo.
+function agregarGrupo(g) {
+  const centro = map.unproject([g.x, g.y]);
+  const el = document.createElement('div');
+  el.className = 'pin-wrap pin-group-wrap';
+  el.innerHTML = `<div class="pin-group"><span>${g.n}</span></div>`;
+  const marker = new maplibregl.Marker({ element: el })
+    .setLngLat(centro)
+    .addTo(map);
+  el.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    map.flyTo({ center: centro, zoom: Math.min(map.getZoom() + 1.5, 18) });
+  });
+  groupMarkers.push(marker);
+}
+
+function resaltarPinFoco() {
+  document.querySelectorAll('.pin-wrap.pin-focus').forEach((el) => el.classList.remove('pin-focus'));
+  const m = pinFocoId != null ? pointMarkers[pinFocoId] : null;
+  if (m) m.getElement().classList.add('pin-focus');
 }
 
 function focusPoint(id) {
@@ -726,72 +940,73 @@ function focusPoint(id) {
   if (p.lat == null || p.lng == null) {
     return toast('Este punto no tiene coordenadas válidas', true);
   }
+  // El punto pedido siempre queda como pin suelto, aunque esté dentro de un
+  // grupo: renderMarkers() lo repinta así en cada `moveend` del flyTo.
+  pinFocoId = id;
   map.flyTo({ center: [p.lng, p.lat], zoom: Math.max(map.getZoom(), 15) });
-  document.querySelectorAll('.pin.pin-focus').forEach((el) => el.classList.remove('pin-focus'));
-  const m = pointMarkers[id];
-  if (m) m.getElement().classList.add('pin-focus');
+  resaltarPinFoco();
 }
 
 // ============================================================
 // CLIC EN MAPA
 // ============================================================
-// Sector (visible) bajo un lng/lat: hit-test geométrico preciso.
+// Territorio (visible) bajo un lng/lat: hit-test geométrico preciso.
 // OJO: queryRenderedFeatures con un punto sobre capas de fill da falsos
-// positivos en MapLibre 4.7.1 (devuelve el sector aunque estés fuera).
-function sectorAtLngLat(lng, lat) {
-  const s = allSectores.find((x) => sectorsVisible(x) && pointInGeometry(lng, lat, x.geom));
+// positivos en MapLibre 4.7.1 (devuelve el territorio aunque estés fuera).
+function territorioAtLngLat(lng, lat) {
+  const s = allTerritorios.find((x) => territoriosVisible(x) && pointInGeometry(lng, lat, x.geom));
   return s ? s.id : null;
 }
 
-// Selección de sector: feature-state en el mapa + clase en la tarjeta lateral
-function setSectorSelected(id) {
-  if (sectorSelectedId === id) return;
-  if (map && map.getSource('sectores') && sectorSelectedId != null) {
-    map.setFeatureState({ source: 'sectores', id: sectorSelectedId }, { selected: false });
+// Selección de territorio: feature-state en el mapa + clase en la tarjeta lateral
+function setTerritorioSelected(id) {
+  if (territorioSelectedId === id) return;
+  if (map && map.getSource('territorios') && territorioSelectedId != null) {
+    map.setFeatureState({ source: 'territorios', id: territorioSelectedId }, { selected: false });
   }
-  sectorSelectedId = id;
-  if (map && map.getSource('sectores') && id != null) {
-    map.setFeatureState({ source: 'sectores', id }, { selected: true });
+  territorioSelectedId = id;
+  pinFocoId = null; // el resaltado no sobrevive a cambiar de territorio
+  prefSet('territorioSel', id || '');
+  if (map && map.getSource('territorios') && id != null) {
+    map.setFeatureState({ source: 'territorios', id }, { selected: true });
   }
   syncSelectedCard();
-  renderList();     // la lista muestra solo los puntos del sector seleccionado
-  renderMarkers();  // en modo "sector" también cambian los marcadores del mapa
-  renderSectorDetail();
-  if (mobileOpen) renderMobile();
+  renderList();     // la lista muestra solo los puntos del territorio seleccionado
+  renderMarkers();  // en modo "territorio" también cambian los marcadores del mapa
+  renderTerritorioDetail();
+  renderAssign();   // al deselectar se cierra la vista de asignación
 }
 
-// Sector seleccionado (o null)
-function sectorSelected() {
-  return sectorSelectedId ? allSectores.find((s) => s.id === sectorSelectedId) : null;
+// Territorio seleccionado (o null)
+function territorioSelected() {
+  return territorioSelectedId ? allTerritorios.find((s) => s.id === territorioSelectedId) : null;
 }
 
 function updateListScope() {
   const head = document.getElementById('puntosHead');
-  const btn = document.getElementById('clearSectorSel');
+  const btn = document.getElementById('allTerritoriosBtn');
   if (!head || !btn) return;
-  const sec = sectorSelected();
+  const sec = territorioSelected();
   head.textContent = sec ? `Puntos · ${sec.nombre}` : 'Puntos';
   btn.style.display = sec ? '' : 'none';
 
-  // Navegación en dos niveles (estilo front): lista de sectores <-> detalle
+  // Navegación en dos niveles (estilo front): lista de territorios <-> detalle
   const sel = !!sec;
-  const listBox = document.getElementById('sectorList');
+  const listBox = document.getElementById('territorioList');
   const detail = document.getElementById('detailBlock');
   const fw = document.getElementById('filterWrap');
   const chips = document.getElementById('estadoChips');
   if (listBox) listBox.style.display = sel ? 'none' : '';
-  if (detail) detail.style.display = sel ? '' : 'none';
+  if (detail) detail.style.display = (sel && !assignOpen) ? '' : 'none';
   if (fw) fw.style.display = sel ? '' : 'none';
   if (chips) chips.style.display = sel ? '' : 'none';
   if (!sel && assignOpen) {
     assignOpen = false;
-    const ab = document.getElementById('assignSectorsBtn');
-    if (ab) ab.classList.remove('active');
     renderAssign();
   }
 
-  // Dos zonas flex: con sector elegido los puntos toman el espacio y la de
-  // sectores se compacta; sin sector, la lista de sectores crece para llenar.
+  // Dos zonas flex: con territorio elegido los puntos toman el espacio y la de
+  // territorios se compacta; sin territorio, la lista de territorios crece para llenar.
   const sectZone = document.getElementById('sectZone');
   const ptsZone = document.getElementById('ptsZone');
   if (sectZone) sectZone.classList.toggle('compact', sel);
@@ -799,8 +1014,8 @@ function updateListScope() {
 }
 
 function syncSelectedCard() {
-  document.querySelectorAll('#sectorList .sector-card').forEach((el) => {
-    el.classList.toggle('selected', el.dataset.id === sectorSelectedId);
+  document.querySelectorAll('#territorioList .territorio-card').forEach((el) => {
+    el.classList.toggle('selected', el.dataset.id === territorioSelectedId);
   });
 }
 
@@ -866,7 +1081,7 @@ function onMapClick(e) {
     return;
   }
 
-  // Modo dibujo: cada clic agrega un vértice del sector
+  // Modo dibujo: cada clic agrega un vértice del territorio
   if (drawActive) { handleDrawClick(e); return; }
 
   const { lng, lat } = e.lngLat;
@@ -883,23 +1098,23 @@ function onMapClick(e) {
     return;
   }
 
-  const sectorId = sectorAtLngLat(lng, lat);
+  const territorioId = territorioAtLngLat(lng, lat);
 
-  if (sectorId) {
-    if (sectorId === sectorSelectedId) {
-      // Sector ya seleccionado: el clic marca el punto
+  if (territorioId) {
+    if (territorioId === territorioSelectedId) {
+      // Territorio ya seleccionado: el clic marca el punto
       placeTempMarker(lng, lat);
     } else {
-      // Sector distinto (o ninguno seleccionado): cambia/selecciona
-      setSectorSelected(sectorId);
+      // Territorio distinto (o ninguno seleccionado): cambia/selecciona
+      setTerritorioSelected(territorioId);
     }
     return;
   }
 
-  // Sin sector debajo
-  if (sectorSelectedId) {
+  // Sin territorio debajo
+  if (territorioSelectedId) {
     // Clic en zona vacía: deselecciona (el punto se marca con doble clic)
-    setSectorSelected(null);
+    setTerritorioSelected(null);
   }
   // Sin selección: el clic simple no hace nada (marcar = doble clic)
 }
@@ -963,6 +1178,12 @@ async function savePoint() {
   if (isNaN(lat) || isNaN(lng)) { err.textContent = 'Latitud/longitud inválidas'; return; }
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) { err.textContent = 'Coordenadas fuera de rango'; return; }
 
+  // Mismo nombre a menos de 10 m: casi seguro un punto repetido
+  const dup = duplicadoCercano(allPoints, nombre, lat, lng, DUP_METROS, editingId);
+  if (dup && !confirm(`Ya existe "${dup.punto.nombre}" a ${dup.metros} m de este punto.\n\n¿Guardar el duplicado de todos modos?`)) {
+    return;
+  }
+
   const editId = editingId;
   const { data: savedId, error } = await db.rpc('guardar_punto', {
     p_id: editId,
@@ -994,7 +1215,7 @@ async function savePoint() {
     created_at: prev?.created_at ?? new Date().toISOString(),
     updated_at: new Date().toISOString(),
     deleted_at: null,
-    sector_id: sectorAtLngLat(lng, lat),
+    territorio_id: territorioAtLngLat(lng, lat),
   };
   if (prev) Object.assign(prev, rec); else allPoints.push(rec);
 
@@ -1002,11 +1223,11 @@ async function savePoint() {
   toast(editId ? 'Punto actualizado' : 'Punto guardado');
 }
 
-// Repinta lista, marcadores y contadores de sectores tras un cambio local
+// Repinta lista, marcadores y contadores de territorios tras un cambio local
 function refreshPointsViews() {
   renderList();
   renderMarkers();
-  renderSectorList();
+  renderTerritorioList();
 }
 
 // ============================================================
@@ -1098,19 +1319,19 @@ document.getElementById('pdDelete').addEventListener('click', () => {
 });
 
 // ============================================================
-// SECTORES: CAPAS, CARGA Y LISTA
+// TERRITORIOS: CAPAS, CARGA Y LISTA
 // ============================================================
 function emptyFC() { return { type: 'FeatureCollection', features: [] }; }
 
-function initSectorLayers() {
-  if (!map.getSource('sectores')) {
-    map.addSource('sectores', { type: 'geojson', data: emptyFC(), promoteId: 'id' });
+function initTerritorioLayers() {
+  if (!map.getSource('territorios')) {
+    map.addSource('territorios', { type: 'geojson', data: emptyFC(), promoteId: 'id' });
   }
-  if (!map.getLayer('sectores-fill')) {
+  if (!map.getLayer('territorios-fill')) {
     map.addLayer({
-      id: 'sectores-fill',
+      id: 'territorios-fill',
       type: 'fill',
-      source: 'sectores',
+      source: 'territorios',
       paint: {
         'fill-color': ['get', 'color'],
         'fill-opacity': ['case',
@@ -1121,11 +1342,11 @@ function initSectorLayers() {
       },
     });
   }
-  if (!map.getLayer('sectores-outline')) {
+  if (!map.getLayer('territorios-outline')) {
     map.addLayer({
-      id: 'sectores-outline',
+      id: 'territorios-outline',
       type: 'line',
-      source: 'sectores',
+      source: 'territorios',
       paint: {
         // Trazo punteado estilo front (6 2 sobre ancho 2.5)
         'line-dasharray': [2.4, 0.8],
@@ -1141,11 +1362,11 @@ function initSectorLayers() {
       },
     });
   }
-  if (!map.getLayer('sectores-labels')) {
+  if (!map.getLayer('territorios-labels')) {
     map.addLayer({
-      id: 'sectores-labels',
+      id: 'territorios-labels',
       type: 'symbol',
-      source: 'sectores',
+      source: 'territorios',
       layout: {
         'text-field': ['get', 'nombre'],
         // text-font obligatorio: Open Sans da 404 en OpenFreeMap y deja la
@@ -1233,26 +1454,26 @@ function countPointsInRing(ring) {
   return n;
 }
 
-function countPointsInSector(s) {
+function countPointsInTerritorio(s) {
   const ring = s.geom && s.geom.coordinates && s.geom.coordinates[0];
   return ring ? countPointsInRing(ring) : 0;
 }
 
-// Puntos dentro de un sector.
-// T6: si el punto trae sector_id (lo calcula la DB con un trigger) basta
+// Puntos dentro de un territorio.
+// T6: si el punto trae territorio_id (lo calcula la DB con un trigger) basta
 // comparar ids; solo se cae al hit-test geométrico cuando no está asignado
-// (fuera de todo sector o columna aún sin poblar).
-function pointsInSector(s) {
+// (fuera de todo territorio o columna aún sin poblar).
+function pointsInTerritorio(s) {
   if (!s) return [];
   return allPoints.filter((p) => {
-    if (p.sector_id) return p.sector_id === s.id;
+    if (p.territorio_id) return p.territorio_id === s.id;
     return p.lat != null && p.lng != null && pointInGeometry(p.lng, p.lat, s.geom);
   });
 }
 
 // Desglose por estado (para la barra multicolor)
-function sectorBreakdown(s) {
-  const pts = pointsInSector(s);
+function territorioBreakdown(s) {
+  const pts = pointsInTerritorio(s);
   const total = pts.length;
   const c = { pendiente: 0, visitado: 0, erroneo: 0, no_pasar: 0 };
   pts.forEach((p) => { const e = p.estado || 'pendiente'; c[e] = (c[e] || 0) + 1; });
@@ -1282,6 +1503,12 @@ function emailDe(userId) {
   return u ? u.email : '';
 }
 
+function fmtFecha(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d) ? '—' : d.toLocaleDateString('es-CL');
+}
+
 async function loadUsuarios() {
   // T3: la lista de correos solo la pide el admin (la RPC la niega a los demás)
   if (!isAdmin) { usuarios = []; return; }
@@ -1292,54 +1519,65 @@ async function loadUsuarios() {
 
 async function loadAsignaciones() {
   const { data, error } = await db
-    .from('sectores_asignaciones')
-    .select('sector_id, user_id, estado, devuelta_at');
-  if (error) { console.error('asignaciones:', error); asignaciones = {}; return; }
-  asignaciones = {};
-  (data || []).forEach((r) => { asignaciones[r.sector_id] = r; });
-}
-
-// Asignación vigente de un sector (las devueltas no cuentan: el sector
-// queda libre para reasignar y desaparece de la app del colaborador)
-function asigActiva(sectorId) {
-  const a = asignaciones[sectorId];
-  return a && a.estado === 'activa' ? a : null;
-}
-
-async function loadSectores() {
-  const { data, error } = await db.from('sectores').select('*');
+    .from('territorios_asignaciones')
+    .select('territorio_id, user_id, estado, assigned_at, devuelta_at, completado_at, notas');
   if (error) {
-    console.error('sectores:', error);
+    // Si falla (tabla/columna ausente, RLS), se avisa: con la lista vacía la
+    // UI no podría mostrar procesos en curso y el admin creería que el
+    // territorio está libre
+    console.error('asignaciones:', error);
+    if (isAdmin) toast('No se pudo cargar el historial de asignaciones: ' + error.message, true);
+    asignaciones = {};
+    return;
+  }
+  // Historial completo por territorio: cada fila es un proceso de trabajo
+  asignaciones = {};
+  (data || []).forEach((r) => {
+    (asignaciones[r.territorio_id] = asignaciones[r.territorio_id] || []).push(r);
+  });
+}
+
+// Proceso en curso de un territorio (las devueltos no cuentan: el territorio queda
+// libre para un nuevo proceso y desaparece de la app del colaborador)
+function asigActiva(territorioId) {
+  const arr = asignaciones[territorioId] || [];
+  return arr.find((a) => a.estado === 'activa') || null;
+}
+
+async function loadTerritorios() {
+  const { data, error } = await db.from('territorios').select('*');
+  if (error) {
+    console.error('territorios:', error);
     const missing =
       error.code === '42P01' ||
       error.code === 'PGRST205' ||
       /does not exist|could not find the table/i.test(error.message || '');
-    sectorListError = missing
+    territorioListError = missing
       ? 'Falta la tabla: ejecuta la sección 6 de schema.sql en Supabase'
-      : 'Error cargando sectores';
-    renderSectorList();
+      : 'Error cargando territorios';
+    renderTerritorioList();
     return;
   }
-  sectorListError = null;
-  allSectores = data || [];
+  territorioListError = null;
+  allTerritorios = data || [];
   snapRingsCache = null;
-  if (sectorSelectedId && !allSectores.some((s) => s.id === sectorSelectedId)) {
-    sectorSelectedId = null; // el sector seleccionado ya no existe
+  if (territorioSelectedId && !allTerritorios.some((s) => s.id === territorioSelectedId)) {
+    territorioSelectedId = null; // el territorio seleccionado ya no existe
   }
-  updateSectorsSource();
-  renderSectorList();
+  updateTerritoriosSource();
+  renderTerritorioList();
   updateListScope();
 }
 
-function sectorsVisible(s) {
+function territoriosVisible(s) {
   const sel = comunaSel.value;
-  // Solo se muestran sectores de la comuna seleccionada; sin comuna, ninguno
+  // Solo se muestran territorios de la comuna seleccionada; sin comuna, ninguno
   return !!sel && s.comuna === sel;
 }
 
-function updateSectorsSource() {
-  if (!map || !map.getSource('sectores')) return;
-  const features = allSectores.filter(sectorsVisible).map((s) => ({
+function updateTerritoriosSource() {
+  if (!map || !map.getSource('territorios')) return;
+  const features = allTerritorios.filter(territoriosVisible).map((s) => ({
     type: 'Feature',
     properties: {
       id: s.id,
@@ -1349,36 +1587,41 @@ function updateSectorsSource() {
     },
     geometry: s.geom,
   }));
-  map.getSource('sectores').setData({ type: 'FeatureCollection', features });
+  map.getSource('territorios').setData({ type: 'FeatureCollection', features });
   // setData puede descartar los feature-states: reafirma la selección
-  if (sectorSelectedId != null) {
-    map.setFeatureState({ source: 'sectores', id: sectorSelectedId }, { selected: true });
+  if (territorioSelectedId != null) {
+    map.setFeatureState({ source: 'territorios', id: territorioSelectedId }, { selected: true });
   }
 }
 
-function renderSectorList() {
-  const box = document.getElementById('sectorList');
+function renderTerritorioList() {
+  const box = document.getElementById('territorioList');
   if (!box) return;
-  const visible = allSectores.filter(sectorsVisible);
+
+  // Sin comuna elegida: resumen de los territorios con proceso en curso, para
+  // abrir su comuna y el territorio de un clic sin tener que elegir comuna antes.
+  if (!comunaSel.value) return renderTerritorioResumen(box);
+
+  const visible = allTerritorios.filter(territoriosVisible);
 
   if (!visible.length) {
-    box.innerHTML = sectorListError
-      ? `<div class="empty">${escapeHtml(sectorListError)}</div>`
-      : '<div class="empty">Aún no hay sectores · dibuja uno con ✏️</div>';
-    renderSectorDetail();
+    box.innerHTML = territorioListError
+      ? `<div class="empty">${escapeHtml(territorioListError)}</div>`
+      : '<div class="empty">Aún no hay territorios · dibuja uno con ✏️</div>';
+    renderTerritorioDetail();
     renderAssign();
     return;
   }
 
   box.innerHTML = visible.map((s) => {
-    const st = sectorBreakdown(s);
+    const st = territorioBreakdown(s);
     const act = asigActiva(s.id);
     const quien = act ? emailDe(act.user_id) : '';
     const chip = quien
       ? `<span class="who">${escapeHtml(quien)}</span>`
       : `<span class="who none"><span class="ms ms-sm">warning</span>Sin asignar</span>`;
     return `
-      <div class="sector-card${s.id === sectorSelectedId ? ' selected' : ''}" data-id="${s.id}">
+      <div class="territorio-card${s.id === territorioSelectedId ? ' selected' : ''}" data-id="${s.id}">
         <div class="s-top">
           <span class="dot" style="background:${escapeHtml(s.color || '#1d4ed8')}"></span>
           <b>${escapeHtml(s.nombre)}</b>
@@ -1393,28 +1636,92 @@ function renderSectorList() {
       </div>`;
   }).join('');
 
-  box.querySelectorAll('.sector-card').forEach((el) => {
+  box.querySelectorAll('.territorio-card').forEach((el) => {
     const id = el.dataset.id;
     el.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
-      focusSector(id);
+      focusTerritorio(id);
     });
-    el.addEventListener('mouseenter', () => setSectorHover(id, true));
-    el.addEventListener('mouseleave', () => setSectorHover(id, false));
+    el.addEventListener('mouseenter', () => setTerritorioHover(id, true));
+    el.addEventListener('mouseleave', () => setTerritorioHover(id, false));
   });
 
   syncSelectedCard();
-  renderSectorDetail();
+  renderTerritorioDetail();
   renderAssign();
 }
 
-// Card completa del sector seleccionado
-function renderSectorDetail() {
-  const box = document.getElementById('sectorDetail');
+// Resumen sin comuna: tarjetas de los territorios con proceso (asignación)
+// activo, con su comuna; al pulsar uno se abre esa comuna y el territorio.
+function renderTerritorioResumen(box) {
+  const asignados = allTerritorios.filter(
+    (s) => s.comuna && comunaActiva(s.comuna) && asigActiva(s.id)
+  );
+
+  if (!asignados.length) {
+    box.innerHTML = territorioListError
+      ? `<div class="empty">${escapeHtml(territorioListError)}</div>`
+      : '<div class="empty">Sin territorios asignados · elige una comuna para ver todos</div>';
+    renderTerritorioDetail();
+    renderAssign();
+    return;
+  }
+
+  const cards = asignados.map((s) => {
+    const st = territorioBreakdown(s);
+    const act = asigActiva(s.id);
+    return `
+      <div class="territorio-card" data-id="${escapeHtml(s.id)}" data-comuna="${escapeHtml(s.comuna)}">
+        <div class="s-top">
+          <span class="dot" style="background:${escapeHtml(s.color || '#1d4ed8')}"></span>
+          <b>${escapeHtml(s.nombre)}</b>
+          <span class="who">${escapeHtml(emailDe(act.user_id) || '—')}</span>
+        </div>
+        <small>${escapeHtml(s.comuna)} · ${st.total} punto${st.total === 1 ? '' : 's'}</small>
+        <div class="s-adv">
+          <span>Avance ${st.hechos} / ${st.total}</span>
+          <span class="s-pct">${st.pct}%</span>
+        </div>
+        ${progressBarHtml(st)}
+      </div>`;
+  }).join('');
+
+  box.innerHTML = `
+    <div class="activos-frame">
+      <div class="sect-resumen-head">
+        <span class="ms ms-sm">bolt</span>
+        <span>Territorios activos</span>
+        <span class="activos-count">${asignados.length}</span>
+      </div>
+      ${cards}
+    </div>`;
+
+  box.querySelectorAll('.territorio-card').forEach((el) => {
+    el.addEventListener('click', () => abrirComunaTerritorio(el.dataset.comuna, el.dataset.id));
+  });
+
+  renderTerritorioDetail();
+  renderAssign();
+}
+
+// Desde el resumen: cambia el selector a la comuna del territorio y lo enfoca.
+// onComunaChange() limpia la selección anterior y encuadra la comuna; luego
+// focusTerritorio vuela al polígono y lo deja seleccionado.
+function abrirComunaTerritorio(comuna, territorioId) {
+  if (comuna && comunaSel.value !== comuna) {
+    comunaSel.value = comuna;
+    onComunaChange();
+  }
+  focusTerritorio(territorioId);
+}
+
+// Card completa del territorio seleccionado
+function renderTerritorioDetail() {
+  const box = document.getElementById('territorioDetail');
   if (!box) return;
-  const s = sectorSelected();
+  const s = territorioSelected();
   if (!s) { box.innerHTML = ''; return; }
-  const st = sectorBreakdown(s);
+  const st = territorioBreakdown(s);
   const act = asigActiva(s.id);
   const quien = act ? emailDe(act.user_id) : '';
   const asigTitle = asignaciones[s.id] && !act && asignaciones[s.id].devuelta_at
@@ -1422,7 +1729,7 @@ function renderSectorDetail() {
     : '';
   const palette = isAdmin ? `
       <div class="sd-palette" id="sdPalette" style="display:none">
-        ${SECTOR_COLORS.map((c) => `
+        ${TERRITORIO_COLORS.map((c) => `
           <button class="chip${c === s.color ? ' selected' : ''}" data-color="${c}"
                   style="background:${c}" title="Color"></button>`).join('')}
       </div>` : '';
@@ -1435,16 +1742,20 @@ function renderSectorDetail() {
         </div>
         <div class="dc-tools">
           <span class="who${quien ? '' : ' none'}"${asigTitle}>${escapeHtml(quien || (asigTitle ? 'Devuelta' : 'Sin asignar'))}</span>
-          ${isAdmin ? `
           <div class="sd-menu-wrap">
-            <button id="sdMenu" class="sd-iconbtn" title="Opciones del sector"><span class="ms ms-sm">more_vert</span></button>
+            <button id="sdMenu" class="sd-iconbtn" title="Opciones del territorio" aria-label="Opciones del territorio"><span class="ms ms-sm">more_vert</span></button>
             <div class="sd-menu-pop" id="sdMenuPop">
+              <button id="sdExportGeo"><span class="ms ms-sm">map</span>Exportar GeoJSON</button>
+              <button id="sdExportCsv"><span class="ms ms-sm">list</span>Exportar puntos (CSV)</button>
+              ${isAdmin ? `
+              <div class="sd-menu-sep"></div>
+              <button id="sdAssign"><span class="ms ms-sm">group_add</span>Asignar</button>
               <button id="sdRename"><span class="ms ms-sm">edit</span>Renombrar</button>
               <button id="sdEdit"><span class="ms ms-sm">palette</span>Editar</button>
-              <button id="sdDel" class="danger-text"><span class="ms ms-sm">delete</span>Eliminar</button>
+              <button id="sdDel" class="danger-text"><span class="ms ms-sm">delete</span>Eliminar</button>` : ''}
             </div>
-          </div>` : ''}
-          <button id="sdFocus" class="sd-iconbtn" title="Ver en el mapa"><span class="ms ms-sm">center_focus_strong</span></button>
+          </div>
+          <button id="sdFocus" class="sd-iconbtn" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">center_focus_strong</span></button>
         </div>
       </div>
       <div class="stats4">
@@ -1461,119 +1772,191 @@ function renderSectorDetail() {
       ${palette}
     </div>`;
   const f = document.getElementById('sdFocus');
-  if (f) f.addEventListener('click', () => focusSector(s.id));
+  if (f) f.addEventListener('click', () => focusTerritorio(s.id));
   const menuBtn = document.getElementById('sdMenu');
   const menuPop = document.getElementById('sdMenuPop');
   if (menuBtn && menuPop) {
+    // Los items dependen del rol (solo admin aparecen Asignar/Renombrar/…),
+    // así que se enganchan por id y se ignora el que no esté en el DOM.
+    const onItem = (id, fn) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menuPop.classList.remove('visible');
+        fn();
+      });
+    };
     menuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       menuPop.classList.toggle('visible');
     });
-    document.getElementById('sdRename').addEventListener('click', (e) => {
-      e.stopPropagation(); menuPop.classList.remove('visible'); renameSector(s.id);
-    });
-    document.getElementById('sdDel').addEventListener('click', (e) => {
-      e.stopPropagation(); menuPop.classList.remove('visible'); deleteSector(s.id);
+    onItem('sdExportGeo', () => exportarTerritorioGeojson(s));
+    onItem('sdExportCsv', () => exportarTerritorioCsv(s));
+    onItem('sdAssign', () => { assignOpen = true; renderAssign(); });
+    onItem('sdRename', () => renameTerritorio(s.id));
+    onItem('sdDel', () => deleteTerritorio(s.id));
+    onItem('sdEdit', () => {
+      const pal = document.getElementById('sdPalette');
+      if (pal) pal.style.display = pal.style.display === 'none' ? 'flex' : 'none';
     });
     const pal = document.getElementById('sdPalette');
-    document.getElementById('sdEdit').addEventListener('click', (e) => {
-      e.stopPropagation(); menuPop.classList.remove('visible');
-      pal.style.display = pal.style.display === 'none' ? 'flex' : 'none';
-    });
     if (pal) {
       pal.querySelectorAll('.chip').forEach((chip) => {
-        chip.addEventListener('click', (e) => { e.stopPropagation(); changeSectorColor(s.id, chip.dataset.color); });
+        chip.addEventListener('click', (e) => { e.stopPropagation(); changeTerritorioColor(s.id, chip.dataset.color); });
       });
     }
   }
 }
 
-// Cierra el menú de opciones del sector al hacer clic fuera
+// Cierra el menú de opciones del territorio al hacer clic fuera
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.sd-menu-wrap')) {
     document.querySelectorAll('.sd-menu-pop.visible').forEach((p) => p.classList.remove('visible'));
   }
 });
 
-// Tabla de asignación de sectores a usuarios
+// Vista de asignación del territorio elegido: proceso en curso + historial.
+// Cada fila de territorios_asignaciones es un proceso de trabajo del territorio
+// (asignado → devuelto); al devolver, el proceso se cierra y el territorio
+// queda a la espera de un nuevo proceso.
 function renderAssign() {
   const panel = document.getElementById('assignPanel');
+  const detail = document.getElementById('territorioDetail');
   if (!panel) return;
-  if (!assignOpen) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
-  panel.style.display = '';
-  const visible = allSectores.filter(sectorsVisible);
-  const head = '<div class="a-head">Asignar sectores<button id="assignClose" type="button" title="Cerrar">✕</button></div>';
-  if (!visible.length) {
-    panel.innerHTML = `<div class="assign-panel">${head}<div class="empty">Sin sectores en esta comuna</div></div>`;
-  } else {
-    const opts = (sel) => '<option value="">— sin asignar —</option>' +
-      usuarios.map((u) => `<option value="${u.id}"${u.id === sel ? ' selected' : ''}>${escapeHtml(u.email)}</option>`).join('');
-    panel.innerHTML = `
-      <div class="assign-panel">
-        ${head}
-        <p class="assign-hint">Cada colaborador puede tener <b>un solo sector activo</b>. Si el sector fue devuelto queda libre para reasignar.</p>
-        <table>
-          <thead><tr><th>Sector</th><th>Usuario</th><th></th></tr></thead>
-          <tbody>
-            ${visible.map((s) => {
-              const act = asigActiva(s.id);
-              return `
-              <tr data-id="${s.id}">
-                <td>${escapeHtml(s.nombre)}</td>
-                <td><select class="asig-user">${opts(act ? act.user_id : '')}</select></td>
-                <td><button class="clear-assign" title="Devolver el sector al colaborador o liberarlo">Devolver</button></td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>`;
+  const s = territorioSelected();
+  if (!assignOpen || !s) {
+    panel.style.display = 'none';
+    panel.innerHTML = '';
+    if (detail) detail.style.display = '';
+    return;
   }
+  panel.style.display = '';
+  if (detail) detail.style.display = 'none';
+
+  const act = asigActiva(s.id);
+  const hist = (asignaciones[s.id] || [])
+    .slice()
+    .sort((a, b) => new Date(b.assigned_at || 0) - new Date(a.assigned_at || 0));
+  const opts = '<option value="">— elegir usuario —</option>' +
+    usuarios.map((u) => `<option value="${u.id}">${escapeHtml(u.email)}</option>`).join('');
+  const fila = (a) => {
+    const est = ESTADO_ASIG[a.estado] ? a.estado : 'activa';
+    const cierre = est === 'completado' ? a.completado_at : est === 'devuelta' ? a.devuelta_at : null;
+    return `
+    <tr>
+      <td>${escapeHtml(emailDe(a.user_id) || '—')}</td>
+      <td>${fmtFecha(a.assigned_at)}</td>
+      <td>${cierre ? fmtFecha(cierre) : '—'}</td>
+      <td><span class="chip-est ${est}">${ESTADO_ASIG[est]}</span></td>
+    </tr>`;
+  };
+  panel.innerHTML = `
+    <div class="assign-panel">
+      <div class="a-head">
+        <span><button id="assignBack" class="sd-iconbtn" title="Volver a la ficha del territorio" aria-label="Volver a la ficha del territorio"><span class="ms ms-sm">arrow_back</span></button>Asignación</span>
+        <button id="assignClose" type="button" title="Cerrar" aria-label="Cerrar">✕</button>
+      </div>
+      <p class="a-territorio">${s.comuna ? escapeHtml(s.comuna) + ' · ' : ''}<b>${escapeHtml(s.nombre)}</b></p>
+      ${act ? `
+        <div class="asig-actual">
+          <div class="asig-quien">
+            <b>${escapeHtml(emailDe(act.user_id) || '—')}</b>
+            <small>Asignado el ${fmtFecha(act.assigned_at)}</small>
+          </div>
+          <div class="asig-actions">
+            <button id="asigCompletar" class="primary" title="Cerrar el proceso como completado">Completar</button>
+            <button id="asigDevolver" class="danger-text" title="Cerrar el proceso y liberar el territorio">Devolver</button>
+          </div>
+        </div>` : `
+        <div class="asig-nueva">
+          <select id="asigUserSel">${opts}</select>
+          <button id="asigAsignar" class="primary">Asignar</button>
+        </div>`}
+      <p class="assign-hint">Cada fila es un proceso de trabajo sobre el territorio: al devolverlo el proceso se cierra y el territorio queda libre para un nuevo proceso.</p>
+      <table>
+        <thead><tr><th>Usuario</th><th>Asignado</th><th>Devuelto</th><th>Estado</th></tr></thead>
+        <tbody>${hist.length ? hist.map(fila).join('') : '<tr><td colspan="4">Sin procesos registrados</td></tr>'}</tbody>
+      </table>
+    </div>`;
+
+  const back = document.getElementById('assignBack');
+  if (back) back.addEventListener('click', () => { assignOpen = false; renderAssign(); });
   const close = document.getElementById('assignClose');
-  if (close) close.addEventListener('click', () => { assignOpen = false; document.getElementById('assignSectorsBtn').classList.remove('active'); renderAssign(); });
-  panel.querySelectorAll('tr[data-id]').forEach((tr) => {
-    const id = tr.dataset.id;
-    const sel = tr.querySelector('.asig-user');
-    if (sel) sel.addEventListener('change', (e) => assignSector(id, e.target.value));
-    const clr = tr.querySelector('.clear-assign');
-    if (clr) clr.addEventListener('click', () => assignSector(id, ''));
+  if (close) close.addEventListener('click', () => { assignOpen = false; setTerritorioSelected(null); });
+  const asignar = document.getElementById('asigAsignar');
+  if (asignar) asignar.addEventListener('click', () => {
+    const uid = document.getElementById('asigUserSel').value;
+    if (!uid) return toast('Elige un usuario para asignar el territorio', true);
+    assignTerritorio(s.id, uid);
   });
+  const dev = document.getElementById('asigDevolver');
+  if (dev) dev.addEventListener('click', () => assignTerritorio(s.id, ''));
+  const comp = document.getElementById('asigCompletar');
+  if (comp) comp.addEventListener('click', () => completarTerritorio(s.id));
 }
 
-async function assignSector(sectorId, userId) {
-  if (!isAdmin) return toast('Solo administradores pueden asignar sectores', true);
+// Cierre manual del proceso (admin): RPC completar_territorio + notas
+async function completarTerritorio(territorioId) {
+  if (!isAdmin) return toast('Solo administradores pueden completar territorios', true);
+  const notas = prompt('Notas del proceso (opcional):', '');
+  if (notas === null) return;
+  const { error } = await db.rpc('completar_territorio', {
+    p_territorio: territorioId,
+    p_notas: notas.trim() || null,
+  });
+  if (error) return toast(error.message, true);
+  toast('Proceso completado');
+  await loadAsignaciones();
+  renderAssign();
+  renderTerritorioList();
+  renderTerritorioDetail();
+}
+
+async function assignTerritorio(territorioId, userId) {
+  if (!isAdmin) return toast('Solo administradores pueden asignar territorios', true);
   if (!userId) {
-    // Devolver / liberar: se conserva la fila como historial
-    const { error } = await db.from('sectores_asignaciones').update({
+    // Devolver: cierra el proceso en curso; la fila se conserva como historial
+    const { error } = await db.from('territorios_asignaciones').update({
       estado: 'devuelta',
       devuelta_at: new Date().toISOString(),
       devuelta_por: currentUser ? currentUser.id : null,
-    }).eq('sector_id', sectorId);
+    }).eq('territorio_id', territorioId).eq('estado', 'activa');
     if (error) return toast(error.message, true);
+    toast('Proceso cerrado: el territorio quedó libre');
   } else {
-    const { error } = await db.from('sectores_asignaciones').upsert(
-      {
-        sector_id: sectorId,
-        user_id: userId,
-        assigned_by: currentUser ? currentUser.id : null,
-        assigned_at: new Date().toISOString(),
-        estado: 'activa',
-        devuelta_at: null,
-        devuelta_por: null,
-      },
-      { onConflict: 'sector_id' }
-    );
+    // Revisión en el servidor: un territorio con proceso en curso no se puede
+    // asignar a otro; tras devolverlo sí (el historial admite varios procesos)
+    const { data: act, error: errAct } = await db
+      .from('territorios_asignaciones')
+      .select('user_id')
+      .eq('territorio_id', territorioId)
+      .eq('estado', 'activa')
+      .maybeSingle();
+    if (errAct) return toast(errAct.message, true);
+    if (act) return toast('El territorio ya está asignado a ' + (emailDe(act.user_id) || 'otro usuario'), true);
+
+    // Nuevo proceso: INSERT (el territorio puede tener varios procesos en el
+    // historial; los índices parciales garantizan 1 activo por territorio/usuario)
+    const { error } = await db.from('territorios_asignaciones').insert({
+      territorio_id: territorioId,
+      user_id: userId,
+      assigned_by: currentUser ? currentUser.id : null,
+      assigned_at: new Date().toISOString(),
+      estado: 'activa',
+    });
     if (error) {
-      // 23505 = el usuario ya tiene otro sector activo (índice parcial)
       const msg = error.code === '23505'
-        ? 'Ese usuario ya tiene un sector activo: devuélvelo antes de asignar otro'
+        ? 'Ese usuario o ese territorio ya tiene un proceso en curso'
         : error.message;
       return toast(msg, true);
     }
+    toast('Proceso de trabajo iniciado');
   }
   await loadAsignaciones();
-  toast('Asignación guardada');
   renderAssign();
-  renderSectorList();
+  renderTerritorioList();
+  renderTerritorioDetail();
 }
 
 // ============================================================
@@ -1581,9 +1964,8 @@ async function assignSector(sectorId, userId) {
 // ============================================================
 function refreshAfterEstado() {
   renderList();
-  renderSectorList();
-  renderSectorDetail();
-  if (mobileOpen) renderMobile();
+  renderTerritorioList();
+  renderTerritorioDetail();
 }
 
 // T1: marcar estado vía RPC (security definer). Cualquier usuario autenticado
@@ -1630,126 +2012,67 @@ document.getElementById('undoBtn').addEventListener('click', () => {
 });
 
 // ============================================================
-// VISTA TERRENO (MÓVIL)
+// TERRITORIOS: FOCO
 // ============================================================
-function renderMobile() {
-  const sec = sectorSelected();
-  const list = document.getElementById('mvList');
-  if (!sec) {
-    document.getElementById('mvComuna').textContent = '';
-    document.getElementById('mvSector').textContent = 'Selecciona un sector';
-    document.getElementById('mvCount').textContent = '0 / 0';
-    document.getElementById('mvPct').textContent = '0%';
-    document.getElementById('mvBar').style.width = '0%';
-    list.innerHTML = '<div class="mv-empty">Selecciona un sector en el panel para verlo en modo terreno.</div>';
-    return;
-  }
-  const b = sectorBreakdown(sec);
-  document.getElementById('mvComuna').textContent = sec.comuna || '—';
-  document.getElementById('mvSector').textContent = sec.nombre;
-  document.getElementById('mvCount').textContent = `${b.hechos} / ${b.total}`;
-  document.getElementById('mvPct').textContent = `${b.pct}%`;
-  document.getElementById('mvBar').style.width = `${b.pct}%`;
-  const pts = pointsInSector(sec);
-  if (!pts.length) { list.innerHTML = '<div class="mv-empty">Este sector no tiene puntos.</div>'; return; }
-  list.innerHTML = pts.map((p) => {
-    const e = p.estado || 'pendiente';
-    const nav = (p.lat != null && p.lng != null)
-      ? `<a class="mv-nav" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank" rel="noopener" title="Cómo llegar">➤</a>` : '';
-    const warn = (p.lat == null || p.lng == null) ? '<div class="mv-warn">Sin coordenadas GPS. Validar en terreno.</div>' : '';
-    const act = (v, l, ic) => `<button class="${e === v ? 'on-' + v : ''}" data-estado="${v}"><span>${ic}</span><span>${l}</span></button>`;
-    return `<div class="mv-card" data-id="${p.id}">
-      <div class="mv-row">
-        <div style="min-width:0">
-          <div class="mv-nombre">${escapeHtml(p.nombre)}</div>
-          <div class="mv-dir">${p.direccion ? escapeHtml(p.direccion) : '—'}</div>
-        </div>
-        ${nav}
-      </div>
-      ${warn}
-      <div class="mv-actions">
-        ${act('visitado', 'Visitado', '✔')}
-        ${act('erroneo', 'Erróneo', '⚠')}
-        ${act('no_pasar', 'No pasar', '⛔')}
-      </div>
-    </div>`;
-  }).join('');
-  list.querySelectorAll('.mv-card').forEach((card) => {
-    const id = card.dataset.id;
-    card.querySelectorAll('.mv-actions button').forEach((btn) => {
-      btn.addEventListener('click', () => setEstadoPunto(id, btn.dataset.estado));
-    });
-  });
+function setTerritorioHover(id, on) {
+  if (!map || !map.getSource('territorios') || !id) return;
+  map.setFeatureState({ source: 'territorios', id }, { hover: on });
 }
 
-document.getElementById('mobileViewBtn').addEventListener('click', () => {
-  mobileOpen = true;
-  document.getElementById('mobileView').classList.add('visible');
-  renderMobile();
-});
-document.getElementById('mvClose').addEventListener('click', () => {
-  mobileOpen = false;
-  document.getElementById('mobileView').classList.remove('visible');
-});
-
-function setSectorHover(id, on) {
-  if (!map || !map.getSource('sectores') || !id) return;
-  map.setFeatureState({ source: 'sectores', id }, { hover: on });
-}
-
-function focusSector(id) {
-  const s = allSectores.find((x) => x.id === id);
+function focusTerritorio(id) {
+  const s = allTerritorios.find((x) => x.id === id);
   if (!s || !s.geom) return;
   const b = boundsFromGeometry(s.geom);
   if (b && !b.isEmpty()) map.fitBounds(b, { padding: 60, duration: 800 });
-  // La tarjeta también deja el sector listo para marcar puntos
-  setSectorSelected(id);
+  // La tarjeta también deja el territorio listo para marcar puntos
+  setTerritorioSelected(id);
 }
 
-async function renameSector(id) {
-  if (!isAdmin) return toast('Solo administradores pueden editar sectores', true);
-  const s = allSectores.find((x) => x.id === id);
+async function renameTerritorio(id) {
+  if (!isAdmin) return toast('Solo administradores pueden editar territorios', true);
+  const s = allTerritorios.find((x) => x.id === id);
   if (!s) return;
-  const nombre = prompt('Nombre del sector:', s.nombre);
+  const nombre = prompt('Nombre del territorio:', s.nombre);
   if (nombre === null) return;
   const trimmed = nombre.trim();
   if (!trimmed || trimmed === s.nombre) return;
-  const { error } = await db.from('sectores').update({ nombre: trimmed }).eq('id', id);
+  const { error } = await db.from('territorios').update({ nombre: trimmed }).eq('id', id);
   if (error) return toast(error.message, true);
-  await loadSectores();
+  await loadTerritorios();
 }
 
-async function changeSectorColor(id, color) {
-  if (!isAdmin) return toast('Solo administradores pueden editar sectores', true);
-  const { error } = await db.from('sectores').update({ color }).eq('id', id);
+async function changeTerritorioColor(id, color) {
+  if (!isAdmin) return toast('Solo administradores pueden editar territorios', true);
+  const { error } = await db.from('territorios').update({ color }).eq('id', id);
   if (error) return toast(error.message, true);
-  await loadSectores();
+  await loadTerritorios();
 }
 
-async function deleteSector(id) {
-  if (!isAdmin) return toast('Solo administradores pueden eliminar sectores', true);
-  const s = allSectores.find((x) => x.id === id);
+async function deleteTerritorio(id) {
+  if (!isAdmin) return toast('Solo administradores pueden eliminar territorios', true);
+  const s = allTerritorios.find((x) => x.id === id);
   if (!confirm(`¿Eliminar "${s?.nombre}"?`)) return;
-  const { error } = await db.from('sectores').delete().eq('id', id);
+  const { error } = await db.from('territorios').delete().eq('id', id);
   if (error) return toast(error.message, true);
-  toast('Sector eliminado');
-  if (sectorSelectedId === id) setSectorSelected(null);
-  await loadSectores();
+  toast('Territorio eliminado');
+  if (territorioSelectedId === id) setTerritorioSelected(null);
+  await loadTerritorios();
 }
 
 // ============================================================
-// DIBUJO DE SECTORES
+// DIBUJO DE TERRITORIOS
 // ============================================================
 function startDraw() {
   if (drawActive) { stopDraw(); return; }
   // T2: la DB rechaza el insert si no es admin; se avisa antes de dibujar.
-  if (!isAdmin) return toast('Solo administradores pueden dibujar sectores', true);
+  if (!isAdmin) return toast('Solo administradores pueden dibujar territorios', true);
+  if (!comunaSel.value) return toast('Elige una comuna antes de dibujar un territorio', true);
 
   drawActive = true;
   drawVerts = [];
   drawHover = null;
   snapRingsCache = null;
-  pendingSector = null;
+  pendingTerritorio = null;
 
   // El modo referencia pisaría el primer clic: lo apagamos
   if (refMode) {
@@ -1760,7 +2083,7 @@ function startDraw() {
     clearReference();
   }
 
-  document.getElementById('sectorModal').classList.remove('visible');
+  document.getElementById('territorioModal').classList.remove('visible');
   document.getElementById('drawToolbar').classList.add('visible');
   document.getElementById('drawBtn').classList.add('active');
   map.doubleClickZoom.disable();
@@ -1774,7 +2097,7 @@ function stopDraw() {
   drawVerts = [];
   drawHover = null;
   setDrawSnap(null);
-  pendingSector = null;
+  pendingTerritorio = null;
 
   if (map) {
     if (map.getSource('draw-preview')) map.getSource('draw-preview').setData(emptyFC());
@@ -1782,7 +2105,7 @@ function stopDraw() {
     map.doubleClickZoom.enable();
     map.getCanvas().style.cursor = '';
   }
-  document.getElementById('sectorModal').classList.remove('visible');
+  document.getElementById('territorioModal').classList.remove('visible');
   document.getElementById('drawToolbar').classList.remove('visible');
   document.getElementById('drawBtn').classList.remove('active');
   document.getElementById('drawCount').textContent = '—';
@@ -1820,7 +2143,7 @@ function updateDraw() {
     })),
   });
 
-  // Contador en vivo: puntos que caerían dentro del sector
+  // Contador en vivo: puntos que caerían dentro del territorio
   const badge = document.getElementById('drawCount');
   if (line.length >= 3) {
     const n = countPointsInRing(line);
@@ -1831,7 +2154,7 @@ function updateDraw() {
 }
 
 // ============================================================
-// SNAP A BORDES EXISTENTES (comuna + sectores) mientras dibujas
+// SNAP A BORDES EXISTENTES (comuna + territorios) mientras dibujas
 // ============================================================
 const SNAP_PX = 14;
 
@@ -1850,7 +2173,7 @@ function snapRefRings() {
   } else {
     for (const c of allComunas) push(c.geom);
   }
-  for (const s of allSectores) if (sectorsVisible(s)) push(s.geom);
+  for (const s of allTerritorios) if (territoriosVisible(s)) push(s.geom);
   snapRingsCache = rings;
   return rings;
 }
@@ -1938,9 +2261,9 @@ function setDrawSnap(edge) {
 
 function handleDrawClick(e) {
   // Con el modal abierto el mapa queda "congelado" (evita vértices fantasma)
-  if (document.getElementById('sectorModal').classList.contains('visible')) return;
+  if (document.getElementById('territorioModal').classList.contains('visible')) return;
 
-  // Clic sobre el primer vértice = cerrar el sector
+  // Clic sobre el primer vértice = cerrar el territorio
   if (drawVerts.length >= 3 && distPx(drawVerts[0], e.point) <= 12) {
     drawHover = null;
     closeDraw();
@@ -1962,20 +2285,20 @@ function onMapMove(e) {
     return;
   }
 
-  const id = sectorAtLngLat(e.lngLat.lng, e.lngLat.lat);
+  const id = territorioAtLngLat(e.lngLat.lng, e.lngLat.lat);
 
-  if (id !== sectorHoverId) {
-    setSectorHover(sectorHoverId, false);
-    setSectorHover(id, true);
-    sectorHoverId = id;
+  if (id !== territorioHoverId) {
+    setTerritorioHover(territorioHoverId, false);
+    setTerritorioHover(id, true);
+    territorioHoverId = id;
   }
-  // Feedback: pointer sobre sector, crosshair donde se puede marcar
+  // Feedback: pointer sobre territorio, crosshair donde se puede marcar
   map.getCanvas().style.cursor = id ? 'pointer' : 'crosshair';
 }
 
 function onMapDblClick(e) {
   if (drawActive) {
-    if (document.getElementById('sectorModal').classList.contains('visible')) return;
+    if (document.getElementById('territorioModal').classList.contains('visible')) return;
     e.preventDefault();
 
     // Los clics previos al doble clic dejaron vértices repetidos en la misma
@@ -1994,16 +2317,16 @@ function onMapDblClick(e) {
 
   if (refMode) return; // modo referencia: sin cambios
 
-  // Modo normal: corta el zoom de MapLibre. Si hay sector, los clics previos
-  // ya resolvieron (seleccionar/marcar); sin sector, el doble clic marca.
+  // Modo normal: corta el zoom de MapLibre. Si hay territorio, los clics previos
+  // ya resolvieron (seleccionar/marcar); sin territorio, el doble clic marca.
   e.preventDefault();
-  if (sectorAtLngLat(e.lngLat.lng, e.lngLat.lat)) return;
+  if (territorioAtLngLat(e.lngLat.lng, e.lngLat.lat)) return;
   placeTempMarker(e.lngLat.lng, e.lngLat.lat);
 }
 
 function closeDraw() {
   if (drawVerts.length < 3) {
-    toast('Necesitas al menos 3 vértices para cerrar un sector', true);
+    toast('Necesitas al menos 3 vértices para cerrar un territorio', true);
     return;
   }
 
@@ -2014,14 +2337,14 @@ function closeDraw() {
   }
 
   const count = countPointsInRing(ring);
-  pendingSector = { ring, color: drawColor, comuna: comunaSel.value || null, count };
+  pendingTerritorio = { ring, color: drawColor, comuna: comunaSel.value || null, count };
 
-  document.getElementById('sectorNombre').value = `Sector ${allSectores.length + 1}`;
-  document.getElementById('sectorCount').innerHTML =
+  document.getElementById('territorioNombre').value = `Territorio ${allTerritorios.length + 1}`;
+  document.getElementById('territorioCount').innerHTML =
     `<span class="swatch" style="background:${escapeHtml(drawColor)}"></span>` +
     `${count} punto${count === 1 ? '' : 's'} incluido${count === 1 ? '' : 's'}`;
-  document.getElementById('sectorErr').textContent = '';
-  document.getElementById('sectorModal').classList.add('visible');
+  document.getElementById('territorioErr').textContent = '';
+  document.getElementById('territorioModal').classList.add('visible');
 
   drawHover = null;
   setDrawSnap(null);
@@ -2029,51 +2352,51 @@ function closeDraw() {
 }
 
 
-async function saveSector() {
-  if (!pendingSector) return;
-  const err = document.getElementById('sectorErr');
+async function saveTerritorio() {
+  if (!pendingTerritorio) return;
+  const err = document.getElementById('territorioErr');
   const nombre =
-    document.getElementById('sectorNombre').value.trim() || `Sector ${allSectores.length + 1}`;
+    document.getElementById('territorioNombre').value.trim() || `Territorio ${allTerritorios.length + 1}`;
 
-  // guardar_sector recorta en el servidor: contra la comuna (nunca sale)
-  // y contra los sectores existentes (cero solapes)
-  const { data, error } = await db.rpc('guardar_sector', {
-    p_comuna: pendingSector.comuna,
+  // guardar_territorio recorta en el servidor: contra la comuna (nunca sale)
+  // y contra los territorios existentes (cero solapes)
+  const { data, error } = await db.rpc('guardar_territorio', {
+    p_comuna: pendingTerritorio.comuna,
     p_nombre: nombre,
-    p_color: pendingSector.color,
-    p_geom: ringToEwkt(pendingSector.ring),
+    p_color: pendingTerritorio.color,
+    p_geom: ringToEwkt(pendingTerritorio.ring),
   });
   if (error) {
     const missing = /could not find the function|does not exist/i.test(error.message || '');
     err.textContent = missing
       ? 'Falta la función SQL: ejecuta la sección 8 de schema.sql en Supabase'
-      : (error.message || 'No se pudo guardar el sector');
+      : (error.message || 'No se pudo guardar el territorio');
     return;
   }
 
-  pendingSector = null;
-  document.getElementById('sectorModal').classList.remove('visible');
+  pendingTerritorio = null;
+  document.getElementById('territorioModal').classList.remove('visible');
   stopDraw();
-  await loadSectores();
+  await loadTerritorios();
 
   // Recién tras el recorte se cuentan los puntos que quedaron dentro
-  const saved = data && data.id ? allSectores.find((s) => s.id === data.id) : null;
-  const n = saved ? countPointsInSector(saved) : 0;
+  const saved = data && data.id ? allTerritorios.find((s) => s.id === data.id) : null;
+  const n = saved ? countPointsInTerritorio(saved) : 0;
   const pts = `· ${n} punto${n === 1 ? '' : 's'} incluido${n === 1 ? '' : 's'}`;
   if (data && data.recortado) {
-    toast(`Sector guardado recortado a los límites · ${data.pct}% del área dibujada ${pts}`);
+    toast(`Territorio guardado recortado a los límites · ${data.pct}% del área dibujada ${pts}`);
   } else {
-    toast(`Sector guardado ${pts}`);
+    toast(`Territorio guardado ${pts}`);
   }
 }
 
 // --- Toolbar y atajos ---
 const drawPalette = document.getElementById('drawPalette');
-SECTOR_COLORS.forEach((c) => {
+TERRITORIO_COLORS.forEach((c) => {
   const chip = document.createElement('button');
   chip.className = 'chip' + (c === drawColor ? ' selected' : '');
   chip.style.background = c;
-  chip.title = 'Color del sector';
+  chip.title = 'Color del territorio';
   chip.addEventListener('click', () => {
     drawColor = c;
     drawPalette.querySelectorAll('.chip').forEach((x) => x.classList.remove('selected'));
@@ -2087,28 +2410,86 @@ document.getElementById('drawBtn').addEventListener('click', startDraw);
 document.getElementById('drawUndo').addEventListener('click', () => { drawVerts.pop(); updateDraw(); });
 document.getElementById('drawCancel').addEventListener('click', () => stopDraw());
 document.getElementById('drawClose').addEventListener('click', () => { drawHover = null; closeDraw(); });
-document.getElementById('sectorCancelBtn').addEventListener('click', () => {
-  pendingSector = null;
-  document.getElementById('sectorModal').classList.remove('visible');
+document.getElementById('territorioCancelBtn').addEventListener('click', () => {
+  pendingTerritorio = null;
+  document.getElementById('territorioModal').classList.remove('visible');
 });
-document.getElementById('sectorSaveBtn').addEventListener('click', saveSector);
-document.getElementById('clearSectorSel').addEventListener('click', () => setSectorSelected(null));
+document.getElementById('territorioSaveBtn').addEventListener('click', saveTerritorio);
+document.getElementById('allTerritoriosBtn').addEventListener('click', () => setTerritorioSelected(null));
 
-document.getElementById('assignSectorsBtn').addEventListener('click', (e) => {
-  if (!isAdmin) return toast('Solo administradores pueden asignar sectores', true);
-  if (!sectorSelected()) return toast('Selecciona un sector primero', true);
-  assignOpen = !assignOpen;
-  e.currentTarget.classList.toggle('active', assignOpen);
-  renderAssign();
+// --- Accesibilidad de modales ---------------------------------------------
+// Tab/Shift+Tab giran dentro del panel abierto, el foco entra al abrir y
+// vuelve al botón que lo abrió al cerrar. Para cerrar, Esc está en el
+// listener que sigue a este bloque.
+const MODALES = ['modal', 'pointDetail', 'territorioModal', 'settingsModal', 'puntoHistorial'];
+const FOCOABLE = 'a[href], button:not([disabled]), input:not([disabled]), '
+  + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function modalVisible() {
+  for (const id of MODALES) {
+    const el = document.getElementById(id);
+    if (el && el.classList.contains('visible')) return el;
+  }
+  return null;
+}
+
+function enfocarPrimero(cont) {
+  const el = [...cont.querySelectorAll(FOCOABLE)]
+    .find((x) => x.offsetParent !== null);   // los ocultos no reciben foco
+  if (el) el.focus();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab') return;
+  const cont = modalVisible();
+  if (!cont) return;
+  const items = [...cont.querySelectorAll(FOCOABLE)].filter((x) => x.offsetParent !== null);
+  if (!items.length) return;
+  const primero = items[0];
+  const ultimo = items[items.length - 1];
+  const activo = document.activeElement;
+  if (cont.contains(activo)) {
+    if (e.shiftKey && activo === primero) { e.preventDefault(); ultimo.focus(); }
+    else if (!e.shiftKey && activo === ultimo) { e.preventDefault(); primero.focus(); }
+  } else {
+    e.preventDefault();
+    (e.shiftKey ? ultimo : primero).focus();
+  }
+});
+
+// Al cambiar la clase .visible: guardar quién tenía el foco, enfocar el
+// panel; al cerrar, devolverlo. Un único observer para los cinco modales.
+let modalActual = null;
+let modalOpener = null;
+const modalObs = new MutationObserver(() => {
+  const cont = modalVisible();
+  if (cont && cont !== modalActual) {
+    modalOpener = document.activeElement;
+    modalActual = cont;
+    enfocarPrimero(cont);
+  } else if (!cont && modalActual) {
+    const volver = modalOpener;
+    modalActual = null;
+    modalOpener = null;
+    if (volver && volver !== document.body && document.contains(volver)) volver.focus();
+  }
+});
+MODALES.forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) modalObs.observe(el, { attributes: true, attributeFilter: ['class'] });
 });
 
 document.addEventListener('keydown', (e) => {
   const typing = e.target && e.target.matches && e.target.matches('input, textarea');
 
   if (e.key === 'Escape') {
-    if (mobileOpen) {
-      mobileOpen = false;
-      document.getElementById('mobileView').classList.remove('visible');
+    if (assignOpen) {
+      assignOpen = false;
+      renderAssign();
+      return;
+    }
+    if (document.getElementById('puntoHistorial').classList.contains('visible')) {
+      cerrarHistorialPunto();
       return;
     }
     if (document.getElementById('pointDetail').classList.contains('visible')) {
@@ -2119,13 +2500,13 @@ document.addEventListener('keydown', (e) => {
       settingsModal.classList.remove('visible');
       return;
     }
-    if (document.getElementById('sectorModal').classList.contains('visible')) {
-      pendingSector = null;
-      document.getElementById('sectorModal').classList.remove('visible');
+    if (document.getElementById('territorioModal').classList.contains('visible')) {
+      pendingTerritorio = null;
+      document.getElementById('territorioModal').classList.remove('visible');
       return;
     }
     if (drawActive) { stopDraw(); return; }
-    if (sectorSelectedId) setSectorSelected(null);
+    if (territorioSelectedId) setTerritorioSelected(null);
     return;
   }
 
@@ -2140,7 +2521,7 @@ document.addEventListener('keydown', (e) => {
 // ============================================================
 // BUSCADOR UNIFICADO (dirección · coordenadas · link Google Maps)
 // Vuela al lugar, marca el punto con el popup "Guardar punto aquí"
-// (mismo flujo que un clic en el mapa dentro de un sector).
+// (mismo flujo que un clic en el mapa dentro de un territorio).
 // ============================================================
 let lastGeocode = null; // { lat, lng, direccion } para precargar el modal
 
@@ -2175,11 +2556,9 @@ async function doSmartSearch() {
   const c = parseCoordQuery(q);
   if (c) return flyMarkAndToast(c.lng, c.lat, `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`);
 
-  // 3) Texto libre → geocodificar con Nominatim (Chile)
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=cl&q=${encodeURIComponent(q)}`;
+  // 3) Texto libre → geocodificar con Nominatim (Chile), con caché y ≤1 req/s
   try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    const data = await res.json();
+    const data = await geocodificar(q);
     if (!data.length) return toast('Dirección no encontrada', true);
     const { lat, lon, display_name } = data[0];
     lastGeocode = { lat: parseFloat(lat), lng: parseFloat(lon), direccion: display_name };
@@ -2187,6 +2566,49 @@ async function doSmartSearch() {
   } catch (_err) {
     toast('Error en la búsqueda', true);
   }
+}
+
+// --- Geocodificación (T15): caché local + espacio mínimo entre peticiones --
+const GEO_LS = 'gps_geo_cache';
+let geoCache = geoCargarCache();
+let geoUltimaPet = 0;
+
+function geoCargarCache() {
+  try {
+    const v = JSON.parse(localStorage.getItem(GEO_LS));
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function geoGuardarCache() {
+  try {
+    localStorage.setItem(GEO_LS, JSON.stringify(geoCache));
+  } catch (_) {}
+}
+
+// Misma query repetida → respuesta del caché sin salir de la máquina.
+// Si toca petición, espera lo que falte para respetar 1 petición/s y guarda
+// el resultado (también los vacíos: una dirección inexistente no debe volver
+// a consultarse).
+async function geocodificar(q) {
+  const ahora = Date.now();
+  const hit = geoCacheLeer(geoCache, q, ahora);
+  if (hit) return hit;
+
+  const espera = GEO_MIN_MS - (ahora - geoUltimaPet);
+  if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=cl&q=${encodeURIComponent(q)}`;
+  geoUltimaPet = Date.now();
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Nominatim ${res.status}`);
+
+  const data = await res.json();
+  geoCache = geoCachePoner(geoCache, q, data, Date.now());
+  geoGuardarCache();
+  return Array.isArray(data) ? data : [];
 }
 
 function searchFromLink(url) {
@@ -2357,9 +2779,609 @@ document.getElementById('toggleSidebar').addEventListener('click', () => {
 });
 
 // ============================================================
+// VISTAS: TERRITORIOS · HISTORIAL · USUARIOS
+// ============================================================
+function setView(name) {
+  const views = { territorios: 'main', historial: 'viewHistorial', usuarios: 'viewUsuarios' };
+  if (!views[name]) return;
+  const cambio = currentView !== name;
+  currentView = name;
+
+  document.querySelectorAll('#mainNav button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.view === name);
+  });
+  document.getElementById('main').style.display = name === 'territorios' ? 'flex' : 'none';
+  document.getElementById('viewHistorial').style.display = name === 'historial' ? 'flex' : 'none';
+  document.getElementById('viewUsuarios').style.display = name === 'usuarios' ? 'flex' : 'none';
+
+  if (name === 'territorios') {
+    if (map && cambio) map.resize();   // el contenedor estaba oculto
+  } else if (name === 'historial') {
+    loadHistorial();
+  } else if (name === 'usuarios') {
+    loadUsuariosView();
+  }
+}
+
+function fmtFechaHora(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d)
+    ? '—'
+    : d.toLocaleDateString('es-CL') + ' · ' +
+      d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Etiquetas del ciclo de vida de una asignación (En proceso / Devuelto / Completado)
+const ESTADO_ASIG = { activa: 'En proceso', devuelta: 'Devuelto', completado: 'Completado' };
+
+function loadHistorial() {
+  return histTab === 'territorios' ? loadHistorialTerritorios() : loadHistorialPuntos();
+}
+
+// ============================================================
+// FILTRO POR COMUNA DEL HISTORIAL
+// ============================================================
+// Aplica a las dos pestañas (Territorios y Puntos) y también al CSV, para que
+// lo que exportas es lo que ves. Va en el <select> del encabezado y se
+// recuerda en la sesión. Va con TODAS las comunas, no solo con las activas:
+// desactivar una comuna no debería ocultar su historial.
+const histComunaSel = document.getElementById('histComunaSel');
+
+function populateHistComunaFilter() {
+  const prev = histComunaSel.value || prefGet('histComuna');
+  const names = todasLasComunas()
+    .slice()
+    .sort((a, b) => a.localeCompare(b, 'es'));
+  histComunaSel.innerHTML =
+    '<option value="">Todas las comunas</option>' +
+    names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  histComunaSel.value = names.includes(prev) ? prev : '';
+}
+
+// Comuna elegida (vacío = todas)
+function histComuna() {
+  return histComunaSel.value || '';
+}
+
+// ============================================================
+// EXPORTACIÓN (Historial · Usuarios · modales · territorio)
+// ============================================================
+// El escapado (csvEscape) y el armado del GeoJSON viven en lib.js: son puros
+// y están testeados. Aquí solo está el disparo de la descarga.
+
+function descargarBlob(nombre, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// CSV con BOM, para que Excel abra bien los acentos
+function descargarCsv(nombreBase, cabeceras, filas) {
+  const csv = [cabeceras, ...filas]
+    .map((f) => f.map(csvEscape).join(','))
+    .join('\r\n');
+  descargarBlob(
+    `${nombreBase}-${new Date().toISOString().slice(0, 10)}.csv`,
+    new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }),
+  );
+}
+
+function descargarJson(nombreBase, objeto) {
+  descargarBlob(
+    `${nombreBase}-${new Date().toISOString().slice(0, 10)}.geojson`,
+    new Blob([JSON.stringify(objeto, null, 2)], { type: 'application/geo+json;' }),
+  );
+}
+
+// Último dataset cargado en el modal (#phExport)
+let phCsv = null;
+
+async function exportarHistorialCsv() {
+  const esTerr = histTab === 'territorios';
+
+  if (esTerr) {
+    const [rt, ra] = await Promise.all([
+      db.from('territorios').select('id, nombre, comuna'),
+      db.from('territorios_asignaciones')
+        .select('territorio_id, user_id, assigned_at, estado, notas, devuelta_at, completado_at'),
+    ]);
+    const error = rt.error || ra.error;
+    if (error) return toast(error.message, true);
+
+    const porId = new Map((rt.data || []).map((t) => [t.id, t]));
+    const cabeceras = ['Comuna', 'Territorio', 'Proceso', 'Usuario', 'Asignado', 'Cierre', 'Estado', 'Notas'];
+
+    // Todos los procesos, agrupados por territorio y numerados cronológicamente
+    const porTerr = new Map();
+    for (const a of ra.data || []) {
+      if (!porTerr.has(a.territorio_id)) porTerr.set(a.territorio_id, []);
+      porTerr.get(a.territorio_id).push(a);
+    }
+
+    const comuna = histComuna();
+    const filas = [];
+    // Solo los territorios de la comuna elegida (el select del encabezado)
+    const entradas = [...porTerr.entries()].filter(([tid]) => {
+      const t = porId.get(tid);
+      return t && (!comuna || t.comuna === comuna);
+    });
+    for (const [tid, lista] of entradas.sort(
+      (x, y) => {
+        const a = porId.get(x[0]), b = porId.get(y[0]);
+        return String(a?.comuna || '').localeCompare(String(b?.comuna || ''), 'es')
+          || String(a?.nombre || '').localeCompare(String(b?.nombre || ''), 'es');
+      },
+    )) {
+      const t = porId.get(tid) || {};
+      const orden = lista.slice().sort(
+        (a, b) => new Date(a.assigned_at || 0) - new Date(b.assigned_at || 0),
+      );
+      orden.forEach((a, i) => {
+        const est = ESTADO_ASIG[a.estado] ? a.estado : 'activa';
+        const cierre = est === 'completado' ? a.completado_at
+          : est === 'devuelta' ? a.devuelta_at : null;
+        filas.push([
+          t.comuna || '', t.nombre || '', i + 1, emailDe(a.user_id) || '',
+          a.assigned_at || '', cierre || '', ESTADO_ASIG[est], a.notas || '',
+        ]);
+      });
+    }
+    descargarCsv(comuna ? `historial-territorios-${slugNombre(comuna)}` : 'historial-territorios', cabeceras, filas);
+    return;
+  }
+
+  // Pestaña Puntos
+  const { data, error } = await db
+    .from('puntos')
+    .select('nombre, estado, ultima_visita, notas, territorio_id, territorios(nombre, comuna)')
+    .is('deleted_at', null)
+    .order('nombre');
+  if (error) return toast(error.message, true);
+
+  const comuna = histComuna();
+  const cabeceras = ['Comuna', 'Territorio', 'Punto', 'Última visita', 'Estado', 'No pasar', 'Erróneo', 'Activo', 'Notas'];
+  const filas = (data || [])
+    .filter((p) => !comuna || (p.territorios && p.territorios.comuna) === comuna)
+    .map((p) => {
+      const t = p.territorios;
+      const est = p.estado || 'pendiente';
+      const activo = est !== 'erroneo' && est !== 'no_pasar';
+      return [
+        (t && t.comuna) || '', (t && t.nombre) || '', p.nombre || '',
+        p.ultima_visita || '', estadoLabel(est),
+        est === 'no_pasar' ? 'Sí' : '', est === 'erroneo' ? 'Sí' : '',
+        activo ? 'Sí' : 'No', p.notas || '',
+      ];
+    });
+  descargarCsv(comuna ? `historial-puntos-${slugNombre(comuna)}` : 'historial-puntos', cabeceras, filas);
+}
+
+async function exportarUsuariosCsv() {
+  const { data, error } = await db.rpc('listar_usuarios');
+  if (error) return toast(error.message, true);
+  const cabeceras = ['Email', 'Rol', 'Territorio en curso', 'Desde'];
+  const filas = (data || []).map((u) => [
+    u.email || '', u.is_admin ? 'Administrador' : 'Usuario',
+    u.territorio || '', u.desde || '',
+  ]);
+  descargarCsv('usuarios', cabeceras, filas);
+}
+
+// --- Territorio seleccionado: polígono + puntos (T12) -------------------
+// Los puntos salen de allPoints (ya tienen lat/lng calculados de geom) y el
+// polígono de s.geom, que PostGIS devuelve como GeoJSON.
+function puntosDelTerritorio(id) {
+  return allPoints.filter((p) => p.territorio_id === id);
+}
+
+function slugNombre(v) {
+  return String(v || '').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'sin-nombre';
+}
+
+function baseTerritorioExport(s) {
+  return `territorio-${slugNombre(s.comuna)}-${slugNombre(s.nombre)}`;
+}
+
+function exportarTerritorioGeojson(s) {
+  const pts = puntosDelTerritorio(s.id);
+  descargarJson(baseTerritorioExport(s), territorioFeatureCollection(s, pts));
+  toast(`GeoJSON: polígono + ${pts.length} punto${pts.length === 1 ? '' : 's'}`);
+}
+
+function exportarTerritorioCsv(s) {
+  const pts = puntosDelTerritorio(s.id);
+  const cabeceras = ['Punto', 'Dirección', 'Estado', 'Última visita', 'Notas', 'Lat', 'Lng'];
+  const filas = pts.map((p) => [
+    p.nombre || '', p.direccion || '', estadoLabel(p.estado),
+    p.ultima_visita || '', p.notas || '',
+    p.lat == null ? '' : p.lat, p.lng == null ? '' : p.lng,
+  ]);
+  descargarCsv(baseTerritorioExport(s), cabeceras, filas);
+  toast(`${filas.length} punto${filas.length === 1 ? '' : 's'} exportado${filas.length === 1 ? '' : 's'}`);
+}
+
+document.getElementById('histExportBtn').addEventListener('click', exportarHistorialCsv);
+document.getElementById('usuariosExportBtn').addEventListener('click', exportarUsuariosCsv);
+document.getElementById('phExport').addEventListener('click', () => {
+  if (phCsv) descargarCsv(phCsv.nombre, phCsv.cabeceras, phCsv.filas);
+});
+
+async function loadHistorialTerritorios() {
+  const box = document.getElementById('histTerritorios');
+  if (!box) return;
+  box.innerHTML = '<div class="empty">Cargando…</div>';
+
+  const [rt, ra] = await Promise.all([
+    db.from('territorios').select('id, nombre, comuna'),
+    db.from('territorios_asignaciones')
+      .select('territorio_id, user_id, assigned_at, estado, notas, devuelta_at, completado_at'),
+  ]);
+  const error = rt.error || ra.error;
+  if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+
+  const comuna = histComuna();
+  const territorios = (rt.data || [])
+    .filter((t) => !comuna || t.comuna === comuna)
+    .sort((a, b) => (a.comuna || '').localeCompare(b.comuna || '', 'es')
+      || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+  if (!territorios.length) {
+    box.innerHTML = `<div class="empty">${comuna ? `Sin territorios en ${escapeHtml(comuna)}` : 'Sin territorios'}</div>`;
+    return;
+  }
+
+  // Proceso más relevante por territorio: la activa si existe, si no el más reciente.
+  const rank = (a) => (a.estado === 'activa' ? 0 : 1);
+  const asigPorTerr = new Map();
+  for (const a of ra.data || []) {
+    const prev = asigPorTerr.get(a.territorio_id);
+    if (!prev
+      || rank(a) < rank(prev)
+      || (rank(a) === rank(prev) && new Date(a.assigned_at) > new Date(prev.assigned_at))) {
+      asigPorTerr.set(a.territorio_id, a);
+    }
+  }
+
+  const filas = territorios.map((t) => {
+    const a = asigPorTerr.get(t.id);
+    const est = a ? (ESTADO_ASIG[a.estado] ? a.estado : 'activa') : null;
+    const cierre = !a ? null
+      : est === 'completado' ? a.completado_at
+      : est === 'devuelta' ? a.devuelta_at
+      : null;
+    return `<tr>
+      <td>${escapeHtml(t.comuna || '—')}</td>
+      <td><b>${escapeHtml(t.nombre || '—')}</b></td>
+      <td>${a ? escapeHtml(emailDe(a.user_id) || '—') : '<span class="muted">Sin asignar</span>'}</td>
+      <td>${a ? fmtFecha(a.assigned_at) : '—'}</td>
+      <td>${a ? `<span class="chip-est ${est}">${ESTADO_ASIG[est]}</span>` : '<span class="muted">Libre</span>'}</td>
+      <td>${cierre ? fmtFecha(cierre) : '—'}</td>
+      <td class="notas">${a ? escapeHtml(a.notas || '') : ''}</td>
+      <td class="col-ver"><button type="button" class="ver-btn" data-territorio="${escapeHtml(t.id)}" data-nombre="${escapeHtml(t.nombre || '')}">Ver</button></td>
+    </tr>`;
+  }).join('');
+
+  box.innerHTML = `<table class="hist-table">
+    <thead><tr>
+      <th>Comuna</th><th>Territorio</th><th>Usuario</th><th>Asignado</th>
+      <th>Estado</th><th>Cierre</th><th>Notas</th>
+      <th class="col-ver-h"></th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table>`;
+}
+
+async function loadHistorialPuntos() {
+  const box = document.getElementById('histPuntos');
+  if (!box) return;
+  box.innerHTML = '<div class="empty">Cargando…</div>';
+
+  const { data, error } = await db
+    .from('puntos')
+    .select('id, nombre, estado, ultima_visita, notas, territorio_id, territorios(nombre, comuna)')
+    .is('deleted_at', null)
+    .order('nombre');
+
+  if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+
+  const comunaFiltro = histComuna();
+  const puntosFiltrados = (data || []).filter((p) => !comunaFiltro || (p.territorios && p.territorios.comuna) === comunaFiltro);
+  if (!puntosFiltrados.length) {
+    box.innerHTML = `<div class="empty">${comunaFiltro ? `Sin puntos en ${escapeHtml(comunaFiltro)}` : 'Sin puntos'}</div>`;
+    return;
+  }
+
+  // Agrupa: comuna -> territorio -> puntos (para filas combinadas con rowspan)
+  const porComuna = new Map();
+  for (const p of puntosFiltrados) {
+    const t = p.territorios;
+    const comuna = (t && t.comuna) || null;
+    const terrId = p.territorio_id || null;
+    if (!porComuna.has(comuna)) porComuna.set(comuna, new Map());
+    const porTerr = porComuna.get(comuna);
+    if (!porTerr.has(terrId)) porTerr.set(terrId, { nombre: (t && t.nombre) || null, puntos: [] });
+    porTerr.get(terrId).puntos.push(p);
+  }
+
+  // Claves alfabéticas; las vacías (Sin comuna / Sin territorio) van al final.
+  const ordenarClaves = (m) => {
+    const keys = [...m.keys()];
+    const llenas = keys.filter((k) => k !== null && k !== '').sort((a, b) => String(a).localeCompare(String(b), 'es'));
+    const vacias = keys.filter((k) => k === null || k === '');
+    return [...llenas, ...vacias];
+  };
+
+  const si = '<span class="mark yes">✓</span>';
+  const no = '<span class="mark no">—</span>';
+  const filas = [];
+  let banda = false;   // alterna el color de fondo de un territorio a otro
+
+  for (const comunaKey of ordenarClaves(porComuna)) {
+    const porTerr = porComuna.get(comunaKey);
+    const totalComuna = [...porTerr.values()].reduce((n, t) => n + t.puntos.length, 0);
+    let comunaPuesta = false;
+
+    for (const terrKey of ordenarClaves(porTerr)) {
+      const terr = porTerr.get(terrKey);
+      const pts = terr.puntos.slice().sort(
+        (a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'),
+      );
+      const enBanda = banda;
+      let terrPuesta = false;
+
+      for (const p of pts) {
+        const est = p.estado || 'pendiente';
+        const activo = est !== 'erroneo' && est !== 'no_pasar';   // "activo" = no erróneo ni no pasar
+        filas.push(`<tr${enBanda ? ' class="band"' : ''}>
+          ${comunaPuesta ? '' : `<td class="grp comuna" rowspan="${totalComuna}"><span>${escapeHtml(comunaKey || 'Sin comuna')}</span></td>`}
+          ${terrPuesta ? '' : `<td class="grp terr" rowspan="${pts.length}"><span>${escapeHtml(terrKey === null || !terr.nombre ? 'Sin territorio' : terr.nombre)}</span></td>`}
+          <td><b>${escapeHtml(p.nombre || '—')}</b></td>
+          <td>${p.ultima_visita ? fmtFechaHora(p.ultima_visita) : '—'}</td>
+          <td><span class="estado-tag ${estadoClass(est)}">${estadoLabel(est)}</span></td>
+          <td>${est === 'no_pasar' ? si : no}</td>
+          <td>${est === 'erroneo' ? si : no}</td>
+          <td>${activo ? si : no}</td>
+          <td class="notas">${escapeHtml(p.notas || '')}</td>
+          <td class="col-ver"><button type="button" class="ver-btn" data-punto="${escapeHtml(String(p.id))}" data-nombre="${escapeHtml(p.nombre || '')}">Ver</button></td>
+        </tr>`);
+        comunaPuesta = true;
+        terrPuesta = true;
+      }
+      banda = !banda;   // el siguiente territorio cambia de color
+    }
+  }
+
+  if (!filas.length) { box.innerHTML = '<div class="empty">Sin puntos</div>'; return; }
+
+  box.innerHTML = `<table class="hist-table hist-grp">
+    <thead><tr>
+      <th class="grp-h">Comuna</th><th class="grp-h">Territorio</th>
+      <th>Punto</th><th>Última visita</th><th>Estado</th>
+      <th>No pasar</th><th>Erróneo</th><th>Activo</th><th>Notas</th>
+      <th class="col-ver-h"></th>
+    </tr></thead>
+    <tbody>${filas.join('')}</tbody>
+  </table>`;
+}
+
+// Etiquetas de la bitácora de movimientos (punto_historial)
+const TIPO_LOG = {
+  creado: 'Creación',
+  estado: 'Estado',
+  territorio: 'Territorio',
+  borrado: 'Borrado',
+  restaurado: 'Restaurado',
+  nota: 'Notas',
+  asignado: 'Asignación',
+  devuelto: 'Devolución',
+  completado: 'Completado',
+};
+
+// Log de un punto: cada movimiento registrado por usuario o admin
+async function abrirHistorialPunto(puntoId, nombre) {
+  const overlay = document.getElementById('puntoHistorial');
+  const body = document.getElementById('phBody');
+  document.getElementById('phTitle').textContent = 'Historial · ' + (nombre || 'punto');
+  document.getElementById('phExport').style.display = 'none';
+  phCsv = null;
+  body.innerHTML = '<div class="empty">Cargando…</div>';
+  overlay.classList.add('visible');
+
+  const { data, error } = await db.rpc('punto_historial', { p_punto: puntoId });
+  if (error) { body.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+
+  const filas = data || [];
+  if (!filas.length) { body.innerHTML = '<div class="empty">Sin movimientos registrados</div>'; return; }
+
+  body.innerHTML = `<table class="hist-table log-table">
+    <thead><tr><th>Fecha</th><th>Movimiento</th><th>Detalle</th><th>Usuario</th></tr></thead>
+    <tbody>${filas.map((r) => `<tr>
+      <td>${fmtFechaHora(r.ev_at)}</td>
+      <td><span class="log-tipo ${escapeHtml(r.ev_tipo || '')}">${escapeHtml(TIPO_LOG[r.ev_tipo] || r.ev_tipo || '—')}</span></td>
+      <td class="log-det">${escapeHtml(r.ev_detalle || '')}</td>
+      <td>${escapeHtml(r.ev_actor || '—')}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+
+  phCsv = {
+    nombre: 'bitacora-punto',
+    cabeceras: ['Fecha', 'Movimiento', 'Detalle', 'Usuario'],
+    filas: filas.map((r) => [
+      r.ev_at || '', TIPO_LOG[r.ev_tipo] || r.ev_tipo || '', r.ev_detalle || '', r.ev_actor || '',
+    ]),
+  };
+  document.getElementById('phExport').style.display = '';
+}
+
+function cerrarHistorialPunto() {
+  document.getElementById('puntoHistorial').classList.remove('visible');
+}
+
+// Historial completo de un territorio: cada proceso de asignación como una
+// entrada de log (fecha de asignación, usuario, cierre y notas).
+async function abrirHistorialTerritorio(territorioId, nombre) {
+  const overlay = document.getElementById('puntoHistorial');
+  const body = document.getElementById('phBody');
+  document.getElementById('phTitle').textContent = 'Historial · ' + (nombre || 'territorio');
+  document.getElementById('phExport').style.display = 'none';
+  phCsv = null;
+  body.innerHTML = '<div class="empty">Cargando…</div>';
+  overlay.classList.add('visible');
+
+  const { data, error } = await db
+    .from('territorios_asignaciones')
+    .select('user_id, assigned_at, estado, notas, devuelta_at, completado_at')
+    .eq('territorio_id', territorioId)
+    .order('assigned_at', { ascending: false });
+
+  if (error) { body.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+  const procesos = data || [];
+  if (!procesos.length) { body.innerHTML = '<div class="empty">Sin procesos registrados</div>'; return; }
+
+  const n = procesos.length;
+  const filas = procesos.map((a, i) => {
+    const est = ESTADO_ASIG[a.estado] ? a.estado : 'activa';
+    const cierre = est === 'completado' ? a.completado_at : est === 'devuelta' ? a.devuelta_at : null;
+    return `<tr>
+      <td class="log-num">${n - i}</td>
+      <td>${fmtFechaHora(a.assigned_at)}</td>
+      <td>${escapeHtml(emailDe(a.user_id) || '—')}</td>
+      <td>${cierre ? fmtFechaHora(cierre) : '<span class="muted">—</span>'}</td>
+      <td><span class="chip-est ${est}">${ESTADO_ASIG[est]}</span></td>
+      <td class="notas">${escapeHtml(a.notas || '')}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `<table class="hist-table log-table">
+    <thead><tr>
+      <th>#</th><th>Asignado</th><th>Usuario</th><th>Cierre</th><th>Estado</th><th>Notas</th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table>
+  <p class="ph-leyenda">${n} proceso${n === 1 ? '' : 's'} de trabajo sobre este territorio. El #${n} es el más reciente.</p>`;
+
+  phCsv = {
+    nombre: 'historial-territorio',
+    cabeceras: ['#', 'Asignado', 'Usuario', 'Cierre', 'Estado', 'Notas'],
+    filas: procesos.map((a, i) => {
+      const est = ESTADO_ASIG[a.estado] ? a.estado : 'activa';
+      const cierra = est === 'completado' ? a.completado_at
+        : est === 'devuelta' ? a.devuelta_at : null;
+      return [n - i, a.assigned_at || '', emailDe(a.user_id) || '',
+        cierra || '', ESTADO_ASIG[est], a.notas || ''];
+    }),
+  };
+  document.getElementById('phExport').style.display = '';
+}
+
+async function loadUsuariosView() {
+  const box = document.getElementById('usuariosList');
+  if (!box) return;
+  box.innerHTML = '<div class="empty">Cargando…</div>';
+
+  const { data, error } = await db.rpc('listar_usuarios');
+  if (error) { box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+  const lista = data || [];
+  if (!lista.length) { box.innerHTML = '<div class="empty">Sin usuarios</div>'; return; }
+
+  const filas = lista.map((u) => `
+    <tr>
+      <td>${escapeHtml(u.email || '—')}</td>
+      <td>${u.is_admin ? 'Administrador' : 'Usuario'}</td>
+      <td>${u.territorio ? escapeHtml(u.territorio) : '<span class="muted">Libre</span>'}</td>
+      <td>${u.desde ? fmtFecha(u.desde) : '—'}</td>
+    </tr>`).join('');
+
+  box.innerHTML = `<table class="hist-table">
+    <thead><tr><th>Email</th><th>Rol</th><th>Territorio en curso</th><th>Desde</th></tr></thead>
+    <tbody>${filas}</tbody>
+  </table>`;
+}
+
+// Alta de usuarios de terreno (nunca admin) vía Edge Function con service_role
+async function crearUsuario(ev) {
+  ev.preventDefault();
+  const email = document.getElementById('newUserEmail').value.trim();
+  const pass = document.getElementById('newUserPass').value;
+  const errEl = document.getElementById('userFormErr');
+  const btn = document.getElementById('newUserBtn');
+  errEl.textContent = '';
+  if (!email || pass.length < 6) {
+    errEl.textContent = 'Email válido y contraseña de al menos 6 caracteres';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Creando…';
+  try {
+    const { data, error } = await db.functions.invoke('crear-usuario', { body: { email, password: pass } });
+    if (error) throw error;
+    if (data && data.error) throw new Error(data.error);
+    toast('Usuario creado');
+    document.getElementById('userForm').reset();
+    await loadUsuarios();       // refresca los correos para la asignación
+    await loadUsuariosView();
+  } catch (ex) {
+    errEl.textContent = (ex && ex.message) || 'No se pudo crear el usuario';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Crear usuario';
+  }
+}
+
+document.querySelectorAll('#mainNav button').forEach((b) => {
+  b.addEventListener('click', () => setView(b.dataset.view));
+});
+document.getElementById('histTabs').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-tab]');
+  if (!b) return;
+  histTab = b.dataset.tab;
+  document.querySelectorAll('#histTabs button').forEach((x) => x.classList.toggle('active', x === b));
+  document.getElementById('histTerritorios').style.display = histTab === 'territorios' ? '' : 'none';
+  document.getElementById('histPuntos').style.display = histTab === 'puntos' ? '' : 'none';
+  loadHistorial();
+});
+// Filtro por comuna del historial: recarga la pestaña activa y lo recuerda
+histComunaSel.addEventListener('change', () => {
+  prefSet('histComuna', histComunaSel.value);
+  loadHistorial();
+});
+document.getElementById('userForm').addEventListener('submit', crearUsuario);
+
+// Historial de un punto: botón "Ver" de la tabla (delegación en el contenedor)
+document.getElementById('histPuntos').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button.ver-btn');
+  if (!b) return;
+  abrirHistorialPunto(b.dataset.punto, b.dataset.nombre);
+});
+// Historial de un territorio: botón "Ver" de la pestaña Territorios
+document.getElementById('histTerritorios').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button.ver-btn');
+  if (!b) return;
+  abrirHistorialTerritorio(b.dataset.territorio, b.dataset.nombre);
+});
+document.getElementById('phClose').addEventListener('click', cerrarHistorialPunto);
+document.getElementById('puntoHistorial').addEventListener('click', (ev) => {
+  if (ev.target.id === 'puntoHistorial') cerrarHistorialPunto();   // clic fuera del box
+});
+
+// ============================================================
 // ARRANQUE
 // ============================================================
 (async () => {
-  const { data } = await db.auth.getSession();
-  if (data?.session?.user) await startApp(data.session.user);
+  try {
+    const { data } = await db.auth.getSession();
+    if (data?.session?.user) await startApp(data.session.user);
+  } catch (e) {
+    console.error(e);
+    toast('No se pudo recuperar la sesión: ' + e.message, true);
+  }
 })();

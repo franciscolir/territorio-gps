@@ -16,7 +16,11 @@ const lib = new Function(
      SEGMENTOS, ESTADOS, PIN_ICONS, estadoLabel, estadoClass,
      escapeHtml, pointFromGeom, pointInGeometry, inRing,
      ringArea, ringToEwkt, createCircle, coordsFromLink, parseCoordQuery,
-     nuevaOpCola, colaAgregar, colaQuitar, colaResumen, sectorAvance,
+     nuevaOpCola, colaAgregar, colaQuitar, colaResumen, territorioAvance,
+     distMeters, duplicadoCercano, DUP_METROS, csvEscape,
+     territorioFeatureCollection,
+     GEO_MIN_MS, GEO_MAX, GEO_TTL_MS, geoClave, geoCacheLeer, geoCachePoner,
+     agruparPuntos,
    };`
 )();
 
@@ -45,7 +49,7 @@ describe('escapeHtml', () => {
     expect(lib.escapeHtml(undefined)).toBe('');
   });
   it('no rompe texto normal con acentos', () => {
-    expect(lib.escapeHtml('Sector Ñuñoa · visitado')).toBe('Sector Ñuñoa · visitado');
+    expect(lib.escapeHtml('Territorio Ñuñoa · visitado')).toBe('Territorio Ñuñoa · visitado');
   });
 });
 
@@ -249,22 +253,262 @@ describe('cola offline (nuevaOpCola / colaAgregar / colaQuitar / colaResumen)', 
   });
 });
 
-describe('sectorAvance', () => {
+describe('territorioAvance', () => {
   it('cuenta estados y calcula el porcentaje de visitados', () => {
     const puntos = [
       { estado: 'visitado' }, { estado: 'visitado' }, { estado: 'visitado' },
       { estado: 'erroneo' }, { estado: 'no_pasar' }, { estado: 'pendiente' },
     ];
-    expect(lib.sectorAvance(puntos)).toEqual({
+    expect(lib.territorioAvance(puntos)).toEqual({
       total: 6, pendiente: 1, visitado: 3, erroneo: 1, no_pasar: 1, pct: 50,
     });
   });
   it('trata lo vacío o desconocido como pendiente', () => {
-    expect(lib.sectorAvance([])).toEqual({
+    expect(lib.territorioAvance([])).toEqual({
       total: 0, pendiente: 0, visitado: 0, erroneo: 0, no_pasar: 0, pct: 0,
     });
-    const r = lib.sectorAvance([{}, { estado: 'raro' }]);
+    const r = lib.territorioAvance([{}, { estado: 'raro' }]);
     expect(r.pendiente).toBe(2);
     expect(r.pct).toBe(0);
+  });
+});
+
+describe('distMeters', () => {
+  it('da 0 en el mismo punto', () => {
+    expect(lib.distMeters(-33.45, -70.66, -33.45, -70.66)).toBe(0);
+  });
+  it('mide ~8,8 m para 0,00008° de latitud', () => {
+    const d = lib.distMeters(-33.45, -70.66, -33.45008, -70.66);
+    expect(d).toBeGreaterThan(8);
+    expect(d).toBeLessThan(10);
+  });
+  it('es simétrica', () => {
+    const a = lib.distMeters(-33.45, -70.66, -33.451, -70.661);
+    const b = lib.distMeters(-33.451, -70.661, -33.45, -70.66);
+    expect(Math.abs(a - b)).toBeLessThan(1e-6);
+  });
+});
+
+describe('duplicadoCercano', () => {
+  const puntos = [
+    { id: 'a', nombre: 'Farmacia', lat: -33.45, lng: -70.66 },
+    { id: 'b', nombre: 'Farmacia Los Andes', lat: -33.45, lng: -70.66 },
+    { id: 'c', nombre: ' farmacia ', lat: -33.45005, lng: -70.66 },
+    { id: 'd', nombre: 'Almacén', lat: -33.46, lng: -70.66 },
+    { id: 'e', nombre: 'Sin GPS', lat: null, lng: null },
+    { id: 'f', nombre: 'Farmacia', lat: -33.45, lng: -70.66, deleted_at: '2026-01-01' },
+  ];
+
+  it('detecta el mismo nombre a menos de 10 m (mayúsculas y espacios aparte)', () => {
+    const r = lib.duplicadoCercano(puntos, '  FARMACIA ', -33.45001, -70.66);
+    expect(r).not.toBeNull();
+    expect(r.punto.id).toBe('a');
+    expect(r.metros).toBeLessThan(10);
+  });
+
+  it('devuelve null con nombre distinto', () => {
+    expect(lib.duplicadoCercano(puntos, 'Cafetería', -33.45, -70.66)).toBeNull();
+  });
+
+  it('devuelve null si el nombre coincide pero está a más de 10 m', () => {
+    expect(lib.duplicadoCercano(puntos, 'Almacén', -33.45, -70.66)).toBeNull();
+  });
+
+  it('ignora borrados, puntos sin GPS y el propio punto al editar', () => {
+    const solo = [{ id: 'x', nombre: 'Solo', lat: -33.45, lng: -70.66 }];
+    expect(lib.duplicadoCercano(solo, 'Solo', -33.45, -70.66)?.punto.id).toBe('x');
+    expect(lib.duplicadoCercano(solo, 'Solo', -33.45, -70.66, 10, 'x')).toBeNull();
+    expect(lib.duplicadoCercano(puntos, 'Farmacia', null, -70.66)).toBeNull();
+    expect(lib.duplicadoCercano(puntos, '', -33.45, -70.66)).toBeNull();
+    expect(lib.duplicadoCercano(puntos, 'Sin GPS', -33.45, -70.66)).toBeNull();
+    expect(lib.duplicadoCercano(puntos, 'Farmacia', -33.45, -70.66, 10, 'f').punto.id)
+      .not.toBe('f');
+  });
+
+  it('el umbral es estricto: a 10 m exactos no cuenta', () => {
+    const enLimite = [{ id: 'z', nombre: 'Z', lat: -33.45, lng: -70.66 }];
+    // ~11 m de desplazamiento → fuera del umbral por defecto
+    expect(lib.duplicadoCercano(enLimite, 'Z', -33.4501, -70.66)).toBeNull();
+    expect(lib.duplicadoCercano(enLimite, 'Z', -33.4501, -70.66, 20)).not.toBeNull();
+  });
+});
+
+describe('csvEscape', () => {
+  it('deja lo simple y los números negativos tal cual', () => {
+    expect(lib.csvEscape('Punto A')).toBe('Punto A');
+    expect(lib.csvEscape(-33.457)).toBe('-33.457');
+    expect(lib.csvEscape(0)).toBe('0');
+    expect(lib.csvEscape(null)).toBe('');
+    expect(lib.csvEscape(undefined)).toBe('');
+  });
+
+  it('comilla lo que lleva comas, comillas o saltos de línea', () => {
+    expect(lib.csvEscape('a,b')).toBe('"a,b"');
+    expect(lib.csvEscape('dijo "hola"')).toBe('"dijo ""hola"""');
+    expect(lib.csvEscape('l1\nl2')).toBe('"l1\nl2"');
+    expect(lib.csvEscape('con "coma", y salto\n')).toBe('"con ""coma"", y salto\n"');
+  });
+
+  it('neutraliza las fórmulas de Excel (=, +, @, tab)', () => {
+    expect(lib.csvEscape('=1+1')).toBe("'=1+1");
+    expect(lib.csvEscape('@SUMA(A1)')).toBe("'@SUMA(A1)");
+    expect(lib.csvEscape('\t=cmd')).toBe("'\t=cmd");
+    // y siguen comillándose si además llevan coma
+    expect(lib.csvEscape('=1,2')).toBe("\"'=1,2\"");
+  });
+});
+
+describe('territorioFeatureCollection', () => {
+  const territorio = {
+    id: 't1', nombre: 'Lota 1', comuna: 'Lota', color: '#1d4ed8',
+    geom: { type: 'Polygon', coordinates: [[[-73.2, -37.1], [-73.1, -37.1], [-73.1, -37.0], [-73.2, -37.1]]] },
+  };
+  const puntos = [
+    { id: 'p1', nombre: 'A', estado: 'visitado', notas: 'ok', lat: -37.05, lng: -73.15 },
+    { id: 'p2', nombre: 'B', estado: 'no_pasar', lat: -37.06, lng: -73.16 },
+    { id: 'p3', nombre: 'Sin coords', lat: null, lng: null },
+    { id: 'p4', nombre: 'Sin estado', lat: -37.07, lng: -73.17 },
+  ];
+
+  it('pone el polígono primero y luego los puntos', () => {
+    const fc = lib.territorioFeatureCollection(territorio, puntos);
+    expect(fc.type).toBe('FeatureCollection');
+    expect(fc.features).toHaveLength(4); // polígono + 3 con coords
+    expect(fc.features[0].geometry.type).toBe('Polygon');
+    expect(fc.features[0].properties.tipo).toBe('territorio');
+    expect(fc.features[0].properties.nombre).toBe('Lota 1');
+    expect(fc.features[1].geometry.type).toBe('Point');
+    expect(fc.features[1].geometry.coordinates).toEqual([-73.15, -37.05]); // [lng, lat]
+  });
+
+  it('arrastra estado, notas y última visita en las propiedades', () => {
+    const fc = lib.territorioFeatureCollection(territorio, puntos);
+    expect(fc.features[1].properties).toMatchObject({
+      tipo: 'punto', nombre: 'A', estado: 'visitado', notas: 'ok',
+    });
+    expect(fc.features[2].properties.estado).toBe('no_pasar');
+    expect(fc.features[3].properties.estado).toBe('pendiente'); // default
+  });
+
+  it('salta los puntos sin coordenadas y tolera entradas sin geom', () => {
+    const fc = lib.territorioFeatureCollection(territorio, puntos);
+    const nombres = fc.features.filter((f) => f.properties.tipo === 'punto')
+      .map((f) => f.properties.nombre);
+    expect(nombres).toEqual(['A', 'B', 'Sin estado']);
+
+    const sinPoligono = lib.territorioFeatureCollection(
+      { id: 't2', nombre: 'Sin geom' }, puntos,
+    );
+    expect(sinPoligono.features.every((f) => f.properties.tipo === 'punto')).toBe(true);
+
+    const vacio = lib.territorioFeatureCollection(null, null);
+    expect(vacio).toEqual({ type: 'FeatureCollection', features: [] });
+  });
+});
+
+describe('geocaché (geoClave / geoCacheLeer / geoCachePoner)', () => {
+  it('la clave normaliza mayúsculas, acentos y espacios repetidos', () => {
+    expect(lib.geoClave('  Av. Providencia   1234 ')).toBe('av. providencia 1234');
+    expect(lib.geoClave('PROVIDENCIA')).toBe(lib.geoClave('providencia'));
+    expect(lib.geoClave('Piso Ñuñoa')).toBe(lib.geoClave('piso nunoa'));
+    expect(lib.geoClave(null)).toBe('');
+    expect(lib.geoClave(undefined)).toBe('');
+  });
+
+  it('lee solo lo que está guardado y no ha vencido', () => {
+    const t0 = 1_000_000;
+    const c = lib.geoCachePoner({}, 'Santiago', [{ lat: '-33.45' }], t0);
+
+    expect(lib.geoCacheLeer(c, 'santiago', t0)).toEqual([{ lat: '-33.45' }]);
+    expect(lib.geoCacheLeer(c, '  SANTIAGO ', t0 + lib.GEO_TTL_MS)).toEqual([{ lat: '-33.45' }]);
+    expect(lib.geoCacheLeer(c, 'Santiago', t0 + lib.GEO_TTL_MS + 1)).toBeNull();
+
+    expect(lib.geoCacheLeer(c, 'Valparaíso', t0)).toBeNull();
+    expect(lib.geoCacheLeer({}, 'Santiago', t0)).toBeNull();
+    expect(lib.geoCacheLeer(null, 'Santiago', t0)).toBeNull();
+  });
+
+  it('no muta el caché anterior y recorta las entradas más antiguas', () => {
+    const original = {};
+    const c1 = lib.geoCachePoner(original, 'a', [], 10);
+    expect(original).toEqual({});
+    expect(Object.keys(c1)).toEqual(['a']);
+
+    let c = {};
+    for (let i = 0; i < lib.GEO_MAX + 10; i++) {
+      c = lib.geoCachePoner(c, `q${i}`, [], 1000 + i);
+    }
+    expect(Object.keys(c)).toHaveLength(lib.GEO_MAX);
+    expect(c.q0).toBeUndefined();                    // la más antigua se fue
+    expect(c[`q${lib.GEO_MAX + 9}`]).toBeDefined();  // la última sigue
+  });
+
+  it('el límite de frecuencia es ≥1 s y una clave vacía no se cachea', () => {
+    expect(lib.GEO_MIN_MS).toBeGreaterThanOrEqual(1000);
+    expect(lib.geoCachePoner({}, '   ', [], 5)).toEqual({});
+    expect(lib.geoCacheLeer({}, '   ', 5)).toBeNull();
+  });
+});
+
+describe('agruparPuntos (T14)', () => {
+  const pts = [
+    { id: 'a', x: 0, y: 0 },
+    { id: 'b', x: 30, y: 40 }, // exactamente 50 px de a
+    { id: 'c', x: 500, y: 500 },
+  ];
+
+  it('con radio 0 cada punto queda suelto', () => {
+    const g = lib.agruparPuntos(pts, { radio: 0 });
+    expect(g).toHaveLength(3);
+    g.forEach((x) => { expect(x.n).toBe(1); });
+    expect(lib.agruparPuntos(pts, {}).map((x) => x.n)).toEqual([1, 1, 1]);
+  });
+
+  it('une lo que está dentro del radio y respeta la distancia exacta', () => {
+    const g = lib.agruparPuntos(pts, { radio: 50 });
+    expect(g).toHaveLength(2);
+
+    const grupo = g.find((x) => x.n === 2);
+    expect(grupo.puntos.map((p) => p.id).sort()).toEqual(['a', 'b']);
+    expect(grupo.x).toBeCloseTo(15, 6); // centroide (0,0)-(30,40)
+    expect(grupo.y).toBeCloseTo(20, 6);
+
+    expect(g.find((x) => x.n === 1).puntos[0].id).toBe('c');
+  });
+
+  it('un radio menor que la distancia deja todo separado', () => {
+    expect(lib.agruparPuntos(pts, { radio: 49 })).toHaveLength(3);
+  });
+
+  it('conserva cada punto exactamente una vez', () => {
+    const g = lib.agruparPuntos(pts, { radio: 1000 });
+    expect(g).toHaveLength(1);
+    expect(g[0].n).toBe(3);
+    expect(g[0].puntos.map((p) => p.id).sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('descarta lo que no se puede proyectar y tolera entradas vacías', () => {
+    const proyectar = (p) => (p.x == null ? null : { x: p.x, y: p.y });
+    const g = lib.agruparPuntos([...pts, { id: 'sin-gps' }], { radio: 0, proyectar });
+    expect(g.flatMap((x) => x.puntos).map((p) => p.id).sort()).toEqual(['a', 'b', 'c']);
+
+    expect(lib.agruparPuntos([{ id: 's' }], { radio: 10 })).toEqual([]);
+    expect(lib.agruparPuntos(null, { radio: 10 })).toEqual([]);
+    expect(lib.agruparPuntos([], { radio: 10 })).toEqual([]);
+  });
+
+  it('usa el proyector inyectado (lng/lat → píxel)', () => {
+    const g = lib.agruparPuntos([{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }], {
+      radio: 5,
+      proyectar: (p) => ({ x: p.lng * 100, y: p.lat * 100 }),
+    });
+    expect(g).toHaveLength(2);
+
+    const juntos = lib.agruparPuntos([{ lng: 1, lat: 1 }, { lng: 1.01, lat: 1.01 }], {
+      radio: 5,
+      proyectar: (p) => ({ x: p.lng * 100, y: p.lat * 100 }),
+    });
+    expect(juntos).toHaveLength(1);
+    expect(juntos[0].n).toBe(2);
   });
 });

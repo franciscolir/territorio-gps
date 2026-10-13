@@ -161,9 +161,9 @@ function colaResumen(ops) {
   return r;
 }
 
-// Avance de un sector a partir de sus puntos (mismos estados que la app
+// Avance de un territorio a partir de sus puntos (mismos estados que la app
 // de escritorio; pct = visitados sobre el total).
-function sectorAvance(puntos) {
+function territorioAvance(puntos) {
   const r = { total: puntos.length, pendiente: 0, visitado: 0, erroneo: 0, no_pasar: 0, pct: 0 };
   for (const p of puntos) {
     const e = p && p.estado && Object.prototype.hasOwnProperty.call(r, p.estado)
@@ -173,4 +173,197 @@ function sectorAvance(puntos) {
   }
   r.pct = r.total ? Math.round((r.visitado / r.total) * 100) : 0;
   return r;
+}
+
+// ============================================================
+// DUPLICADOS AL CREAR UN PUNTO
+// ============================================================
+
+// Radio (m) por debajo del cual dos puntos con el mismo nombre se consideran
+// duplicados al crearlos.
+const DUP_METROS = 10;
+
+// Distancia en metros entre dos coordenadas (haversine).
+function distMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// ¿Existe ya un punto vivo con el MISMO nombre a menos de `metros`?
+// Devuelve { punto, metros } del más cercano, o null. `excluirId` deja fuera
+// el propio punto cuando se está editando.
+function duplicadoCercano(puntos, nombre, lat, lng, metros = 10, excluirId = null) {
+  const clave = String(nombre == null ? '' : nombre).trim().toLowerCase();
+  if (!clave || lat == null || lng == null || isNaN(lat) || isNaN(lng)) return null;
+
+  let mejor = null;
+  let mejorD = metros;
+  for (const p of puntos || []) {
+    if (!p || p.deleted_at) continue;
+    if (excluirId && p.id === excluirId) continue;
+    if (p.lat == null || p.lng == null) continue;
+    if (String(p.nombre == null ? '' : p.nombre).trim().toLowerCase() !== clave) continue;
+    const d = distMeters(lat, lng, p.lat, p.lng);
+    if (d < mejorD) { mejorD = d; mejor = p; }
+  }
+  return mejor ? { punto: mejor, metros: Math.round(mejorD) } : null;
+}
+
+// ============================================================
+// EXPORTACIÓN CSV
+// ============================================================
+
+// Escapa un valor para una celda CSV. Las celdas que empiezan por = + @ o
+// tabulador se prefijan con ' para que Excel no las ejecute como fórmula
+// (CSV injection). El guion se deja estar: las coordenadas negativas
+// (-33.45) son números y deben seguir siéndolo.
+function csvEscape(v) {
+  let s = v == null ? '' : String(v);
+  if (/^[=+@\t\r]/.test(s)) s = "'" + s;
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+// FeatureCollection GeoJSON con el polígono del territorio y sus puntos
+// (estado, notas, última visita) para compartir con quien no usa la app:
+// se abre en QGIS, geojson.io o Google Earth sin nada más.
+// El polígono va primero para que un visor simple muestre el contorno.
+function territorioFeatureCollection(territorio, puntos) {
+  const t = territorio || {};
+  const features = [];
+
+  if (t.geom && t.geom.type && t.geom.coordinates) {
+    features.push({
+      type: 'Feature',
+      properties: {
+        tipo: 'territorio',
+        id: t.id || null,
+        nombre: t.nombre || '',
+        comuna: t.comuna || '',
+        color: t.color || null,
+      },
+      geometry: { type: t.geom.type, coordinates: t.geom.coordinates },
+    });
+  }
+
+  for (const p of puntos || []) {
+    if (p == null || p.lat == null || p.lng == null) continue;
+    features.push({
+      type: 'Feature',
+      properties: {
+        tipo: 'punto',
+        id: p.id || null,
+        nombre: p.nombre || '',
+        direccion: p.direccion || null,
+        estado: p.estado || 'pendiente',
+        notas: p.notas || null,
+        ultima_visita: p.ultima_visita || null,
+      },
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+    });
+  }
+
+  return { type: 'FeatureCollection', features };
+}
+
+// ============================================================
+// GEOCACHÉ DE NOMINATIM (T15)
+// ============================================================
+// La política de uso de Nominatim pide identificar la app (el navegador
+// envía el Referer solo) y respetar **≤1 petición por segundo**. El límite de
+// frecuencia lo impone `app.js` con `GEO_MIN_MS`; aquí vive el caché local,
+// que evita repetir la misma búsqueda y por tanto evita el tráfico.
+const GEO_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
+const GEO_MAX = 200;                        // entradas máximas del caché
+const GEO_MIN_MS = 1000;                    // ≤ 1 petición/s a Nominatim
+
+// Clave de caché: minúsculas, sin acentos y con espacios colapsados, para
+// que "Av. Providencia  1234" y "av. providencia 1234" compartan entrada.
+function geoClave(q) {
+  return String(q == null ? '' : q)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// → la lista de resultados cacheada, o null si no hay o ya venció
+function geoCacheLeer(cache, q, ahora = Date.now()) {
+  const reg = cache ? cache[geoClave(q)] : null;
+  if (!reg || !Array.isArray(reg.r) || typeof reg.t !== 'number') return null;
+  return ahora - reg.t <= GEO_TTL_MS ? reg.r : null;
+}
+
+// Devuelve un caché nuevo (no muta el anterior) con la entrada puesta,
+// descartando las más antiguas al superar GEO_MAX.
+function geoCachePoner(cache, q, resultados, ahora = Date.now()) {
+  const clave = geoClave(q);
+  const salida = { ...(cache || {}) };
+  if (!clave) return salida;
+  salida[clave] = { t: ahora, r: Array.isArray(resultados) ? resultados : [] };
+
+  const claves = Object.keys(salida);
+  if (claves.length > GEO_MAX) {
+    claves
+      .sort((a, b) => (salida[a].t || 0) - (salida[b].t || 0))
+      .slice(0, claves.length - GEO_MAX)
+      .forEach((k) => { delete salida[k]; });
+  }
+  return salida;
+}
+
+// ============================================================
+// AGRUPACIÓN DE MARCADORES (T14)
+// ============================================================
+// Clustering por radio en **coordenadas de pantalla**: no depende de una
+// proyección concreta ni de librerías, se le entrega el píxel de cada punto
+// (`proyectar`) y se recalcula con cada `moveend` del mapa.
+//
+// · radio <= 0  → cada punto queda suelto (el comportamiento de siempre)
+// · radio >  0  → los puntos a <= radio px del centro de un grupo caen dentro
+//
+// Devuelve [{ x, y, n, puntos }]:
+//   · n === 1 → marcador individual
+//   · n >  1  → burbuja de agrupación con `n` puntos en (x, y)
+//
+// Es voraz (cada punto se asigna al grupo más cercano) y el centro del grupo
+// se recalcula como centroide al aceptarlo, así que la burbuja queda en medio
+// de sus puntos. Un punto que no se puede proyectar (sin GPS) se ignora.
+function agruparPuntos(puntos, opciones = {}) {
+  const rRaw = Number(opciones.radio);
+  const r = Number.isFinite(rRaw) && rRaw > 0 ? rRaw : 0;
+  const proyectar = typeof opciones.proyectar === 'function' ? opciones.proyectar : null;
+
+  const grupos = [];
+  for (const p of (Array.isArray(puntos) ? puntos : [])) {
+    const c = proyectar ? proyectar(p) : { x: p && p.x, y: p && p.y };
+    if (!c || !Number.isFinite(c.x) || !Number.isFinite(c.y)) continue;
+
+    let destino = null;
+    if (r > 0) {
+      let mejor = r * r;
+      for (const g of grupos) {
+        const dx = g.x - c.x;
+        const dy = g.y - c.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 <= mejor) { mejor = d2; destino = g; }
+      }
+    }
+
+    if (destino) {
+      const n = destino.n;
+      destino.x = (destino.x * n + c.x) / (n + 1);
+      destino.y = (destino.y * n + c.y) / (n + 1);
+      destino.n = n + 1;
+      destino.puntos.push(p);
+    } else {
+      grupos.push({ x: c.x, y: c.y, n: 1, puntos: [p] });
+    }
+  }
+  return grupos;
 }

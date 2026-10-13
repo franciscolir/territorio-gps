@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
 
 <link rel="stylesheet" href="styles.css" />
 </head>
@@ -32,17 +32,21 @@
 
 <!-- ================= APP ================= -->
 <div id="appView">
+  <header id="topbar">
+    <div class="tb-brand"><span class="ms ms-lg">tune</span><b>Puntos RM</b></div>
+    <nav id="mainNav" aria-label="Secciones">
+      <button data-view="territorios" class="active"><span class="ms ms-sm">map</span>Territorios</button>
+      <button data-view="historial"><span class="ms ms-sm">history</span>Historial</button>
+      <button data-view="usuarios"><span class="ms ms-sm">group</span>Usuarios</button>
+    </nav>
+    <div class="tb-user">
+      <span class="user" id="userInfo"></span>
+      <button aria-label="Cerrar sesión" id="logoutBtn" class="ghost icon" title="Cerrar sesión"><span class="ms ms-sm">logout</span></button>
+    </div>
+  </header>
   <div id="main">
     <aside id="sidebar">
       <div class="panel-head">
-        <div class="panel-brand">
-          <span class="ms ms-lg">tune</span>
-          <div class="brand-txt">
-            <b>Puntos RM</b>
-            <span class="user" id="userInfo"></span>
-          </div>
-          <button id="logoutBtn" class="ghost icon" title="Cerrar sesión"><span class="ms ms-sm">logout</span></button>
-        </div>
         <div class="comuna-row">
           <label for="comunaSel" class="row-label">Comuna</label>
           <select id="comunaSel" aria-label="Elegir comuna">
@@ -53,19 +57,12 @@
 
       <div class="sect-zone" id="sectZone">
         <div class="sect-head">
-          <h2>Sectores</h2>
-          <div class="sect-btns">
-            <button id="drawBtn" title="Dibujar un sector a mano"><span class="ms ms-sm">draw</span></button>
-            <button id="assignSectorsBtn" title="Asignar sectores a usuarios"><span class="ms ms-sm">group_add</span>Asignar</button>
-            <button id="mobileViewBtn" title="Vista terreno (móvil)"><span class="ms ms-sm">smartphone</span></button>
-          </div>
+          <h2>Territorios</h2>
+          <button aria-label="Volver a la lista de territorios" id="allTerritoriosBtn" class="ghost back" style="display:none" title="Volver a la lista de territorios"><span class="ms ms-sm">list</span>Todos</button>
         </div>
-        <div id="sectorList"><div class="empty">Aún no hay sectores</div></div>
+        <div id="territorioList"><div class="empty">Aún no hay territorios</div></div>
         <div id="detailBlock" style="display:none">
-          <div class="detail-top">
-            <button id="clearSectorSel" class="ghost back" style="display:none" title="Volver a la lista de sectores"><span class="ms ms-sm">arrow_back</span>Todos los Sectores</button>
-          </div>
-          <div id="sectorDetail"></div>
+          <div id="territorioDetail"></div>
           <div id="assignPanel" style="display:none"></div>
         </div>
       </div>
@@ -91,47 +88,49 @@
 
     <div id="map"></div>
 
-    <!-- Riel de borde: colapsar panel + buscador unificado -->
+    <!-- Riel de borde: colapsar panel, buscador unificado y dibujar territorio -->
     <div id="edgeRail">
-      <button id="toggleSidebar" title="Mostrar/ocultar panel"><span class="ms">menu</span></button>
-      <button id="searchFab" title="Buscar dirección, coordenadas o link"><span class="ms">search</span></button>
+      <button aria-label="Mostrar/ocultar panel" id="toggleSidebar" title="Mostrar/ocultar panel"><span class="ms">menu</span></button>
+      <button aria-label="Buscar dirección, coordenadas o link" id="searchFab" title="Buscar dirección, coordenadas o link"><span class="ms">search</span></button>
+      <button aria-label="Dibujar un territorio a mano (elige una comuna)" id="drawBtn" title="Dibujar un territorio a mano (elige una comuna)" style="display:none"><span class="ms">draw</span></button>
     </div>
     <div id="searchOverlay">
       <span class="ms ms-sm search-ic">search</span>
       <input id="smartSearch" type="text" placeholder="Buscar dirección, coordenadas o link…" />
-      <button id="searchCloseBtn" title="Cerrar búsqueda"><span class="ms ms-sm">close</span></button>
+      <button aria-label="Cerrar búsqueda" id="searchCloseBtn" title="Cerrar búsqueda"><span class="ms ms-sm">close</span></button>
     </div>
 
     <!-- Controles flotantes del mapa (estilo front) -->
     <div class="map-fabs">
       <div class="fab-group">
-        <button id="zoomInBtn" title="Acercar"><span class="ms">add</span></button>
-        <button id="zoomOutBtn" title="Alejar"><span class="ms">remove</span></button>
-        <button id="locateBtn" title="Mi ubicación"><span class="ms">my_location</span></button>
+        <button aria-label="Acercar" id="zoomInBtn" title="Acercar"><span class="ms">add</span></button>
+        <button aria-label="Alejar" id="zoomOutBtn" title="Alejar"><span class="ms">remove</span></button>
+        <button aria-label="Mi ubicación" id="locateBtn" title="Mi ubicación"><span class="ms">my_location</span></button>
       </div>
       <div class="fab-group">
-        <button id="fitViewBtn" title="Ajustar vista a la comuna o sector"><span class="ms">center_focus_strong</span></button>
+        <button aria-label="Ajustar vista a la comuna o territorio" id="fitViewBtn" title="Ajustar vista a la comuna o territorio"><span class="ms">center_focus_strong</span></button>
+        <button aria-label="Vista satélite" id="btnSatelite" title="Vista satélite"><span class="ms">satellite_alt</span></button>
       </div>
     </div>
 
     <!-- Acciones del panel → mapa abajo-derecha (L invertida) -->
     <div class="map-fabs bottom">
       <div class="fab-group fab-col">
-        <button id="newPointFab" title="Nuevo punto"><span class="ms">add_location</span></button>
-        <button id="refBtn" title="Modo referencia"><span class="ms">target</span></button>
-        <button id="settingsBtn" title="Ajustes"><span class="ms">settings</span></button>
+        <button aria-label="Nuevo punto" id="newPointFab" title="Nuevo punto"><span class="ms">add_location</span></button>
+        <button aria-label="Modo referencia" id="refBtn" title="Modo referencia"><span class="ms">target</span></button>
+        <button aria-label="Ajustes" id="settingsBtn" title="Ajustes"><span class="ms">settings</span></button>
       </div>
       <div class="fab-group">
         <div class="scope-seg" id="scopeSeg" title="Alcance de puntos en el mapa">
           <button id="scopeRegion" data-scope="region">Toda RM</button>
           <button id="scopeCommune" data-scope="comuna">Comuna</button>
-          <button id="scopeSector" data-scope="sector">Sector</button>
+          <button id="scopeTerritorio" data-scope="territorio">Territorio</button>
         </div>
       </div>
     </div>
 
     <div id="refPanel">
-      <button class="close" id="refClose">×</button>
+      <button class="close" id="refClose" aria-label="Cerrar punto de referencia">×</button>
       <h3>🎯 Puntos cercanos a referencia</h3>
       <div class="coord" id="refCoord">—</div>
       <label>Radio: <span class="radius-val" id="refRadiusVal">500 m</span></label>
@@ -140,14 +139,57 @@
     </div>
 
     <div id="drawToolbar">
-      <span class="t-label">✏️ Sector</span>
+      <span class="t-label">✏️ Territorio</span>
       <span id="drawPalette"></span>
       <span id="drawCount">—</span>
       <button id="drawUndo">Deshacer</button>
       <button id="drawCancel">Cancelar</button>
-      <button id="drawClose" class="primary">Cerrar sector</button>
+      <button id="drawClose" class="primary">Cerrar territorio</button>
     </div>
   </div>
+
+  <!-- ================= VISTA: HISTORIAL ================= -->
+  <section id="viewHistorial" class="view-page">
+    <div class="vp-head">
+      <h2>Historial</h2>
+      <div class="vp-head-tools">
+        <div class="vp-tabs" id="histTabs">
+          <button data-tab="territorios" class="active">Territorios</button>
+          <button data-tab="puntos">Puntos</button>
+        </div>
+        <select id="histComunaSel" aria-label="Filtrar historial por comuna">
+          <option value="">Todas las comunas</option>
+        </select>
+        <button type="button" class="secondary" id="histExportBtn">Exportar CSV</button>
+      </div>
+    </div>
+    <div class="vp-body" id="histTerritorios"></div>
+    <div class="vp-body" id="histPuntos" style="display:none"></div>
+  </section>
+
+  <!-- ================= VISTA: USUARIOS ================= -->
+  <section id="viewUsuarios" class="view-page">
+    <div class="vp-head">
+      <h2>Usuarios</h2>
+      <button type="button" class="secondary" id="usuariosExportBtn">Exportar CSV</button>
+    </div>
+    <div class="vp-body">
+      <form id="userForm" class="user-form">
+        <div>
+          <label for="newUserEmail">Email</label>
+          <input id="newUserEmail" type="email" autocomplete="off" required />
+        </div>
+        <div>
+          <label for="newUserPass">Contraseña</label>
+          <input id="newUserPass" type="text" autocomplete="off" required minlength="6" />
+        </div>
+        <button type="submit" class="primary" id="newUserBtn">Crear usuario</button>
+      </form>
+      <div class="err" id="userFormErr"></div>
+      <div class="note" id="userFormNote">Los usuarios creados son de terreno (nunca administradores).</div>
+      <div id="usuariosList"></div>
+    </div>
+  </section>
 </div>
 
 <!-- ================= MODAL ================= -->
@@ -198,17 +240,29 @@
   </div>
 </div>
 
-<!-- ================= MODAL NUEVO SECTOR ================= -->
-<div id="sectorModal">
+<!-- ================= MODAL HISTORIAL DE PUNTO ================= -->
+<div id="puntoHistorial">
   <div class="box">
-    <h2>Nuevo sector</h2>
-    <div class="count-badge" id="sectorCount"></div>
-    <label>Nombre</label>
-    <input id="sectorNombre" type="text" />
-    <div class="err" id="sectorErr"></div>
+    <h2 id="phTitle">Historial del punto</h2>
+    <div id="phBody"></div>
     <div class="buttons">
-      <button class="secondary" id="sectorCancelBtn">Cancelar</button>
-      <button class="primary" id="sectorSaveBtn">Guardar</button>
+      <button class="primary" id="phClose">Cerrar</button>
+      <button class="secondary" id="phExport">Exportar CSV</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL NUEVO TERRITORIO ================= -->
+<div id="territorioModal">
+  <div class="box">
+    <h2>Nuevo territorio</h2>
+    <div class="count-badge" id="territorioCount"></div>
+    <label>Nombre</label>
+    <input id="territorioNombre" type="text" />
+    <div class="err" id="territorioErr"></div>
+    <div class="buttons">
+      <button class="secondary" id="territorioCancelBtn">Cancelar</button>
+      <button class="primary" id="territorioSaveBtn">Guardar</button>
     </div>
   </div>
 </div>
@@ -233,9 +287,9 @@
     <div class="set-radios">
       <label><input type="radio" name="mapScope" value="region" /> Toda la región</label>
       <label><input type="radio" name="mapScope" value="comuna" /> Comuna seleccionada</label>
-      <label><input type="radio" name="mapScope" value="sector" /> Sector seleccionado</label>
+      <label><input type="radio" name="mapScope" value="territorio" /> Territorio seleccionado</label>
     </div>
-    <div class="set-note">Solo afecta a los marcadores del mapa; es una preferencia de este navegador. La lista lateral muestra siempre los puntos del sector seleccionado.</div>
+    <div class="set-note">Solo afecta a los marcadores del mapa; es una preferencia de este navegador. La lista lateral muestra siempre los puntos del territorio seleccionado.</div>
     <div class="err" id="setErr"></div>
     <div class="buttons">
       <button class="primary" id="setCloseBtn">Cerrar</button>
@@ -248,25 +302,6 @@
   <span class="ms ut-ic">check_circle</span>
   <span class="ut-msg" id="undoMsg">Estado actualizado</span>
   <button id="undoBtn"><span class="ms ic">undo</span>Deshacer</button>
-</div>
-
-<!-- ================= VISTA TERRENO (MÓVIL) ================= -->
-<div id="mobileView">
-  <div class="mv-top">
-    <div class="mv-head">
-      <div>
-        <div class="mv-comuna" id="mvComuna">—</div>
-        <div class="mv-sector" id="mvSector">Selecciona un sector</div>
-      </div>
-      <div class="mv-prog">
-        <div class="mv-count" id="mvCount">0 / 0</div>
-        <div class="mv-pct" id="mvPct">0%</div>
-      </div>
-      <button id="mvClose" title="Cerrar"><span class="ms" style="font-size:18px">close</span></button>
-    </div>
-    <div class="mv-bar"><i id="mvBar"></i></div>
-  </div>
-  <div class="mv-list" id="mvList"></div>
 </div>
 
 <script src="lib.js"></script>

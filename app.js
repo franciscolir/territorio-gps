@@ -14,27 +14,20 @@ const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 // ============================================================
 const { createClient } = supabase;
 // Cada app (escritorio / móvil) usa su propia clave de sesión: así pueden
-// coexistir dos pestañas con usuarios distintos sin pisarse. El lock con
-// navigator.locks serializa el refresh del token entre pestañas de la MISMA
-// app (los refresh tokens son de un solo uso).
+// coexistir dos pestañas con usuarios distintos sin pisarse. Se usa el lock
+// por defecto de supabase-js (navigator.locks), que serializa el refresh del
+// token entre pestañas de la MISMA app (los refresh tokens son de un solo uso).
+//
+// OJO: no pasar la opción `accessToken` a createClient. Deja el cliente en
+// modo "auth externa" y entonces `db.auth.signInWithPassword` (y el resto de
+// los métodos de auth) lanzan. Aquí la sesión la gestiona supabase-js: el
+// arranque espera `getSession()` antes de consultar, así que las peticiones
+// salen con el token vigente sin necesidad de inyectarlo por petición.
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     storageKey: 'gps-desktop-session',
-  },
-  // Token POR PETICIÓN: al recargar, las consultas REST/RPC salen siempre con
-  // el token vigente de la sesión (antes podían salir con el token viejo o
-  // anónimo → RLS respondía 0 filas hasta que el cliente sincronizaba headers).
-  // Sin lock custom: navigator.locks no soporta re-entrada y podía
-  // auto-bloquear los flujos de auth al recargar.
-  accessToken: async () => {
-    try {
-      const { data } = await db.auth.getSession();
-      return data?.session?.access_token ?? null;
-    } catch (_) {
-      return null;
-    }
   },
 });
 

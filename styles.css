@@ -707,7 +707,7 @@
 
   /* ============ REFERENCE PANEL ============ */
   #refPanel {
-    position: absolute; bottom: 136px; right: 20px;
+    position: absolute; bottom: 160px; right: 20px;
     background: var(--surface-lowest); padding: 16px; border-radius: var(--r-lg);
     box-shadow: var(--shadow-2); z-index: 15;
     width: 300px; display: none;
@@ -954,8 +954,9 @@
   .map-fabs button .ms { font-size: 20px; }
 
   /* Acciones del panel → mapa abajo-derecha (L invertida: columna + fila) */
+  /* bottom 40px: deja ver la atribución del mapa (píldora ~10-34px) */
   .map-fabs.bottom {
-    top: auto; bottom: 16px; right: 16px; flex-direction: column; align-items: flex-end; gap: 8px;
+    top: auto; bottom: 40px; right: 16px; flex-direction: column; align-items: flex-end; gap: 8px;
   }
   .map-fabs.bottom .fab-group { flex-direction: row; align-items: center; }
   .map-fabs.bottom .fab-group.fab-col { flex-direction: column; }
@@ -1016,7 +1017,7 @@
 
   /* ============ TOAST ============ */
   #toast {
-    position: fixed; bottom: 140px; right: 32px;
+    position: fixed; bottom: 164px; right: 32px;
     display: flex; align-items: center; gap: 10px;
     background: var(--inverse-surface); color: var(--inverse-on-surface);
     padding: 12px 18px; border-radius: var(--r-lg); box-shadow: 0 10px 30px rgba(0,0,0,.35);
@@ -1048,11 +1049,11 @@
     .map-fabs { top: 10px; right: 10px; }
     .map-fabs .fab-group { padding: 3px; }
     .map-fabs button { width: 36px; height: 36px; }
-    .map-fabs.bottom { bottom: 10px; right: 10px; }
+    .map-fabs.bottom { bottom: 34px; right: 10px; }
     .map-fabs.bottom .scope-seg button { padding: 7px 9px; font-size: 11px; }
 
-    #refPanel { right: 10px; bottom: 130px; width: min(300px, calc(100vw - 20px)); }
-    #toast { left: 12px; right: 12px; bottom: 130px; max-width: none; }
+    #refPanel { right: 10px; bottom: 154px; width: min(300px, calc(100vw - 20px)); }
+    #toast { left: 12px; right: 12px; bottom: 154px; max-width: none; }
 
     #drawToolbar { max-width: calc(100% - 20px); flex-wrap: wrap; justify-content: center; }
     #sidebar .comuna-row select { max-width: none; }
@@ -1062,5 +1063,5 @@
     #modal, #pointDetail, #territorioModal, #settingsModal, #puntoHistorial { padding: 10px; }
     #modal .box, #pointDetail .box, #territorioModal .box, #settingsModal .box, #puntoHistorial .box { padding: 16px; }
     .map-fabs.bottom .scope-seg button { padding: 6px 7px; font-size: 10px; }
-    #refPanel { bottom: 118px; }
+    #refPanel { bottom: 142px; }
   }

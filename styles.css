@@ -664,14 +664,6 @@
     border-radius: 999px; overflow: hidden; display: flex; margin-top: 1px;
   }
   .territorio-card .progress > i { display: block; height: 100%; }
-  .territorio-card .s-actions { display: flex; gap: 4px; justify-content: flex-end; }
-  .territorio-card .s-actions button {
-    border: none; background: var(--surface-mid); cursor: pointer; padding: 4px 7px;
-    border-radius: var(--r-md); color: var(--on-surface-variant); display: inline-flex;
-  }
-  .territorio-card .s-actions button:hover { background: var(--surface-high); color: var(--primary); }
-  .territorio-card .palette-row { display: none; gap: 6px; flex-wrap: wrap; }
-  .territorio-card.editing .palette-row { display: flex; }
   .chip {
     width: 20px; height: 20px; padding: 0; border-radius: 50%;
     border: 2px solid #fff; box-shadow: 0 0 0 1px var(--outline-variant); cursor: pointer;

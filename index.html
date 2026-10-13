@@ -36,6 +36,7 @@
     <div class="tb-brand"><span class="ms ms-lg">tune</span><b>Puntos RM</b></div>
     <nav id="mainNav" aria-label="Secciones">
       <button data-view="territorios" class="active"><span class="ms ms-sm">map</span>Territorios</button>
+      <button data-view="actividad"><span class="ms ms-sm">notifications</span>Actividad</button>
       <button data-view="historial"><span class="ms ms-sm">history</span>Historial</button>
       <button data-view="usuarios"><span class="ms ms-sm">group</span>Usuarios</button>
     </nav>
@@ -188,6 +189,20 @@
       <div class="err" id="userFormErr"></div>
       <div class="note" id="userFormNote">Los usuarios creados son de terreno (nunca administradores).</div>
       <div id="usuariosList"></div>
+    </div>
+  </section>
+
+  <!-- ================= VISTA: NUEVA ACTIVIDAD ================= -->
+  <section id="viewActividad" class="view-page">
+    <div class="vp-head">
+      <h2>Nueva actividad</h2>
+      <div class="vp-head-tools">
+        <button type="button" class="secondary" id="actRefreshBtn">Actualizar</button>
+      </div>
+    </div>
+    <div class="vp-body">
+      <div id="actAvisos"></div>
+      <div id="actTabla"></div>
     </div>
   </section>
 </div>

@@ -166,10 +166,10 @@ async function afterLogin() {
   // exige la DB): el botón de dibujar ni siquiera se muestra a los demás
   if (!isAdmin) document.getElementById('drawBtn').style.display = 'none';
 
-  // Historial y Usuarios son solo de administración
+  // Historial, Usuarios y Nueva actividad son solo de administración
   if (!isAdmin) {
     document
-      .querySelectorAll('#mainNav button[data-view="historial"], #mainNav button[data-view="usuarios"]')
+      .querySelectorAll('#mainNav button[data-view="historial"], #mainNav button[data-view="usuarios"], #mainNav button[data-view="actividad"]')
       .forEach((b) => { b.style.display = 'none'; });
   }
 
@@ -904,8 +904,14 @@ function agregarPin(p) {
   const el = document.createElement('div');
   const inRef = refResultsIds.has(p.id);
   const est = p.estado || 'pendiente';
+  // Aureola «nueva actividad» (solo admin): punto nuevo sin aceptar o
+  // erroneo/no_pasar puesto por un usuario a la espera del doble chequeo.
+  const enActividad = isAdmin && (
+    p.aceptado_at == null ||
+    ((p.estado === 'erroneo' || p.estado === 'no_pasar') && !p.verificado)
+  );
   // wrap (lo transforma MapLibre) + .pin interno (el dibujo, con hover)
-  el.className = 'pin-wrap' + (inRef ? ' is-ref' : '');
+  el.className = 'pin-wrap' + (inRef ? ' is-ref' : '') + (enActividad ? ' pin-act' : '');
   el.innerHTML = `<div class="pin" data-est="${est}"><span class="ms pin-ic">${PIN_ICONS[est] || 'schedule'}</span></div>`;
   // Sin popup: el clic abre la ficha de detalles (openPointDetail)
   const marker = new maplibregl.Marker({ element: el })
@@ -2792,7 +2798,7 @@ document.getElementById('toggleSidebar').addEventListener('click', () => {
 // VISTAS: TERRITORIOS · HISTORIAL · USUARIOS
 // ============================================================
 function setView(name) {
-  const views = { territorios: 'main', historial: 'viewHistorial', usuarios: 'viewUsuarios' };
+  const views = { territorios: 'main', historial: 'viewHistorial', usuarios: 'viewUsuarios', actividad: 'viewActividad' };
   if (!views[name]) return;
   const cambio = currentView !== name;
   currentView = name;
@@ -2803,6 +2809,7 @@ function setView(name) {
   document.getElementById('main').style.display = name === 'territorios' ? 'flex' : 'none';
   document.getElementById('viewHistorial').style.display = name === 'historial' ? 'flex' : 'none';
   document.getElementById('viewUsuarios').style.display = name === 'usuarios' ? 'flex' : 'none';
+  document.getElementById('viewActividad').style.display = name === 'actividad' ? 'flex' : 'none';
 
   if (name === 'territorios') {
     if (map && cambio) map.resize();   // el contenedor estaba oculto
@@ -2810,6 +2817,8 @@ function setView(name) {
     loadHistorial();
   } else if (name === 'usuarios') {
     loadUsuariosView();
+  } else if (name === 'actividad') {
+    loadActividad();
   }
 }
 
@@ -2821,6 +2830,171 @@ function fmtFechaHora(iso) {
     : d.toLocaleDateString('es-CL') + ' · ' +
       d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
 }
+
+// ============================================================
+// NUEVA ACTIVIDAD: doble chequeo de erroneo/no_pasar + puntos nuevos
+// El campo «estado» lo pone el usuario de terreno; «verificado» lo maneja el
+// admin (directo o vía tarea especial asignada a un usuario X).
+// ============================================================
+let actTareas = {};    // punto_id -> tarea pendiente { id, user_id }
+let actUsuarios = [];  // [{id, email}] para asignar y mostrar el autor
+
+// Clasificación de un punto para esta vista (null = no corresponde)
+function puntoRequiereActividad(p) {
+  if (p.aceptado_at == null) return 'nuevo';
+  if ((p.estado === 'erroneo' || p.estado === 'no_pasar') && !p.verificado) return 'verificar';
+  return null;
+}
+
+async function loadActividad() {
+  if (!isAdmin) return;
+  if (!actUsuarios.length) {
+    try { actUsuarios = (await db.rpc('listar_usuarios')).data || []; }
+    catch (_) { actUsuarios = []; }
+  }
+  const { data: tareas, error: errT } = await db
+    .from('tareas_verificacion')
+    .select('id, punto_id, user_id, estado')
+    .eq('estado', 'pendiente');
+  if (errT) toast('No se pudieron cargar las tareas: ' + errT.message, true);
+  actTareas = {};
+  (tareas || []).forEach((t) => { actTareas[t.punto_id] = t; });
+
+  // Avisos de tareas resueltas por usuarios que el admin aún no ha leído
+  const { data: avisos, error: errA } = await db
+    .from('tareas_verificacion')
+    .select('id, punto_id, user_id, estado, confirmado_at, puntos ( nombre, estado )')
+    .neq('estado', 'pendiente')
+    .is('leida_at', null)
+    .order('confirmado_at', { ascending: false })
+    .limit(50);
+  if (errA) toast('No se pudieron cargar los avisos: ' + errA.message, true);
+
+  renderAvisos(avisos || []);
+  renderActividadTabla(
+    allPoints.filter((p) => puntoRequiereActividad(p) === 'nuevo'),
+    allPoints.filter((p) => puntoRequiereActividad(p) === 'verificar')
+  );
+}
+
+function emailDeUsuario(uid) {
+  const u = actUsuarios.find((x) => x.id === uid);
+  return u ? (u.email || 'usuario') : 'usuario';
+}
+
+function renderAvisos(avisos) {
+  const box = document.getElementById('actAvisos');
+  if (!box) return;
+  if (!avisos.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="act-avisos">' + avisos.map((a) => {
+    const accion = a.estado === 'confirmada' ? 'confirmado' : 'rechazado';
+    return `<div class="act-aviso${a.estado === 'rechazada' ? ' rech' : ''}">
+      <span class="ms" aria-hidden="true">notifications_active</span>
+      <span><b>${escapeHtml(a.puntos?.nombre || 'Punto')}</b> — estado ${accion} por usuario ${escapeHtml(emailDeUsuario(a.user_id))}</span>
+      <button type="button" class="secondary" data-leer="${a.id}">Leído</button>
+    </div>`;
+  }).join('') + '</div>';
+  box.querySelectorAll('[data-leer]').forEach((b) => b.addEventListener('click', async () => {
+    const { error } = await db.rpc('tarea_leida', { p_tarea: b.dataset.leer });
+    if (error) return toast(error.message, true);
+    loadActividad();
+  }));
+}
+
+function renderActividadTabla(nuevos, verificar) {
+  const box = document.getElementById('actTabla');
+  if (!box) return;
+  const opcionesUsuarios = actUsuarios
+    .map((u) => `<option value="${u.id}">${escapeHtml(u.email)}</option>`)
+    .join('');
+
+  const filaVerificar = (p) => {
+    const tarea = actTareas[p.id];
+    const asignacion = tarea
+      ? `<span class="who">Tarea: ${escapeHtml(emailDeUsuario(tarea.user_id))}</span>
+         <button type="button" class="ghost" data-cancelar="${tarea.id}">Cancelar tarea</button>`
+      : `<select class="act-user" aria-label="Asignar verificación"><option value="">Asignar a…</option>${opcionesUsuarios}</select>
+         <button type="button" class="ghost" data-asignar="${p.id}">Asignar</button>`;
+    return `<tr data-punto="${p.id}">
+      <td><b>${escapeHtml(p.nombre || 'Sin nombre')}</b><small>${escapeHtml(p.direccion || '—')}</small></td>
+      <td><span class="estado-tag ${estadoClass(p.estado)}">${estadoLabel(p.estado)}</span></td>
+      <td class="act-acc">${asignacion}
+        <button type="button" class="secondary" data-resolver="${p.id}" data-res="confirmado">Confirmar</button>
+        <button type="button" class="ghost" data-resolver="${p.id}" data-res="rechazado">Rechazar</button>
+        <button type="button" class="ghost icon" data-vermapa="${p.id}" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">map</span></button>
+      </td>
+    </tr>`;
+  };
+
+  const filaNuevo = (p) => `<tr data-punto="${p.id}">
+      <td><b>${escapeHtml(p.nombre || 'Sin nombre')}</b><small>${escapeHtml(p.direccion || '—')}</small></td>
+      <td><span class="estado-tag ${estadoClass(p.estado || 'pendiente')}">${estadoLabel(p.estado || 'pendiente')}</span></td>
+      <td class="act-acc">
+        <button type="button" class="secondary" data-aceptar="${p.id}">Aceptar</button>
+        <button type="button" class="ghost icon" data-vermapa="${p.id}" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">map</span></button>
+      </td>
+    </tr>`;
+
+  box.innerHTML = `
+    <h3 class="act-h">Por verificar <span class="act-count">${verificar.length}</span></h3>
+    ${verificar.length
+      ? `<table class="act-tabla"><thead><tr><th>Punto</th><th>Estado (usuario)</th><th class="act-th-acc">Doble chequeo</th></tr></thead><tbody>${verificar.map(filaVerificar).join('')}</tbody></table>`
+      : '<div class="empty">Nada pendiente de verificación</div>'}
+    <h3 class="act-h">Puntos nuevos <span class="act-count">${nuevos.length}</span></h3>
+    ${nuevos.length
+      ? `<table class="act-tabla"><thead><tr><th>Punto</th><th>Estado</th><th class="act-th-acc">Acciones</th></tr></thead><tbody>${nuevos.map(filaNuevo).join('')}</tbody></table>`
+      : '<div class="empty">No hay puntos nuevos por aceptar</div>'}`;
+
+  box.querySelectorAll('[data-aceptar]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const { error } = await db.rpc('aceptar_punto', { p_punto: b.dataset.aceptar });
+    if (error) { toast(error.message, true); b.disabled = false; return; }
+    toast('Punto aceptado');
+    await loadPoints();
+    loadActividad();
+  }));
+
+  box.querySelectorAll('[data-resolver]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const { error } = await db.rpc('resolver_verificacion', {
+      p_punto: b.dataset.resolver,
+      p_resultado: b.dataset.res,
+    });
+    if (error) { toast(error.message, true); b.disabled = false; return; }
+    toast(b.dataset.res === 'confirmado' ? 'Estado confirmado' : 'Rechazado: el punto volvió a pendiente');
+    await loadPoints();
+    loadActividad();
+  }));
+
+  box.querySelectorAll('[data-asignar]').forEach((b) => b.addEventListener('click', async () => {
+    const sel = b.closest('td').querySelector('.act-user');
+    if (!sel || !sel.value) return toast('Elige un usuario primero', true);
+    b.disabled = true;
+    const { error } = await db.from('tareas_verificacion').insert({
+      punto_id: b.dataset.asignar,
+      user_id: sel.value,
+      asignado_por: currentUser.id,
+    });
+    if (error) { toast(error.message, true); b.disabled = false; return; }
+    toast('Tarea de verificación asignada');
+    loadActividad();
+  }));
+
+  box.querySelectorAll('[data-cancelar]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const { error } = await db.from('tareas_verificacion').delete().eq('id', b.dataset.cancelar);
+    if (error) { toast(error.message, true); b.disabled = false; return; }
+    toast('Tarea cancelada');
+    loadActividad();
+  }));
+
+  box.querySelectorAll('[data-vermapa]').forEach((b) => b.addEventListener('click', () => {
+    setView('territorios');
+    focusPoint(b.dataset.vermapa);
+  }));
+}
+
+document.getElementById('actRefreshBtn').addEventListener('click', () => loadActividad());
 
 // Etiquetas del ciclo de vida de una asignación (En proceso / Devuelto / Completado)
 const ESTADO_ASIG = { activa: 'En proceso', devuelta: 'Devuelto', completado: 'Completado' };

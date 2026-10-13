@@ -149,6 +149,42 @@
   .hist-table .mark.yes { color: var(--est-visitado); font-weight: 800; }
   .hist-table .mark.no { color: var(--outline); }
 
+  /* ============================================================
+     NUEVA ACTIVIDAD (vista admin): avisos + doble chequeo
+     ============================================================ */
+  .act-avisos { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .act-aviso {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    border-radius: var(--r-lg); background: var(--surface-low);
+    border: 1px solid var(--outline-variant); font-size: 13px;
+  }
+  .act-aviso.rech { border-color: rgba(186, 26, 26, .4); background: #fff5f5; }
+  .act-aviso .ms { color: var(--secondary); font-size: 18px; }
+  .act-aviso.rech .ms { color: var(--error); }
+  .act-aviso button { margin-left: auto; flex-shrink: 0; }
+  .act-h { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--on-surface-variant); margin: 18px 0 8px; display: flex; align-items: center; gap: 8px; }
+  .act-count {
+    background: var(--secondary); color: #fff; border-radius: 999px;
+    font-size: 11px; padding: 1px 8px; font-weight: 700;
+  }
+  .act-tabla {
+    width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface-lowest);
+    border-radius: var(--r-lg); overflow: clip; box-shadow: var(--shadow-1);
+  }
+  .act-tabla th, .act-tabla td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
+  .act-tabla th {
+    background: var(--surface-mid);
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--on-surface-variant);
+    box-shadow: inset 0 -1px 0 var(--outline-variant);
+  }
+  .act-tabla tr:hover td { background: var(--surface-low); }
+  .act-tabla td b { color: var(--primary); }
+  .act-tabla td small { display: block; color: var(--on-surface-variant); font-size: 11px; margin-top: 2px; }
+  .act-tabla .act-acc { display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+  .act-tabla .act-th-acc { text-align: right; }
+  .act-tabla .act-user { max-width: 210px; font-size: 12px; padding: 6px 8px; }
+  .act-tabla .who { font-size: 11px; color: var(--on-surface-variant); background: var(--surface-high); padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+
   /* Historial de puntos: filas combinadas con comuna/territorio en vertical */
   .hist-table td.grp {
     padding: 0; width: 30px; min-width: 30px; text-align: center; overflow: hidden;
@@ -898,6 +934,14 @@
   .pin[data-est="ref"] { background: #f59e0b; color: #422006; }
   .pin-wrap.is-ref .pin { outline: 3px solid #f59e0b; outline-offset: 2px; }
   .pin-wrap.pin-focus .pin { outline: 3px solid var(--secondary); outline-offset: 3px; }
+  /* Aureola «nueva actividad»: punto nuevo sin aceptar o erroneo/no_pasar a la
+     espera del doble chequeo. Después de las reglas de hover para no pisarse. */
+  .pin-wrap.pin-act .pin {
+    box-shadow: 0 0 0 4px rgba(147, 51, 234, .38), 0 3px 9px rgba(13, 28, 46, .4);
+  }
+  .pin-wrap.pin-act:hover .pin {
+    box-shadow: 0 0 0 5px rgba(147, 51, 234, .48), 0 7px 16px rgba(13, 28, 46, .45);
+  }
   /* Burbuja de agrupación (T14): agrandar el wrap porque la cuenta mide más
      que los 28 px del pin; el dibujo sigue viviendo en un hijo por lo mismo
      que .pin (MapLibre escribe `transform` inline en el elemento marcador). */

@@ -2875,6 +2875,56 @@ async function loadActividad() {
     allPoints.filter((p) => puntoRequiereActividad(p) === 'nuevo'),
     allPoints.filter((p) => puntoRequiereActividad(p) === 'verificar')
   );
+
+  // Solicitudes de puntos nuevos enviadas desde el móvil
+  const { data: sols, error: errS } = await db
+    .from('puntos_solicitudes')
+    .select('id, user_id, nombre, direccion, notas, lat, lng, created_at')
+    .eq('estado', 'pendiente')
+    .order('created_at', { ascending: false });
+  if (errS) toast('No se pudieron cargar las solicitudes: ' + errS.message, true);
+  renderSolicitudes(sols || []);
+}
+
+function renderSolicitudes(sols) {
+  const box = document.getElementById('actSolicitudes');
+  if (!box) return;
+  const fila = (s) => `<tr data-sol="${s.id}">
+      <td><b>${escapeHtml(s.nombre || 'Sin nombre')}</b>
+        <small>${escapeHtml(s.direccion || `${Number(s.lat).toFixed(5)}, ${Number(s.lng).toFixed(5)}`)}</small>
+        ${s.notas ? `<small>Notas: ${escapeHtml(s.notas)}</small>` : ''}
+        <small>Enviada por ${escapeHtml(emailDeUsuario(s.user_id))}</small>
+      </td>
+      <td class="act-acc">
+        <button type="button" class="secondary" data-sol-ok="${s.id}">Confirmar</button>
+        <button type="button" class="ghost" data-sol-no="${s.id}">Rechazar</button>
+        <a class="ghost icon" href="https://www.google.com/maps?q=${Number(s.lat)},${Number(s.lng)}"
+           target="_blank" rel="noopener" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">map</span></a>
+      </td>
+    </tr>`;
+  box.innerHTML = `
+    <h3 class="act-h">Solicitudes de puntos nuevos <span class="act-count">${sols.length}</span></h3>
+    ${sols.length
+      ? `<table class="act-tabla"><thead><tr><th>Punto (solicitante)</th><th class="act-th-acc">Acciones</th></tr></thead><tbody>${sols.map(fila).join('')}</tbody></table>`
+      : '<div class="empty">No hay solicitudes de puntos pendientes</div>'}`;
+
+  box.querySelectorAll('[data-sol-ok]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const { error } = await db.rpc('confirmar_solicitud', { p_solicitud: b.dataset.solOk });
+    if (error) { toast(error.message, true); b.disabled = false; return; }
+    toast('Solicitud confirmada: punto creado');
+    await loadPoints();
+    loadActividad();
+  }));
+
+  box.querySelectorAll('[data-sol-no]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const motivo = prompt('Motivo del rechazo (opcional):') ?? '';
+    const { error } = await db.rpc('rechazar_solicitud', { p_solicitud: b.dataset.solNo, p_motivo: motivo });
+    if (error) { toast(error.message, true); b.disabled = false; return; }
+    toast('Solicitud rechazada');
+    loadActividad();
+  }));
 }
 
 function emailDeUsuario(uid) {

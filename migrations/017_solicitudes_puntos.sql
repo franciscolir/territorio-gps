@@ -43,6 +43,11 @@ create index if not exists puntos_sol_user_idx
 
 alter table public.puntos_solicitudes enable row level security;
 
+-- Sin default privileges en este proyecto: grants explícitos. El RPC
+-- crear_solicitud_punto es security invoker → necesita estos grants.
+-- El ciclo (confirmar/rechazar) es security definer (owner) → no requiere.
+grant select, insert on public.puntos_solicitudes to authenticated;
+
 -- El creador ve sus solicitudes; el admin las ve todas
 drop policy if exists "puntos_sol_select" on public.puntos_solicitudes;
 create policy "puntos_sol_select" on public.puntos_solicitudes

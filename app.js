@@ -1536,7 +1536,7 @@ async function loadUsuarios() {
 async function loadAsignaciones() {
   const { data, error } = await db
     .from('territorios_asignaciones')
-    .select('territorio_id, user_id, estado, assigned_at, devuelta_at, completado_at, notas');
+    .select('territorio_id, user_id, estado, assigned_at, devuelta_at, completado_at, notas, puntos_base');
   if (error) {
     // Si falla (tabla/columna ausente, RLS), se avisa: con la lista vacía la
     // UI no podría mostrar procesos en curso y el admin creería que el
@@ -1836,6 +1836,13 @@ document.addEventListener('click', (e) => {
 // Cada fila de territorios_asignaciones es un proceso de trabajo del territorio
 // (asignado → devuelto); al devolver, el proceso se cierra y el territorio
 // queda a la espera de un nuevo proceso.
+
+// Puntos 'pendiente' de gestión de un territorio (sobre ellos se calcula el
+// avance de cada proceso; ver migración 019)
+function pendientesDe(territorioId) {
+  return allPoints.filter((p) => p.territorio_id === territorioId && p.estado === 'pendiente' && !p.deleted_at).length;
+}
+
 function renderAssign() {
   const panel = document.getElementById('assignPanel');
   const detail = document.getElementById('territorioDetail');
@@ -1879,6 +1886,7 @@ function renderAssign() {
           <div class="asig-quien">
             <b>${escapeHtml(emailDe(act.user_id) || '—')}</b>
             <small>Asignado el ${fmtFecha(act.assigned_at)}</small>
+            ${act.puntos_base ? `<small>Avance: ${Math.max(0, act.puntos_base - pendientesDe(s.id))} de ${act.puntos_base} pendientes gestionados</small>` : ''}
           </div>
           <div class="asig-actions">
             <button id="asigCompletar" class="primary" title="Cerrar el proceso como completado">Completar</button>
@@ -1886,9 +1894,11 @@ function renderAssign() {
           </div>
         </div>` : `
         <div class="asig-nueva">
+          <p class="assign-count">${pendientesDe(s.id)} puntos pendientes de gestión</p>
           <select id="asigUserSel">${opts}</select>
-          <button id="asigAsignar" class="primary">Asignar</button>
-        </div>`}
+          <button id="asigAsignar" class="primary"${pendientesDe(s.id) ? '' : ' disabled'}>Asignar</button>
+        </div>
+        ${pendientesDe(s.id) ? '' : '<p class="assign-warn">Este territorio no tiene puntos pendientes de gestión: no puede asignarse.</p>'}`}
       <p class="assign-hint">Cada fila es un proceso de trabajo sobre el territorio: al devolverlo el proceso se cierra y el territorio queda libre para un nuevo proceso.</p>
       <table>
         <thead><tr><th>Usuario</th><th>Asignado</th><th>Devuelto</th><th>Estado</th></tr></thead>
@@ -1951,6 +1961,12 @@ async function assignTerritorio(territorioId, userId) {
       .maybeSingle();
     if (errAct) return toast(errAct.message, true);
     if (act) return toast('El territorio ya está asignado a ' + (emailDe(act.user_id) || 'otro usuario'), true);
+
+    // Regla de negocio: sin puntos pendientes no hay proceso que abrir
+    // (la migración 019 también lo exige en la BD; esto evita el viaje)
+    if (pendientesDe(territorioId) === 0) {
+      return toast('Este territorio no tiene puntos pendientes de gestión: no puede asignarse', true);
+    }
 
     // Nuevo proceso: INSERT (el territorio puede tener varios procesos en el
     // historial; los índices parciales garantizan 1 activo por territorio/usuario)
@@ -2860,17 +2876,16 @@ async function loadActividad() {
   actTareas = {};
   (tareas || []).forEach((t) => { actTareas[t.punto_id] = t; });
 
-  // Avisos de tareas resueltas por usuarios que el admin aún no ha leído
-  const { data: avisos, error: errA } = await db
-    .from('tareas_verificacion')
-    .select('id, punto_id, user_id, estado, confirmado_at, puntos ( nombre, estado )')
-    .neq('estado', 'pendiente')
-    .is('leida_at', null)
-    .order('confirmado_at', { ascending: false })
-    .limit(50);
-  if (errA) toast('No se pudieron cargar los avisos: ' + errA.message, true);
+  // Feed de actividad reciente (tabla mensajes, disparada por triggers)
+  const { data: msgs, error: errM } = await db
+    .from('mensajes')
+    .select('id, tipo, titulo, detalle, actor, territorio_id, punto_id, leido, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (errM) toast('No se pudo cargar la actividad: ' + errM.message, true);
+  renderMensajes(msgs || []);
+  actualizarBadge(msgs || []);
 
-  renderAvisos(avisos || []);
   renderActividadTabla(
     allPoints.filter((p) => puntoRequiereActividad(p) === 'nuevo'),
     allPoints.filter((p) => puntoRequiereActividad(p) === 'verificar')
@@ -2932,20 +2947,65 @@ function emailDeUsuario(uid) {
   return u ? (u.email || 'usuario') : 'usuario';
 }
 
-function renderAvisos(avisos) {
-  const box = document.getElementById('actAvisos');
+function fmtRel(iso) {
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return 'recién';
+  if (min < 60) return 'hace ' + min + ' min';
+  const h = Math.floor(min / 60);
+  if (h < 24) return 'hace ' + h + ' h';
+  const d = Math.floor(h / 24);
+  return 'hace ' + d + ' d';
+}
+
+const MSG_ICONS = {
+  asignacion: 'assignment_turn_in',
+  devolucion: 'assignment_return',
+  completado: 'task_alt',
+  solicitud: 'add_circle',
+  solicitud_resuelta: 'rule',
+  verificacion: 'rule',
+  punto_nuevo: 'add_pin',
+  punto_aceptado: 'check_circle',
+};
+
+function actualizarBadge(msgs) {
+  const badge = document.getElementById('actBadge');
+  if (!badge) return;
+  const n = msgs.filter((m) => !m.leido).length;
+  badge.hidden = n === 0;
+  badge.textContent = n > 99 ? '99+' : String(n);
+}
+
+function renderMensajes(msgs) {
+  const box = document.getElementById('actMensajes');
   if (!box) return;
-  if (!avisos.length) { box.innerHTML = ''; return; }
-  box.innerHTML = '<div class="act-avisos">' + avisos.map((a) => {
-    const accion = a.estado === 'confirmada' ? 'confirmado' : 'rechazado';
-    return `<div class="act-aviso${a.estado === 'rechazada' ? ' rech' : ''}">
-      <span class="ms" aria-hidden="true">notifications_active</span>
-      <span><b>${escapeHtml(a.puntos?.nombre || 'Punto')}</b> — estado ${accion} por usuario ${escapeHtml(emailDeUsuario(a.user_id))}</span>
-      <button type="button" class="secondary" data-leer="${a.id}">Leído</button>
+  const fila = (m) => `<div class="msg${m.leido ? '' : ' unread'}" data-msg="${m.id}">
+      <span class="ms msg-ic" aria-hidden="true">${MSG_ICONS[m.tipo] || 'info'}</span>
+      <div class="msg-body">
+        <b>${escapeHtml(m.titulo)}</b>
+        ${m.detalle ? `<small>${escapeHtml(m.detalle)}</small>` : ''}
+        <small class="msg-time">${fmtRel(m.created_at)}</small>
+      </div>
+      <div class="msg-acc">
+        ${m.leido ? '' : `<button type="button" class="ghost" data-msg-leer="${m.id}">Leído</button>`}
+        <button type="button" class="ghost icon" data-msg-borrar="${m.id}" title="Borrar mensaje" aria-label="Borrar mensaje"><span class="ms ms-sm">delete</span></button>
+      </div>
     </div>`;
-  }).join('') + '</div>';
-  box.querySelectorAll('[data-leer]').forEach((b) => b.addEventListener('click', async () => {
-    const { error } = await db.rpc('tarea_leida', { p_tarea: b.dataset.leer });
+  box.innerHTML = `
+    <h3 class="act-h">Actividad reciente <span class="act-count">${msgs.length}</span></h3>
+    ${msgs.length
+      ? `<div class="msg-feed">${msgs.map(fila).join('')}</div>`
+      : '<div class="empty">Sin actividad registrada</div>'}`;
+
+  box.querySelectorAll('[data-msg-leer]').forEach((b) => b.addEventListener('click', async () => {
+    const { error } = await db.from('mensajes').update({ leido: true }).eq('id', b.dataset.msgLeer);
+    if (error) return toast(error.message, true);
+    loadActividad();
+  }));
+
+  box.querySelectorAll('[data-msg-borrar]').forEach((b) => b.addEventListener('click', async () => {
+    const { error } = await db.from('mensajes').delete().eq('id', b.dataset.msgBorrar);
     if (error) return toast(error.message, true);
     loadActividad();
   }));
@@ -3045,6 +3105,23 @@ function renderActividadTabla(nuevos, verificar) {
 }
 
 document.getElementById('actRefreshBtn').addEventListener('click', () => loadActividad());
+
+// "Marcar todo leído" y "Vaciar actividad" (solo admin: la RLS lo exige)
+document.getElementById('actLeerTodoBtn')?.addEventListener('click', async () => {
+  const { error } = await db.from('mensajes').update({ leido: true }).eq('leido', false);
+  if (error) return toast(error.message, true);
+  toast('Actividad marcada como leída');
+  loadActividad();
+});
+document.getElementById('actVaciarBtn')?.addEventListener('click', async () => {
+  if (!confirm('¿Vaciar toda la actividad registrada?')) return;
+  // PostgREST exige WHERE en todo DELETE: filtro siempre-verdadero (ningún id
+  // es el uuid cero) para vaciar la tabla completa
+  const { error } = await db.from('mensajes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  if (error) return toast(error.message, true);
+  toast('Actividad vaciada');
+  loadActividad();
+});
 
 // Etiquetas del ciclo de vida de una asignación (En proceso / Devuelto / Completado)
 const ESTADO_ASIG = { activa: 'En proceso', devuelta: 'Devuelto', completado: 'Completado' };

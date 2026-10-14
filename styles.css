@@ -91,6 +91,13 @@
     border: 0; background: transparent; color: var(--inverse-primary);
     font-family: inherit; font-weight: 600; font-size: 13px; cursor: pointer;
     padding: 7px 12px; border-radius: var(--r-md); display: inline-flex; align-items: center; gap: 5px;
+    position: relative;
+  }
+  .nav-badge {
+    position: absolute; top: 1px; right: 1px;
+    min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 999px; background: var(--error); color: #fff;
+    font-size: 10px; font-weight: 800; line-height: 16px; text-align: center;
   }
   #mainNav button .ms { font-size: 16px; }
   #mainNav button:hover { background: rgba(255,255,255,.12); color: #fff; }
@@ -151,17 +158,20 @@
 
   /* ============================================================
      NUEVA ACTIVIDAD (vista admin): avisos + doble chequeo
-     ============================================================ */
-  .act-avisos { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
-  .act-aviso {
-    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+      ============================================================ */
+  .msg-feed { display: flex; flex-direction: column; gap: 8px; }
+  .msg {
+    display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px;
     border-radius: var(--r-lg); background: var(--surface-low);
     border: 1px solid var(--outline-variant); font-size: 13px;
   }
-  .act-aviso.rech { border-color: rgba(186, 26, 26, .4); background: #fff5f5; }
-  .act-aviso .ms { color: var(--secondary); font-size: 18px; }
-  .act-aviso.rech .ms { color: var(--error); }
-  .act-aviso button { margin-left: auto; flex-shrink: 0; }
+  .msg.unread { border-color: rgba(64, 105, 242, .45); background: #f3f6ff; }
+  .msg-ic { color: var(--secondary); font-size: 18px; margin-top: 1px; }
+  .msg-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .msg-body b { color: var(--primary); }
+  .msg-body small { display: block; color: var(--on-surface-variant); font-size: 11px; }
+  .msg-body .msg-time { font-size: 10px; text-transform: lowercase; }
+  .msg-acc { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
   .act-h { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--on-surface-variant); margin: 18px 0 8px; display: flex; align-items: center; gap: 8px; }
   .act-count {
     background: var(--secondary); color: #fff; border-radius: 999px;
@@ -576,6 +586,12 @@
   .assign-panel button { font-size: 11px; padding: 3px 7px; border-radius: var(--r-sm); border: 1px solid var(--secondary); background: rgba(29,78,216,.08); color: var(--secondary); cursor: pointer; font-family: inherit; }
   .assign-panel button:hover { background: var(--secondary); color: #fff; }
   .assign-panel .assign-hint { margin: 0 0 8px; font-size: 10.5px; line-height: 1.4; color: var(--on-surface-variant); }
+  .assign-panel .assign-count { margin: 0 0 6px; font-size: 11px; font-weight: 700; color: var(--on-surface-variant); }
+  .assign-panel .assign-warn {
+    margin: 6px 0 0; padding: 7px 10px; border-radius: var(--r-md);
+    background: #fff5f5; border: 1px solid rgba(186, 26, 26, .4);
+    color: var(--error); font-size: 11px; font-weight: 600;
+  }
 
   /* ============ MODAL DETALLE DE PUNTO ============ */
   #pointDetail { position: fixed; inset: 0; z-index: 510; background: rgba(13,28,46,.55); display: none; align-items: center; justify-content: center; padding: 16px; }

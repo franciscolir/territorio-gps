@@ -173,6 +173,7 @@ producción**, aplica solo los cambios nuevos, en orden:
 | [`migrations/009_puntos_historial.sql`](migrations/009_puntos_historial.sql) | Bitácora `puntos_historial` (un log por movimiento del punto) y RPC `punto_historial` |
 | [`migrations/010_reinicio_visitados.sql`](migrations/010_reinicio_visitados.sql) | Al (re)asignar un territorio: `visitado` vuelve a `pendiente` (nuevo proceso de trabajo); `erroneo` y `no_pasar` se heredan |
 | [`migrations/015_rls_estricto.sql`](migrations/015_rls_estricto.sql) | RLS estricto: revierte la apertura de la 014 — colaborador solo lee puntos de su territorio activo (o propios), crea solo con asignación, y `guardar_punto` lo exige |
+| [`migrations/016_tarea_ver_punto.sql`](migrations/016_tarea_ver_punto.sql) | El asignado de una tarea de verificación puede leer el punto mientras la tarea esté pendiente (corrige cards de tarea sin datos) |
 | [`migrations/011_cierre_inmediato.sql`](migrations/011_cierre_inmediato.sql) | Si tras el reinicio no queda ningún punto `pendiente`, el proceso recién abierto se cierra como `completado` (evita procesos eternos al 100 %) |
 | [`migrations/012_app_config_sin_delete.sql`](migrations/012_app_config_sin_delete.sql) | `app_config` deja de dar `DELETE` a `authenticated` (la app solo lee y hace `upsert`); el privilegio queda solo en `service_role` |
 

@@ -1837,10 +1837,39 @@ document.addEventListener('click', (e) => {
 // (asignado → devuelto); al devolver, el proceso se cierra y el territorio
 // queda a la espera de un nuevo proceso.
 
-// Puntos 'pendiente' de gestión de un territorio (sobre ellos se calcula el
+// Puntos de un territorio. Usa pointsInTerritorio para no depender de que
+// allPoints tenga ya el territorio_id: al crear un territorio la DB reasigna
+// los puntos por geometría, pero el array en memoria puede quedar obsoleto.
+function puntosDeTerritorio(territorioId) {
+  const t = allTerritorios.find((x) => x.id === territorioId);
+  return t ? pointsInTerritorio(t) : allPoints.filter((p) => p.territorio_id === territorioId);
+}
+
+// Puntos 'pendiente' actuales de un territorio (sobre ellos se calcula el
 // avance de cada proceso; ver migración 019)
 function pendientesDe(territorioId) {
-  return allPoints.filter((p) => p.territorio_id === territorioId && p.estado === 'pendiente' && !p.deleted_at).length;
+  return puntosDeTerritorio(territorioId)
+    .filter((p) => p.estado === 'pendiente' && !p.deleted_at).length;
+}
+
+// Puntos que quedarán 'pendiente' al abrir un proceso: el trigger de 019
+// reinicia los 'visitado' del proceso anterior antes de contar, así que un
+// territorio con solo visitados SÍ puede reasignarse. 'erroneo' y 'no_pasar'
+// se heredan y no cuentan como trabajo nuevo.
+function asignablesDe(territorioId) {
+  return puntosDeTerritorio(territorioId)
+    .filter((p) => !p.deleted_at && (p.estado === 'pendiente' || p.estado === 'visitado')).length;
+}
+
+// Desglose para la validación al reasignar un territorio ya trabajado.
+function reasignacionDe(territorioId) {
+  const pts = puntosDeTerritorio(territorioId).filter((p) => !p.deleted_at);
+  const cuenta = (estado) => pts.filter((p) => p.estado === estado).length;
+  return {
+    visitados: cuenta('visitado'),
+    erroneos: cuenta('erroneo'),
+    noPasar: cuenta('no_pasar'),
+  };
 }
 
 function renderAssign() {
@@ -1863,6 +1892,7 @@ function renderAssign() {
     .sort((a, b) => new Date(b.assigned_at || 0) - new Date(a.assigned_at || 0));
   const opts = '<option value="">— elegir usuario —</option>' +
     usuarios.map((u) => `<option value="${u.id}">${escapeHtml(u.email)}</option>`).join('');
+  const reasig = reasignacionDe(s.id);
   const fila = (a) => {
     const est = ESTADO_ASIG[a.estado] ? a.estado : 'activa';
     const cierre = est === 'completado' ? a.completado_at : est === 'devuelta' ? a.devuelta_at : null;
@@ -1894,11 +1924,12 @@ function renderAssign() {
           </div>
         </div>` : `
         <div class="asig-nueva">
-          <p class="assign-count">${pendientesDe(s.id)} puntos pendientes de gestión</p>
+          <p class="assign-count">${asignablesDe(s.id)} puntos pendientes de gestión</p>
           <select id="asigUserSel">${opts}</select>
-          <button id="asigAsignar" class="primary"${pendientesDe(s.id) ? '' : ' disabled'}>Asignar</button>
+          <button id="asigAsignar" class="primary"${asignablesDe(s.id) ? '' : ' disabled'}>Asignar</button>
         </div>
-        ${pendientesDe(s.id) ? '' : '<p class="assign-warn">Este territorio no tiene puntos pendientes de gestión: no puede asignarse.</p>'}`}
+        ${reasig.visitados ? `<p class="assign-hint">Al asignar se reiniciarán ${reasig.visitados} punto${reasig.visitados === 1 ? '' : 's'} visitado${reasig.visitados === 1 ? '' : 's'} a pendiente${reasig.erroneos || reasig.noPasar ? `; se mantienen ${reasig.erroneos} erróneo${reasig.erroneos === 1 ? '' : 's'} y ${reasig.noPasar} no pasar` : ''}.</p>` : ''}
+        ${asignablesDe(s.id) ? '' : '<p class="assign-warn">Este territorio no tiene puntos pendientes de gestión: no puede asignarse.</p>'}`}
       <p class="assign-hint">Cada fila es un proceso de trabajo sobre el territorio: al devolverlo el proceso se cierra y el territorio queda libre para un nuevo proceso.</p>
       <table>
         <thead><tr><th>Usuario</th><th>Asignado</th><th>Devuelto</th><th>Estado</th></tr></thead>
@@ -1962,10 +1993,27 @@ async function assignTerritorio(territorioId, userId) {
     if (errAct) return toast(errAct.message, true);
     if (act) return toast('El territorio ya está asignado a ' + (emailDe(act.user_id) || 'otro usuario'), true);
 
-    // Regla de negocio: sin puntos pendientes no hay proceso que abrir
-    // (la migración 019 también lo exige en la BD; esto evita el viaje)
-    if (pendientesDe(territorioId) === 0) {
+    // Regla de negocio: sin puntos pendientes (tras reiniciar los visitados
+    // del proceso anterior) no hay trabajo que abrir; la migración 019
+    // también lo exige en la BD.
+    if (asignablesDe(territorioId) === 0) {
       return toast('Este territorio no tiene puntos pendientes de gestión: no puede asignarse', true);
+    }
+
+    // Validación al reasignar un territorio ya trabajado (completado o
+    // devuelto): el nuevo proceso reinicia los 'visitado' a pendiente.
+    // 'erroneo' y 'no_pasar' se conservan (migración 019).
+    const reasig = reasignacionDe(territorioId);
+    if (reasig.visitados > 0) {
+      const conserva = reasig.erroneos || reasig.noPasar
+        ? ` Se mantendrán ${reasig.erroneos} erróneo(s) y ${reasig.noPasar} no pasar.`
+        : '';
+      const ok = confirm(
+        'Este territorio ya fue trabajado.\n\n'
+        + `Se reiniciarán ${reasig.visitados} punto(s) visitado(s) a pendiente.${conserva}\n\n`
+        + '¿Asignar y reiniciar los visitados?'
+      );
+      if (!ok) return;
     }
 
     // Nuevo proceso: INSERT (el territorio puede tener varios procesos en el
@@ -1986,6 +2034,9 @@ async function assignTerritorio(territorioId, userId) {
     toast('Proceso de trabajo iniciado');
   }
   await loadAsignaciones();
+  // El trigger de la DB reinicia los visitados y recalcula puntos_base; se
+  // recargan los puntos para que la UI refleje el nuevo proceso al instante.
+  await loadPoints();
   renderAssign();
   renderTerritorioList();
   renderTerritorioDetail();
@@ -2089,6 +2140,9 @@ async function deleteTerritorio(id) {
   toast('Territorio eliminado');
   if (territorioSelectedId === id) setTerritorioSelected(null);
   await loadTerritorios();
+  // Al borrar, la DB devuelve sus puntos a "sin territorio"; recargar para
+  // que los contadores y el panel de asignación no queden obsoletos.
+  await loadPoints();
 }
 
 // ============================================================
@@ -2410,6 +2464,9 @@ async function saveTerritorio() {
   document.getElementById('territorioModal').classList.remove('visible');
   stopDraw();
   await loadTerritorios();
+  // La DB reasigna los puntos incluidos (trigger por geometría); recargarlos
+  // evita que el panel de asignación los vea sin territorio_id.
+  await loadPoints();
 
   // Recién tras el recorte se cuentan los puntos que quedaron dentro
   const saved = data && data.id ? allTerritorios.find((s) => s.id === data.id) : null;

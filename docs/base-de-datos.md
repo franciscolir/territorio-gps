@@ -145,6 +145,7 @@ Notas:
 | `actualizar_punto_terreno(id, nombre, direccion, notas, lat, lng)` | **definer** | El colaborador edita campos de terreno de un punto de su territorio activo; rechaza coordenadas fuera del polígono. No toca `estado`/`user_id`/`deleted_at`. |
 | `eliminar_punto_propio(id)` | **definer** | Borrado lógico de puntos creados por el propio colaborador. |
 | `completar_territorio(territorio, notas)` | **definer** | Solo admin: cierra el proceso activo como `completado` (auditoría + notas). |
+| `reiniciar_territorio(territorio)` | **definer** | **021.** Solo admin, una transacción: cierra el proceso activo como `devuelta` (auditoría) y reinicia los `visitado` a `pendiente` (`erroneo`/`no_pasar` se conservan; historial por punto vía trigger). Devuelve la cantidad reiniciada. |
 | `listar_usuarios()` | **definer** | Solo admin: `id, email, is_admin` + territorio activo y fecha de asignación (`desde`). |
 | `punto_historial(punto)` | **definer** | Bitácora de un punto: sus movimientos (creación, estado, territorio, borrado, notas) + las asignaciones de su territorio. Devuelve `ev_at, ev_tipo, ev_actor, ev_detalle`; exige admin, ser el creador o tener ese territorio activo. |
 
@@ -218,6 +219,13 @@ o vía SQL Editor de Supabase.
 | `010_reinicio_visitados.sql` | trigger `territorios_asig_reiniciar` (`territorio_reiniciar_visitados`): al insertar una asignación `activa`, los puntos `visitado` del territorio vuelven a `pendiente` |
 | `011_cierre_inmediato.sql` | misma función, con el paso final: si no queda ningún punto `pendiente` tras el reinicio, la asignación recién creada se cierra como `completado` |
 | `012_app_config_sin_delete.sql` | `revoke delete on public.app_config from authenticated`: la app nunca borra filas de configuración; el privilegio queda solo en `service_role` |
+| `013`–`020` | verificación de revisión, nueva actividad/verificaciones, RLS estricto con policies por tabla, solicitudes de puntos, avance por asignación (`puntos_base`), bitácora de mensajes por punto (móvil) |
+
+La migración `021_reiniciar_territorio.sql` **no está incluida en el bloque psql de arriba** (los comandos listados cubren hasta 012; las 013–020 se aplican por separado). Aplicar con:
+
+```sh
+psql "$DATABASE_URL" -f migrations/021_reiniciar_territorio.sql
+```
 
 ### Verificación rápida tras migrar
 
@@ -227,7 +235,8 @@ select proname from pg_proc
 where proname in ('marcar_estado','guardar_territorio','devolver_territorio',
                   'actualizar_punto_terreno','eliminar_punto_propio',
                   'territorio_activo_usuario','completar_territorio','listar_usuarios',
-                  'punto_historial','puntos_historial_log');
+                  'punto_historial','puntos_historial_log',
+                  'agregar_nota_punto','notas_punto','reiniciar_territorio');
 
 -- todos los puntos vivos tienen territorio (o están fuera de todo territorio)
 select count(*) from public.puntos where deleted_at is null and territorio_id is null;

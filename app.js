@@ -1905,17 +1905,18 @@ function renderAssign() {
 
   let cuerpo;
   if (assignMode === 'reset') {
-    const detalle = reasig.visitados
-      ? `${reasig.visitados} visitado${reasig.visitados === 1 ? '' : 's'} volverá${reasig.visitados === 1 ? '' : 'n'} a pendiente` +
-        (reasig.erroneos || reasig.noPasar
-          ? `; se mantienen ${reasig.erroneos} erróneo${reasig.erroneos === 1 ? '' : 's'} y ${reasig.noPasar} no pasar`
-          : '')
-      : 'No hay puntos visitados por reiniciar.';
+    const permiteReset = reasig.visitados > 0 || !!act;
+    const detalle = [
+      reasig.visitados
+        ? `${reasig.visitados} visitado${reasig.visitados === 1 ? '' : 's'} volverá${reasig.visitados === 1 ? '' : 'n'} a pendiente`
+        : 'Sin visitados por reiniciar',
+      act ? 'el proceso activo queda cerrado y el territorio libre' : 'no hay proceso que liberar',
+    ].join(' · ');
     cuerpo = `
-      <p class="assign-hint">Reinicia los <b>visitado</b> del territorio a <b>pendiente</b>; los <b>erróneo</b> y <b>no pasar</b> se mantienen.</p>
-      <p class="assign-hint"><b>${detalle}</b></p>
+      <p class="assign-hint">Reinicia los <b>visitado</b> a <b>pendiente</b> y libera el proceso activo, si hay, en un solo paso. Los <b>erróneo</b> y <b>no pasar</b> se mantienen.</p>
+      <p class="assign-hint"><b>${detalle}.</b></p>
       <div class="asig-actions">
-        <button id="asigResetConfirm" class="danger-text"${reasig.visitados ? '' : ' disabled'}>Reiniciar</button>
+        <button id="asigResetConfirm" class="danger-text"${permiteReset ? '' : ' disabled'}>Reiniciar</button>
         <button id="asigResetCancel">Cancelar</button>
       </div>`;
   } else if (assignMode === 'asignar') {
@@ -1986,16 +1987,18 @@ function renderAssign() {
   if (comp) comp.addEventListener('click', () => completarTerritorio(s.id));
 }
 
-// Reset manual del territorio (toggle Reset): los 'visitado' vuelven a
-// 'pendiente' vía marcar_estado; 'erroneo' y 'no_pasar' se conservan.
+// Reset manual del territorio (toggle Reset): 1 RPC transaccional en el
+// servidor (migración 021) reinicia los 'visitado' a 'pendiente' ('erroneo'
+// y 'no_pasar' se conservan) y cierra el proceso activo como 'devuelta'.
 async function resetTerritorioPuntos(s) {
-  if (!isAdmin) return toast('Solo administradores pueden reiniciar puntos', true);
-  const ids = puntosDeTerritorio(s.id)
-    .filter((p) => !p.deleted_at && p.estado === 'visitado')
-    .map((p) => p.id);
-  if (!ids.length) return;
-  for (const id of ids) await setEstadoPunto(id, 'pendiente', true);
-  toast(`Reiniciado${ids.length === 1 ? '' : 's'} ${ids.length} punto${ids.length === 1 ? '' : 's'} a pendiente`);
+  if (!isAdmin) return toast('Solo administradores pueden reiniciar territorios', true);
+  const { data, error } = await db.rpc('reiniciar_territorio', { p_territorio: s.id });
+  if (error) return toast(error.message, true);
+  await loadPoints();
+  await loadAsignaciones();
+  toast(+data > 0
+    ? `Reiniciado${+data === 1 ? '' : 's'} ${+data} punto${+data === 1 ? '' : 's'} a pendiente`
+    : 'Territorio reiniciado (no había visitados)');
   renderAssign();
   renderTerritorioList();
   renderTerritorioDetail();

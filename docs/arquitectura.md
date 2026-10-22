@@ -92,7 +92,7 @@ getSession() ─┬─ con sesión → startApp(user)
 startApp()  (guarda: solo una vez, evita mapa duplicado)
   ├─ profiles.is_admin → isAdmin
   ├─ oculta ✏️ si no es admin (y aparece solo con comuna elegida)
-  ├─ applyInitialSidebarState()   (móvil: panel colapsado)
+  ├─ applyInitialSidebarState()   (default: col A abierta, col B cerrada)
   ├─ loadConfig()   (app_config.comunas_activas)
   ├─ loadComunas()  (comunas_rm → comunaFeatures)
   └─ initMap()

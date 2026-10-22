@@ -49,9 +49,8 @@
     <aside id="sidebar">
       <!-- Columna 1: Comuna + Territorios -->
       <section id="colTerr" class="col">
-        <header class="col-head col-head-terr" title="Mostrar/ocultar columna">
+        <header class="col-head col-head-terr">
           <span class="col-title"><span class="ms ms-sm">explore</span><span>Comuna · Territorio</span></span>
-          <button class="col-collapse" aria-label="Colapsar columna" title="Colapsar/expandir columna"><span class="ms ms-sm">chevron_left</span></button>
         </header>
         <div class="panel-head">
           <div class="comuna-row">
@@ -75,9 +74,8 @@
 
       <!-- Columna 2: Puntos -->
       <section id="colPuntos" class="col">
-        <header class="col-head col-head-punt" title="Mostrar/ocultar columna">
+        <header class="col-head col-head-punt">
           <span class="col-title"><span class="ms ms-sm">pin_drop</span><span id="puntosHead">Puntos</span></span>
-          <button class="col-collapse" aria-label="Colapsar columna" title="Colapsar/expandir columna"><span class="ms ms-sm">chevron_left</span></button>
         </header>
         <div class="pts-zone" id="ptsZone">
           <div class="search-wrap" id="filterWrap">
@@ -98,9 +96,10 @@
 
     <div id="map"></div>
 
-    <!-- Riel de borde: colapsar panel, buscador unificado y dibujar territorio -->
+    <!-- Riel de borde: flechas de columnas, buscador unificado y dibujar territorio -->
     <div id="edgeRail">
-      <button aria-label="Mostrar/ocultar panel" id="toggleSidebar" title="Mostrar/ocultar panel"><span class="ms">menu</span></button>
+      <button aria-label="Cerrar la columna abierta" id="railIzq" title="Cerrar columna abierta"><span class="ms">arrow_back_ios</span></button>
+      <button aria-label="Abrir columna" id="railDer" title="Abrir columna"><span class="ms">arrow_forward_ios</span></button>
       <button aria-label="Buscar dirección, coordenadas o link" id="searchFab" title="Buscar dirección, coordenadas o link"><span class="ms">search</span></button>
       <button aria-label="Dibujar un territorio a mano (elige una comuna)" id="drawBtn" title="Dibujar un territorio a mano (elige una comuna)" style="display:none"><span class="ms">draw</span></button>
     </div>

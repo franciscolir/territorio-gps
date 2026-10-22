@@ -276,31 +276,29 @@
 
   #main { flex: 1; display: flex; position: relative; overflow: hidden; }
 
-  /* ============ SIDEBAR · dos columnas colapsables ============ */
+  /* ============ SIDEBAR · columnas A (comuna·territorio) y B (puntos) ============ */
+  /* Cada columna ocupa un ancho propio X (var --col-w): nunca crece a costa de
+     la otra. Cerrada desaparece por completo; con ambas cerradas el panel
+     (y su borde/sombra) liberan todo el espacio para el mapa. */
+  #main { --panel-w: 0px; --col-w: min(280px, 40vw); }
+
   #sidebar {
-    width: min(560px, 46vw); max-width: 92vw; background: var(--surface-lowest); border-right: 1px solid var(--outline-variant);
+    min-width: 0; width: auto; background: var(--surface-lowest); border-right: 1px solid var(--outline-variant);
     display: flex; flex-direction: row; align-items: stretch; z-index: 10;
-    transition: transform .25s; box-shadow: 4px 0 18px rgba(13,28,46,.06);
+    box-shadow: 4px 0 18px rgba(13,28,46,.06);
   }
-  #sidebar.collapsed { transform: translateX(-100%); position: absolute; height: 100%; }
+  #sidebar.sin-panel { display: none; }
 
-  /* Columna: espacio propio al repartir (0 basis + grow = se reparte lo libre);
-     al colapsar la vecina, la que queda se expande con todo el espacio liberado */
   #sidebar .col {
-    flex: 1 1 0; min-width: 0; position: relative;
+    flex: 0 0 auto; width: var(--col-w); min-width: 0; position: relative;
     display: flex; flex-direction: column; overflow: hidden;
-    transition: flex-basis .2s ease, flex-grow .2s ease;
   }
-  #sidebar .col.collapsed { flex: 0 0 46px; }
-  #sidebar .col.collapsed .panel-head,
-  #sidebar .col.collapsed .sect-zone,
-  #sidebar .col.collapsed .pts-zone { display: none; }
+  #sidebar .col.collapsed { display: none; }
 
-  /* Cabecera de columna (contraste: azul = navegación/comuna·territorio; oscuro = datos/puntos) */
+  /* Cabecerías de color para contraste: azul = navegación; oscuro = datos */
   #sidebar .col-head {
-    display: flex; align-items: center; justify-content: space-between; gap: 6px;
-    padding: 0 9px; height: 40px; flex-shrink: 0; color: #fff;
-    cursor: pointer; user-select: none;
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 9px; height: 40px; flex-shrink: 0; color: #fff; user-select: none;
   }
   #sidebar .col-head-terr { background: var(--secondary); }
   #sidebar .col-head-punt { background: var(--primary); }
@@ -310,21 +308,6 @@
     white-space: nowrap; overflow: hidden; min-width: 0;
   }
   #sidebar .col-head .col-title .ms { flex-shrink: 0; }
-  #sidebar .col-collapse {
-    flex-shrink: 0; width: 26px; height: 26px; border: 0; border-radius: 8px;
-    background: rgba(255,255,255,.16); color: #fff; padding: 0;
-    display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
-  }
-  #sidebar .col-collapse:hover { background: rgba(255,255,255,.3); }
-  #sidebar .col-head:hover { filter: brightness(1.08); }
-  /* Colapsada: etiqueta vertical, chevron apunta a expandir */
-  #sidebar .col.collapsed .col-head { justify-content: center; gap: 0; padding: 8px 0; }
-  #sidebar .col.collapsed .col-title { writing-mode: vertical-rl; transform: rotate(180deg); }
-  #sidebar .col.collapsed .col-head .col-collapse {
-    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
-    width: 30px;
-  }
-  #sidebar .col.collapsed .col-collapse .ms { transform: rotate(-180deg); }
 
   #sidebar .panel-head {
     padding: 10px 14px; border-bottom: 1px solid var(--outline-variant);
@@ -1065,12 +1048,14 @@
   .map-fabs.bottom .scope-seg { background: var(--surface-mid); }
   .map-fabs.bottom .scope-seg button { flex: 0 0 auto; width: auto; height: auto; padding: 8px 12px; white-space: nowrap; }
 
-  /* ============ RIEL DE BORDE (toggle + lupa) ============ */
+  /* ============ RIEL DE BORDE (flechas de columnas + lupa) ============ */
+  /* El riel flota a la derecha del panel abierto: left depende de --panel-w.
+     Flechas: ◄ cierra la columna de mayor nivel (B si está abierta; si no, A);
+     ► abre la siguiente (B si A abierta; si no, reabre A). */
   #edgeRail {
-    position: absolute; top: 16px; left: calc(420px + 8px); z-index: 40;
+    position: absolute; top: 16px; left: calc(var(--panel-w) + 8px); z-index: 40;
     display: flex; flex-direction: column; gap: 8px; transition: left .25s;
   }
-  #main.sb-collapsed #edgeRail { left: 0; }
   #edgeRail button {
     width: 36px; height: 36px; border: 1px solid var(--outline-variant);
     background: var(--surface-lowest); color: var(--primary); border-radius: var(--r-md);
@@ -1089,14 +1074,13 @@
 
   /* Overlay de búsqueda unificada (sobre el mapa, a la derecha del riel) */
   #searchOverlay {
-    position: absolute; top: 16px; left: calc(420px + 52px); z-index: 39;
-    width: 380px; max-width: calc(100vw - 520px);
+    position: absolute; top: 16px; left: calc(var(--panel-w) + 52px); z-index: 39;
+    width: 380px; max-width: calc(100vw - var(--panel-w) - 60px);
     display: none; align-items: center; gap: 8px;
     background: var(--surface-lowest); border: 1px solid var(--outline-variant);
     border-radius: var(--r-lg); padding: 6px 10px;
     box-shadow: 0 10px 30px rgba(13,28,46,.22); transition: left .25s;
   }
-  #main.sb-collapsed #searchOverlay { left: 46px; max-width: calc(100vw - 62px); }
   #searchOverlay.visible { display: flex; }
   #searchOverlay .search-ic { color: var(--on-surface-variant); flex-shrink: 0; }
   #searchOverlay input {
@@ -1127,19 +1111,15 @@
 
   /* ============ RESPONSIVE (móvil / tablet) — T8 ============ */
   @media (max-width: 860px) {
-    /* Panel pasa a overlay: el JS lo arranca colapsado y el primer clic
-       en el mapa lo vuelve a cerrar (isNarrow() en app.js) */
+    /* Panel pasa a overlay: el primer clic en el mapa lo cierra (isNarrow() en app.js) */
     #sidebar {
       position: absolute; top: 0; left: 0; bottom: 0;
       width: min(420px, 88vw); height: 100%; z-index: 60;
       box-shadow: 0 0 40px rgba(13,28,46,.4);
     }
-    #sidebar.collapsed { transform: translateX(-100%); }
 
-    #edgeRail, #main.sb-collapsed #edgeRail { left: 10px; top: 10px; }
-    #searchOverlay, #main.sb-collapsed #searchOverlay {
-      left: 54px; right: 10px; width: auto; max-width: none;
-    }
+    #edgeRail { left: 10px; top: 10px; z-index: 70; }
+    #searchOverlay { left: 54px; right: 10px; width: auto; max-width: none; }
 
     .map-fabs { top: 10px; right: 10px; }
     .map-fabs .fab-group { padding: 3px; }
@@ -1152,12 +1132,9 @@
 
     #drawToolbar { max-width: calc(100% - 20px); flex-wrap: wrap; justify-content: center; }
     #sidebar .comuna-row select { max-width: none; }
-    /* En angostas las columnas se apilan verticales (cada una sigue colapsable) */
+    /* En angostas las columnas se apilan verticales */
     #sidebar { flex-direction: column; height: 100%; overflow-y: auto; }
-    #sidebar .col { flex: 1 1 auto; }
-    #sidebar .col.collapsed .col-head { writing-mode: horizontal-tb; flex-direction: row; transform: none; padding: 0 9px; height: 40px; }
-    #sidebar .col.collapsed .col-title { writing-mode: horizontal-tb; transform: none; }
-    #sidebar .col.collapsed .col-head .col-collapse { position: static; transform: none; width: 26px; }
+    #sidebar .col { flex: 1 1 auto; width: 100%; }
   }
 
   @media (max-width: 480px) {

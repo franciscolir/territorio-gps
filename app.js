@@ -985,6 +985,12 @@ function setTerritorioSelected(id) {
   renderMarkers();  // en modo "territorio" también cambian los marcadores del mapa
   renderTerritorioDetail();
   renderAssign();   // al deselectar se cierra la vista de asignación
+  // Al elegir un territorio se abre la columna de puntos (B), mientras A siga
+  // abierta (si el panel está vacío, el riel ofrece ► para reabrirlo)
+  if (id != null && colAAbierta && !colBAbierta) {
+    colBAbierta = true;
+    pintarPanel();
+  }
 }
 
 // Territorio seleccionado (o null)
@@ -1079,8 +1085,10 @@ function nearbyVisiblePointId(pt) {
 
 function onMapClick(e) {
   // T8: en móvil el panel es overlay: el primer clic en el mapa lo cierra
-  if (isNarrow() && !document.getElementById('sidebar').classList.contains('collapsed')) {
-    setSidebarCollapsed(true);
+  if (isNarrow() && (colAAbierta || colBAbierta)) {
+    colAAbierta = false;
+    colBAbierta = false;
+    pintarPanel();
     return;
   }
 
@@ -2839,31 +2847,47 @@ function isNarrow() {
   return window.matchMedia('(max-width: 860px)').matches;
 }
 
-function setSidebarCollapsed(collapsed) {
-  document.getElementById('sidebar').classList.toggle('collapsed', collapsed);
-  document.getElementById('main').classList.toggle('sb-collapsed', collapsed);
-  if (collapsed) closeSearchOverlay();
-  setTimeout(() => map && map.resize(), 300);
+// ============================================================
+// PANEL A/B: comuna·territorio (A) y puntos (B), con riel de flechas
+// Cada columna ocupa su ancho propio (X); cerrada desaparece por completo,
+// sin espacio fantasma. Con ambas cerradas el mapa ocupa toda la pantalla.
+// Estados del riel: A abierta+B cerrada (default) → ◄► · B abierta → ◄
+// (cierra B) · A y B cerradas → ► (reabre A).
+// ============================================================
+let colAAbierta = true;
+let colBAbierta = false;
+
+function pintarPanel() {
+  document.getElementById('colTerr').classList.toggle('collapsed', !colAAbierta);
+  document.getElementById('colPuntos').classList.toggle('collapsed', !colBAbierta);
+  const vacio = !colAAbierta && !colBAbierta;
+  const sidebar = document.getElementById('sidebar');
+  const main = document.getElementById('main');
+  sidebar.classList.toggle('sin-panel', vacio);
+  main.style.setProperty('--panel-w', vacio ? '0px' : sidebar.offsetWidth + 'px');
+  const izq = document.getElementById('railIzq');
+  const der = document.getElementById('railDer');
+  if (colBAbierta) { izq.hidden = false; der.hidden = true; }
+  else if (colAAbierta) { izq.hidden = false; der.hidden = false; }
+  else { izq.hidden = true; der.hidden = false; }
+  setTimeout(() => map && map.resize(), 60);
 }
 
-function applyInitialSidebarState() {
-  if (isNarrow()) setSidebarCollapsed(true);
-}
-
-document.getElementById('toggleSidebar').addEventListener('click', () => {
-  setSidebarCollapsed(!document.getElementById('sidebar').classList.contains('collapsed'));
+document.getElementById('railIzq').addEventListener('click', () => {
+  if (isNarrow()) closeSearchOverlay();
+  if (colBAbierta) colBAbierta = false;
+  else colAAbierta = false;
+  pintarPanel();
+});
+document.getElementById('railDer').addEventListener('click', () => {
+  if (!colAAbierta) colAAbierta = true;
+  else colBAbierta = true;
+  pintarPanel();
 });
 
-// Toda la cabecera de columna es colapsable (botón incluido): col 1 = comuna y
-// territorio, col 2 = puntos. El estado se guarda para la próxima sesión.
-for (const id of ['colTerr', 'colPuntos']) {
-  const col = document.getElementById(id);
-  if (!col) continue;
-  if (prefGet('colap_' + id) === '1') col.classList.add('collapsed');
-  col.querySelector('.col-head').addEventListener('click', () => {
-    const colap = col.classList.toggle('collapsed');
-    prefSet('colap_' + id, colap ? '1' : '0');
-  });
+// Default al abrir: columna A visible, columna B cerrada
+function applyInitialSidebarState() {
+  pintarPanel();
 }
 
 // ============================================================

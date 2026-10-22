@@ -278,15 +278,16 @@
 
   /* ============ SIDEBAR · dos columnas colapsables ============ */
   #sidebar {
-    width: 420px; max-width: 92vw; background: var(--surface-lowest); border-right: 1px solid var(--outline-variant);
+    width: min(560px, 46vw); max-width: 92vw; background: var(--surface-lowest); border-right: 1px solid var(--outline-variant);
     display: flex; flex-direction: row; align-items: stretch; z-index: 10;
     transition: transform .25s; box-shadow: 4px 0 18px rgba(13,28,46,.06);
   }
   #sidebar.collapsed { transform: translateX(-100%); position: absolute; height: 100%; }
 
-  /* Columna: mitad del panel; al colapsar queda un riel vertical con su etiqueta */
+  /* Columna: espacio propio al repartir (0 basis + grow = se reparte lo libre);
+     al colapsar la vecina, la que queda se expande con todo el espacio liberado */
   #sidebar .col {
-    flex: 1 1 50%; min-width: 0; position: relative;
+    flex: 1 1 0; min-width: 0; position: relative;
     display: flex; flex-direction: column; overflow: hidden;
     transition: flex-basis .2s ease, flex-grow .2s ease;
   }
@@ -1084,7 +1085,7 @@
     font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
     color: var(--on-surface-variant); flex-shrink: 0;
   }
-  #sidebar .comuna-row select { max-width: 240px; }
+  #sidebar .comuna-row select { max-width: none; }
 
   /* Overlay de búsqueda unificada (sobre el mapa, a la derecha del riel) */
   #searchOverlay {

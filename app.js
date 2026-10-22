@@ -4,8 +4,9 @@
 const SUPABASE_URL = 'https://yfdkyccmaseztypccoww.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_jmltUeff0VTuLXf2KrujcA_zktLmoSS';
 
-const SANTIAGO_CENTER = [-70.6483, -33.457];
-const SANTIAGO_ZOOM = 12;
+// Vista inicial sin selección: Plaza de Armas (Santiago centro)
+const SANTIAGO_CENTER = [-70.6506, -33.4410];
+const SANTIAGO_ZOOM = 13;
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
@@ -268,17 +269,10 @@ function initMap() {
     || document.createElement('canvas').getContext('webgl');
   if (!gl) throw new Error('WebGL no está disponible (activa la aceleración de hardware del navegador)');
 
-  const santiago = allComunas.find((c) => c.nombre === 'Santiago');
-  const b = santiago ? boundsFromGeometry(santiago.geom) : null;
-
-  const options = { container: 'map', style: MAP_STYLE };
-  if (b && !b.isEmpty()) {
-    options.bounds = [[b.getWest(), b.getSouth()], [b.getEast(), b.getNorth()]];
-    options.fitBoundsOptions = { padding: 40 };
-  } else {
-    options.center = SANTIAGO_CENTER;
-    options.zoom = SANTIAGO_ZOOM;
-  }
+  // Sin comuna ni territorio seleccionado el mapa arranca en Plaza de Armas:
+  // evita cargar tiles de la comuna completa y abre más rápido. Si hay
+  // selección guardada, onComunaChange()/setTerritorio la re-encuadra después.
+  const options = { container: 'map', style: MAP_STYLE, center: SANTIAGO_CENTER, zoom: SANTIAGO_ZOOM };
 
   map = new maplibregl.Map(options);
   map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
@@ -1020,13 +1014,6 @@ function updateListScope() {
     assignOpen = false;
     renderAssign();
   }
-
-  // Dos zonas flex: con territorio elegido los puntos toman el espacio y la de
-  // territorios se compacta; sin territorio, la lista de territorios crece para llenar.
-  const sectZone = document.getElementById('sectZone');
-  const ptsZone = document.getElementById('ptsZone');
-  if (sectZone) sectZone.classList.toggle('compact', sel);
-  if (ptsZone) ptsZone.classList.toggle('compact', !sel);
 }
 
 function syncSelectedCard() {
@@ -2866,6 +2853,18 @@ function applyInitialSidebarState() {
 document.getElementById('toggleSidebar').addEventListener('click', () => {
   setSidebarCollapsed(!document.getElementById('sidebar').classList.contains('collapsed'));
 });
+
+// Toda la cabecera de columna es colapsable (botón incluido): col 1 = comuna y
+// territorio, col 2 = puntos. El estado se guarda para la próxima sesión.
+for (const id of ['colTerr', 'colPuntos']) {
+  const col = document.getElementById(id);
+  if (!col) continue;
+  if (prefGet('colap_' + id) === '1') col.classList.add('collapsed');
+  col.querySelector('.col-head').addEventListener('click', () => {
+    const colap = col.classList.toggle('collapsed');
+    prefSet('colap_' + id, colap ? '1' : '0');
+  });
+}
 
 // ============================================================
 // VISTAS: TERRITORIOS · HISTORIAL · USUARIOS

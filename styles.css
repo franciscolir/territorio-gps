@@ -276,13 +276,55 @@
 
   #main { flex: 1; display: flex; position: relative; overflow: hidden; }
 
-  /* ============ SIDEBAR ============ */
+  /* ============ SIDEBAR · dos columnas colapsables ============ */
   #sidebar {
     width: 420px; max-width: 92vw; background: var(--surface-lowest); border-right: 1px solid var(--outline-variant);
-    display: flex; flex-direction: column; z-index: 10;
+    display: flex; flex-direction: row; align-items: stretch; z-index: 10;
     transition: transform .25s; box-shadow: 4px 0 18px rgba(13,28,46,.06);
   }
   #sidebar.collapsed { transform: translateX(-100%); position: absolute; height: 100%; }
+
+  /* Columna: mitad del panel; al colapsar queda un riel vertical con su etiqueta */
+  #sidebar .col {
+    flex: 1 1 50%; min-width: 0; position: relative;
+    display: flex; flex-direction: column; overflow: hidden;
+    transition: flex-basis .2s ease, flex-grow .2s ease;
+  }
+  #sidebar .col.collapsed { flex: 0 0 46px; }
+  #sidebar .col.collapsed .panel-head,
+  #sidebar .col.collapsed .sect-zone,
+  #sidebar .col.collapsed .pts-zone { display: none; }
+
+  /* Cabecera de columna (contraste: azul = navegación/comuna·territorio; oscuro = datos/puntos) */
+  #sidebar .col-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    padding: 0 9px; height: 40px; flex-shrink: 0; color: #fff;
+    cursor: pointer; user-select: none;
+  }
+  #sidebar .col-head-terr { background: var(--secondary); }
+  #sidebar .col-head-punt { background: var(--primary); }
+  #sidebar .col-head .col-title {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    white-space: nowrap; overflow: hidden; min-width: 0;
+  }
+  #sidebar .col-head .col-title .ms { flex-shrink: 0; }
+  #sidebar .col-collapse {
+    flex-shrink: 0; width: 26px; height: 26px; border: 0; border-radius: 8px;
+    background: rgba(255,255,255,.16); color: #fff; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  #sidebar .col-collapse:hover { background: rgba(255,255,255,.3); }
+  #sidebar .col-head:hover { filter: brightness(1.08); }
+  /* Colapsada: etiqueta vertical, chevron apunta a expandir */
+  #sidebar .col.collapsed .col-head { justify-content: center; gap: 0; padding: 8px 0; }
+  #sidebar .col.collapsed .col-title { writing-mode: vertical-rl; transform: rotate(180deg); }
+  #sidebar .col.collapsed .col-head .col-collapse {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    width: 30px;
+  }
+  #sidebar .col.collapsed .col-collapse .ms { transform: rotate(-180deg); }
+
   #sidebar .panel-head {
     padding: 10px 14px; border-bottom: 1px solid var(--outline-variant);
     background: var(--surface-low);
@@ -1109,6 +1151,12 @@
 
     #drawToolbar { max-width: calc(100% - 20px); flex-wrap: wrap; justify-content: center; }
     #sidebar .comuna-row select { max-width: none; }
+    /* En angostas las columnas se apilan verticales (cada una sigue colapsable) */
+    #sidebar { flex-direction: column; height: 100%; overflow-y: auto; }
+    #sidebar .col { flex: 1 1 auto; }
+    #sidebar .col.collapsed .col-head { writing-mode: horizontal-tb; flex-direction: row; transform: none; padding: 0 9px; height: 40px; }
+    #sidebar .col.collapsed .col-title { writing-mode: horizontal-tb; transform: none; }
+    #sidebar .col.collapsed .col-head .col-collapse { position: static; transform: none; width: 26px; }
   }
 
   @media (max-width: 480px) {

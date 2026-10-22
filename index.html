@@ -47,44 +47,53 @@
   </header>
   <div id="main">
     <aside id="sidebar">
-      <div class="panel-head">
-        <div class="comuna-row">
-          <label for="comunaSel" class="row-label">Comuna</label>
-          <select id="comunaSel" aria-label="Elegir comuna">
-            <option value="">Todas las comunas</option>
-          </select>
+      <!-- Columna 1: Comuna + Territorios -->
+      <section id="colTerr" class="col">
+        <header class="col-head col-head-terr" title="Mostrar/ocultar columna">
+          <span class="col-title"><span class="ms ms-sm">explore</span><span>Comuna · Territorio</span></span>
+          <button class="col-collapse" aria-label="Colapsar columna" title="Colapsar/expandir columna"><span class="ms ms-sm">chevron_left</span></button>
+        </header>
+        <div class="panel-head">
+          <div class="comuna-row">
+            <label for="comunaSel" class="row-label">Comuna</label>
+            <select id="comunaSel" aria-label="Elegir comuna">
+              <option value="">Todas las comunas</option>
+            </select>
+          </div>
         </div>
-      </div>
+        <div class="sect-zone" id="sectZone">
+          <div class="sect-head">
+            <button aria-label="Volver a la lista de territorios" id="allTerritoriosBtn" class="ghost back" style="display:none" title="Volver a la lista de territorios"><span class="ms ms-sm">list</span>Todos</button>
+          </div>
+          <div id="territorioList"><div class="empty">Aún no hay territorios</div></div>
+          <div id="detailBlock" style="display:none">
+            <div id="territorioDetail"></div>
+            <div id="assignPanel" style="display:none"></div>
+          </div>
+        </div>
+      </section>
 
-      <div class="sect-zone" id="sectZone">
-        <div class="sect-head">
-          <h2>Territorios</h2>
-          <button aria-label="Volver a la lista de territorios" id="allTerritoriosBtn" class="ghost back" style="display:none" title="Volver a la lista de territorios"><span class="ms ms-sm">list</span>Todos</button>
+      <!-- Columna 2: Puntos -->
+      <section id="colPuntos" class="col">
+        <header class="col-head col-head-punt" title="Mostrar/ocultar columna">
+          <span class="col-title"><span class="ms ms-sm">pin_drop</span><span id="puntosHead">Puntos</span></span>
+          <button class="col-collapse" aria-label="Colapsar columna" title="Colapsar/expandir columna"><span class="ms ms-sm">chevron_left</span></button>
+        </header>
+        <div class="pts-zone" id="ptsZone">
+          <div class="search-wrap" id="filterWrap">
+            <span class="ms ms-sm search-ic">search</span>
+            <input id="filterText" type="text" placeholder="Filtrar por nombre, dirección…" />
+          </div>
+          <div class="estado-chips" id="estadoChips">
+            <button class="chip-f" data-estado="">Todos</button>
+            <button class="chip-f" data-estado="pendiente">Pendiente</button>
+            <button class="chip-f" data-estado="visitado">Visitado</button>
+            <button class="chip-f" data-estado="erroneo">Erróneo</button>
+            <button class="chip-f" data-estado="no_pasar">No pasar</button>
+          </div>
+          <div id="list"></div>
         </div>
-        <div id="territorioList"><div class="empty">Aún no hay territorios</div></div>
-        <div id="detailBlock" style="display:none">
-          <div id="territorioDetail"></div>
-          <div id="assignPanel" style="display:none"></div>
-        </div>
-      </div>
-
-      <div class="pts-zone" id="ptsZone">
-        <div class="sect-head">
-          <h2 id="puntosHead">Puntos</h2>
-        </div>
-        <div class="search-wrap" id="filterWrap">
-          <span class="ms ms-sm search-ic">search</span>
-          <input id="filterText" type="text" placeholder="Filtrar por nombre, dirección…" />
-        </div>
-        <div class="estado-chips" id="estadoChips">
-          <button class="chip-f" data-estado="">Todos</button>
-          <button class="chip-f" data-estado="pendiente">Pendiente</button>
-          <button class="chip-f" data-estado="visitado">Visitado</button>
-          <button class="chip-f" data-estado="erroneo">Erróneo</button>
-          <button class="chip-f" data-estado="no_pasar">No pasar</button>
-        </div>
-        <div id="list"></div>
-      </div>
+      </section>
     </aside>
 
     <div id="map"></div>

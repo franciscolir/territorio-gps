@@ -49,7 +49,7 @@ try {
 } catch (_) {}
 let usuarios = [];           // [{id, email}] para asignar
 let asignaciones = {};       // territorio_id -> { user_id, estado, devuelta_at }
-let assignOpen = false;      // vista de asignación/historial del territorio elegido
+let assignMode = null;        // toggle de la card de gestión: null | 'asignar' | 'reset'
 
 // Preferencias que sobreviven entre sesiones (filtros). Nunca lanzan: en modo
 // privado o con la cuota llena localStorage falla y eso no debe romper la app.
@@ -975,6 +975,7 @@ function setTerritorioSelected(id) {
     map.setFeatureState({ source: 'territorios', id: territorioSelectedId }, { selected: false });
   }
   territorioSelectedId = id;
+  assignMode = null; // el toggle de gestión parte cerrado en cada territorio
   pinFocoId = null; // el resaltado no sobrevive a cambiar de territorio
   prefSet('territorioSel', id || '');
   if (map && map.getSource('territorios') && id != null) {
@@ -1013,11 +1014,11 @@ function updateListScope() {
   const fw = document.getElementById('filterWrap');
   const chips = document.getElementById('estadoChips');
   if (listBox) listBox.style.display = sel ? 'none' : '';
-  if (detail) detail.style.display = (sel && !assignOpen) ? '' : 'none';
+  if (detail) detail.style.display = sel ? '' : 'none';
   if (fw) fw.style.display = sel ? '' : 'none';
   if (chips) chips.style.display = sel ? '' : 'none';
-  if (!sel && assignOpen) {
-    assignOpen = false;
+  if (!sel && assignMode) {
+    assignMode = null;
     renderAssign();
   }
 }
@@ -1804,7 +1805,7 @@ function renderTerritorioDetail() {
     });
     onItem('sdExportGeo', () => exportarTerritorioGeojson(s));
     onItem('sdExportCsv', () => exportarTerritorioCsv(s));
-    onItem('sdAssign', () => { assignOpen = true; renderAssign(); });
+    onItem('sdAssign', () => { assignMode = assignMode === 'asignar' ? null : 'asignar'; renderAssign(); });
     onItem('sdRename', () => renameTerritorio(s.id));
     onItem('sdDel', () => deleteTerritorio(s.id));
     onItem('sdEdit', () => {
@@ -1867,26 +1868,28 @@ function reasignacionDe(territorioId) {
   };
 }
 
+// Card de gestión de la asignación del territorio elegido (bajo la ficha en
+// la columna A): toggle [Asignar] → vista de procesos (nuevo/actual +
+// historial, la que antes reemplazaba a la ficha); toggle [Reset] → devuelve
+// los 'visitado' a 'pendiente' ('erroneo' y 'no_pasar' se mantienen).
 function renderAssign() {
-  const panel = document.getElementById('assignPanel');
+  const card = document.getElementById('assignCard');
   const detail = document.getElementById('territorioDetail');
-  if (!panel) return;
+  if (!card) return;
   const s = territorioSelected();
-  if (!assignOpen || !s) {
-    panel.style.display = 'none';
-    panel.innerHTML = '';
+  if (!s) {
+    card.style.display = 'none';
+    card.innerHTML = '';
     if (detail) detail.style.display = '';
     return;
   }
-  panel.style.display = '';
-  if (detail) detail.style.display = 'none';
+  if (detail) detail.style.display = '';
+  card.style.display = '';
 
   const act = asigActiva(s.id);
   const hist = (asignaciones[s.id] || [])
     .slice()
     .sort((a, b) => new Date(b.assigned_at || 0) - new Date(a.assigned_at || 0));
-  const opts = '<option value="">— elegir usuario —</option>' +
-    usuarios.map((u) => `<option value="${u.id}">${escapeHtml(u.email)}</option>`).join('');
   const reasig = reasignacionDe(s.id);
   const fila = (a) => {
     const est = ESTADO_ASIG[a.estado] ? a.estado : 'activa';
@@ -1899,43 +1902,78 @@ function renderAssign() {
       <td><span class="chip-est ${est}">${ESTADO_ASIG[est]}</span></td>
     </tr>`;
   };
-  panel.innerHTML = `
-    <div class="assign-panel">
-      <div class="a-head">
-        <span><button id="assignBack" class="sd-iconbtn" title="Volver a la ficha del territorio" aria-label="Volver a la ficha del territorio"><span class="ms ms-sm">arrow_back</span></button>Asignación</span>
-        <button id="assignClose" type="button" title="Cerrar" aria-label="Cerrar">✕</button>
-      </div>
-      <p class="a-territorio">${s.comuna ? escapeHtml(s.comuna) + ' · ' : ''}<b>${escapeHtml(s.nombre)}</b></p>
-      ${act ? `
-        <div class="asig-actual">
-          <div class="asig-quien">
-            <b>${escapeHtml(emailDe(act.user_id) || '—')}</b>
-            <small>Asignado el ${fmtFecha(act.assigned_at)}</small>
-            ${act.puntos_base ? `<small>Avance: ${Math.max(0, act.puntos_base - pendientesDe(s.id))} de ${act.puntos_base} pendientes gestionados</small>` : ''}
-          </div>
-          <div class="asig-actions">
-            <button id="asigCompletar" class="primary" title="Cerrar el proceso como completado">Completar</button>
-            <button id="asigDevolver" class="danger-text" title="Cerrar el proceso y liberar el territorio">Devolver</button>
-          </div>
-        </div>` : `
-        <div class="asig-nueva">
-          <p class="assign-count">${asignablesDe(s.id)} puntos pendientes de gestión</p>
-          <select id="asigUserSel">${opts}</select>
-          <button id="asigAsignar" class="primary"${asignablesDe(s.id) ? '' : ' disabled'}>Asignar</button>
+
+  let cuerpo;
+  if (assignMode === 'reset') {
+    const detalle = reasig.visitados
+      ? `${reasig.visitados} visitado${reasig.visitados === 1 ? '' : 's'} volverá${reasig.visitados === 1 ? '' : 'n'} a pendiente` +
+        (reasig.erroneos || reasig.noPasar
+          ? `; se mantienen ${reasig.erroneos} erróneo${reasig.erroneos === 1 ? '' : 's'} y ${reasig.noPasar} no pasar`
+          : '')
+      : 'No hay puntos visitados por reiniciar.';
+    cuerpo = `
+      <p class="assign-hint">Reinicia los <b>visitado</b> del territorio a <b>pendiente</b>; los <b>erróneo</b> y <b>no pasar</b> se mantienen.</p>
+      <p class="assign-hint"><b>${detalle}</b></p>
+      <div class="asig-actions">
+        <button id="asigResetConfirm" class="danger-text"${reasig.visitados ? '' : ' disabled'}>Reiniciar</button>
+        <button id="asigResetCancel">Cancelar</button>
+      </div>`;
+  } else if (assignMode === 'asignar') {
+    const opts = '<option value="">— elegir usuario —</option>' +
+      usuarios.map((u) => `<option value="${u.id}">${escapeHtml(u.email)}</option>`).join('');
+    cuerpo = act ? `
+      <div class="asig-actual">
+        <div class="asig-quien">
+          <b>${escapeHtml(emailDe(act.user_id) || '—')}</b>
+          <small>Asignado el ${fmtFecha(act.assigned_at)}</small>
+          ${act.puntos_base ? `<small>Avance: ${Math.max(0, act.puntos_base - pendientesDe(s.id))} de ${act.puntos_base} pendientes gestionados</small>` : ''}
         </div>
-        ${reasig.visitados ? `<p class="assign-hint">Al asignar se reiniciarán ${reasig.visitados} punto${reasig.visitados === 1 ? '' : 's'} visitado${reasig.visitados === 1 ? '' : 's'} a pendiente${reasig.erroneos || reasig.noPasar ? `; se mantienen ${reasig.erroneos} erróneo${reasig.erroneos === 1 ? '' : 's'} y ${reasig.noPasar} no pasar` : ''}.</p>` : ''}
-        ${asignablesDe(s.id) ? '' : '<p class="assign-warn">Este territorio no tiene puntos pendientes de gestión: no puede asignarse.</p>'}`}
+        <div class="asig-actions">
+          <button id="asigCompletar" class="primary" title="Cerrar el proceso como completado">Completar</button>
+          <button id="asigDevolver" class="danger-text" title="Cerrar el proceso y liberar el territorio">Devolver</button>
+        </div>
+      </div>` : `
+      <div class="asig-nueva">
+        <p class="assign-count">${asignablesDe(s.id)} puntos pendientes de gestión</p>
+        <select id="asigUserSel">${opts}</select>
+        <button id="asigAsignar" class="primary"${asignablesDe(s.id) ? '' : ' disabled'}>Asignar</button>
+      </div>
+      ${reasig.visitados ? `<p class="assign-hint">Al asignar se reiniciarán ${reasig.visitados} punto${reasig.visitados === 1 ? '' : 's'} visitado${reasig.visitados === 1 ? '' : 's'} a pendiente${reasig.erroneos || reasig.noPasar ? `; se mantienen ${reasig.erroneos} erróneo${reasig.erroneos === 1 ? '' : 's'} y ${reasig.noPasar} no pasar` : ''}.</p>` : ''}
+      ${asignablesDe(s.id) ? '' : '<p class="assign-warn">Este territorio no tiene puntos pendientes de gestión: no puede asignarse.</p>'}`;
+    cuerpo += `
       <p class="assign-hint">Cada fila es un proceso de trabajo sobre el territorio: al devolverlo el proceso se cierra y el territorio queda libre para un nuevo proceso.</p>
       <table>
         <thead><tr><th>Usuario</th><th>Asignado</th><th>Devuelto</th><th>Estado</th></tr></thead>
         <tbody>${hist.length ? hist.map(fila).join('') : '<tr><td colspan="4">Sin procesos registrados</td></tr>'}</tbody>
-      </table>
-    </div>`;
+      </table>`;
+  } else {
+    cuerpo = `<p class="assign-hint">${act
+      ? `Proceso activo: <b>${escapeHtml(emailDe(act.user_id) || '—')}</b>`
+      : `Sin proceso activo · ${asignablesDe(s.id)} punto(s) disponible${asignablesDe(s.id) === 1 ? '' : 's'}`}</p>`;
+  }
 
-  const back = document.getElementById('assignBack');
-  if (back) back.addEventListener('click', () => { assignOpen = false; renderAssign(); });
-  const close = document.getElementById('assignClose');
-  if (close) close.addEventListener('click', () => { assignOpen = false; setTerritorioSelected(null); });
+  card.innerHTML = `
+    <div class="asig-head">
+      <b>Gestión de asignación</b>
+      <div class="as-toggles">
+        <button id="asigToggleAsignar" class="as-toggle${assignMode === 'asignar' ? ' active' : ''}" aria-pressed="${assignMode === 'asignar'}">Asignar</button>
+        <button id="asigToggleReset" class="as-toggle${assignMode === 'reset' ? ' active' : ''}" aria-pressed="${assignMode === 'reset'}">Reset</button>
+      </div>
+    </div>
+    <div class="as-box assign-panel">${cuerpo}</div>`;
+
+  document.getElementById('asigToggleAsignar').addEventListener('click', () => {
+    assignMode = assignMode === 'asignar' ? null : 'asignar';
+    renderAssign();
+  });
+  document.getElementById('asigToggleReset').addEventListener('click', () => {
+    assignMode = assignMode === 'reset' ? null : 'reset';
+    renderAssign();
+  });
+  const resetOk = document.getElementById('asigResetConfirm');
+  if (resetOk) resetOk.addEventListener('click', () => resetTerritorioPuntos(s));
+  const resetNo = document.getElementById('asigResetCancel');
+  if (resetNo) resetNo.addEventListener('click', () => { assignMode = null; renderAssign(); });
   const asignar = document.getElementById('asigAsignar');
   if (asignar) asignar.addEventListener('click', () => {
     const uid = document.getElementById('asigUserSel').value;
@@ -1946,6 +1984,21 @@ function renderAssign() {
   if (dev) dev.addEventListener('click', () => assignTerritorio(s.id, ''));
   const comp = document.getElementById('asigCompletar');
   if (comp) comp.addEventListener('click', () => completarTerritorio(s.id));
+}
+
+// Reset manual del territorio (toggle Reset): los 'visitado' vuelven a
+// 'pendiente' vía marcar_estado; 'erroneo' y 'no_pasar' se conservan.
+async function resetTerritorioPuntos(s) {
+  if (!isAdmin) return toast('Solo administradores pueden reiniciar puntos', true);
+  const ids = puntosDeTerritorio(s.id)
+    .filter((p) => !p.deleted_at && p.estado === 'visitado')
+    .map((p) => p.id);
+  if (!ids.length) return;
+  for (const id of ids) await setEstadoPunto(id, 'pendiente', true);
+  toast(`Reiniciado${ids.length === 1 ? '' : 's'} ${ids.length} punto${ids.length === 1 ? '' : 's'} a pendiente`);
+  renderAssign();
+  renderTerritorioList();
+  renderTerritorioDetail();
 }
 
 // Cierre manual del proceso (admin): RPC completar_territorio + notas
@@ -2567,8 +2620,8 @@ document.addEventListener('keydown', (e) => {
   const typing = e.target && e.target.matches && e.target.matches('input, textarea');
 
   if (e.key === 'Escape') {
-    if (assignOpen) {
-      assignOpen = false;
+    if (assignMode) {
+      assignMode = null;
       renderAssign();
       return;
     }

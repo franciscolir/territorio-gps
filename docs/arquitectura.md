@@ -49,7 +49,7 @@ Todo el estado vive en variables de módulo (`let` en el top level):
 | Alcance/selection | `puntosScope` (region·comuna·territorio), `territorioSelectedId`, `territorioHoverId` |
 | Dibujo | `drawActive`, `drawVerts`, `drawColor`, `drawSnap`, `snapRingsCache`, `pendingTerritorio` |
 | Referencia | `refMode`, `refRadius`, `refResultsIds` |
-| UI | `currentView` (territorios · historial · usuarios), `assignOpen` (vista de asignación del territorio), `histTab`, `estadoFiltro`, `lastEstadoUndo` |
+| UI | `currentView` (territorios · historial · usuarios), `assignMode` (toggle Asignar/Reset de la card de gestión), `histTab`, `estadoFiltro`, `lastEstadoUndo` |
 | Config | `comunasActivas`, `configError` |
 
 No hay store ni framework: la actualización es **imperativa + render manual**.

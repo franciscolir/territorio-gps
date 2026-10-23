@@ -51,6 +51,7 @@
       <section id="colTerr" class="col">
         <header class="col-head col-head-terr">
           <span class="col-title"><span class="ms ms-sm">explore</span><span>Comuna · Territorio</span></span>
+          <button class="col-btn" id="closeColA" type="button" aria-label="Ocultar columna de territorio" title="Ocultar columna"><span class="ms ms-sm">chevron_left</span></button>
         </header>
         <div class="panel-head">
           <div class="comuna-row">
@@ -76,6 +77,7 @@
       <section id="colPuntos" class="col">
         <header class="col-head col-head-punt">
           <span class="col-title"><span class="ms ms-sm">pin_drop</span><span id="puntosHead">Puntos</span></span>
+          <button class="col-btn" id="closeColB" type="button" aria-label="Cerrar lista de puntos" title="Cerrar lista de puntos"><span class="ms ms-sm">close</span></button>
         </header>
         <div class="pts-zone" id="ptsZone">
           <div class="search-wrap" id="filterWrap">
@@ -200,20 +202,35 @@
     </div>
   </section>
 
-  <!-- ================= VISTA: NUEVA ACTIVIDAD ================= -->
+  <!-- ================= VISTA: CENTRO DE ACTIVIDAD ================= -->
   <section id="viewActividad" class="view-page">
-    <div class="vp-head">
-      <h2>Nueva actividad</h2>
-      <div class="vp-head-tools">
+    <div class="act-hero">
+      <div class="act-hero-txt">
+        <span class="act-hero-badge"><span class="ms ms-sm">shield</span>Exclusivo administración</span>
+        <h2>Centro de Actividad y Coordinación</h2>
+      </div>
+      <div class="act-cmd">
+        <input id="actFiltro" type="search" placeholder="Filtrar por punto, usuario o detalle" aria-label="Filtrar actividad">
+        <button type="button" class="ghost icon" id="actRefreshBtn" title="Actualizar" aria-label="Actualizar"><span class="ms ms-sm">refresh</span></button>
         <button type="button" class="ghost" id="actLeerTodoBtn">Marcar todo leído</button>
-        <button type="button" class="danger-text" id="actVaciarBtn">Vaciar actividad</button>
-        <button type="button" class="secondary" id="actRefreshBtn">Actualizar</button>
+        <div class="act-purge-wrap">
+          <button type="button" class="danger-text" id="actVaciarBtn">Vaciar actividad</button>
+          <div id="actPurgePop" class="act-purge" hidden>
+            <p>Esto borra <b>todos</b> los mensajes del feed. Los dobles chequeos y solicitudes pendientes no se tocan.</p>
+            <div class="act-purge-acc">
+              <button type="button" id="actPurgeCancel">Cancelar</button>
+              <button type="button" class="danger-text" id="actPurgeOk">Borrar todo</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="vp-body">
-      <div id="actSolicitudes"></div>
-      <div id="actTabla"></div>
-      <div id="actMensajes"></div>
+      <div class="act-grid">
+        <section class="act-card act-verif" id="actVerificarBox"></section>
+        <section class="act-card act-ing" id="actIngresosBox"></section>
+        <section class="act-card act-feed" id="actMensajes"></section>
+      </div>
     </div>
   </section>
 </div>

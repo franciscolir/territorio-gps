@@ -817,6 +817,7 @@ function renderList() {
           <button class="pd-btn">Detalles<span class="ms ms-sm">arrow_forward</span></button>
         </div>
       </div>
+      ${p.notas ? `<div class="pc-nota"><span class="ms ms-sm">format_quote</span><p>${escapeHtml(p.notas)}</p></div>` : ''}
       <div class="seg">${seg}</div>
     </div>`;
   }).join('') + paginador;
@@ -1771,9 +1772,9 @@ function renderTerritorioDetail() {
         </div>
       </div>
       <div class="stats4">
-        <div><span>Total</span><b>${st.total}</b></div>
-        <div class="st-v"><span>Visitados</span><b>${st.visitado}</b></div>
-        <div class="st-e"><span>Erróneos</span><b>${st.erroneo}</b></div>
+        <div class="st-g"><span>Total</span><b>${st.total}</b></div>
+        <div class="st-v"><span>Visitadas</span><b>${st.visitado}</b></div>
+        <div class="st-e"><span>Erróneas</span><b>${st.erroneo}</b></div>
         <div class="st-b"><span>No pasar</span><b>${st.no_pasar}</b></div>
       </div>
       <div class="dc-prog-head">
@@ -1869,9 +1870,12 @@ function reasignacionDe(territorioId) {
 }
 
 // Card de gestión de la asignación del territorio elegido (bajo la ficha en
-// la columna A): toggle [Asignar] → vista de procesos (nuevo/actual +
-// historial, la que antes reemplazaba a la ficha); toggle [Reset] → devuelve
-// los 'visitado' a 'pendiente' ('erroneo' y 'no_pasar' se mantienen).
+// la columna A), según el prototipo vista admin: cabecera con estado + tabs
+// segmentados [Asignar|Reset]. Asignar muestra el proceso (nuevo o activo,
+// con Completar/Devolver) y el historial desplegable con "Ver historial";
+// Reset muestra la caja roja del reinicio atómico (RPC migración 021).
+let histAbierto = false;
+
 function renderAssign() {
   const card = document.getElementById('assignCard');
   const detail = document.getElementById('territorioDetail');
@@ -1902,22 +1906,24 @@ function renderAssign() {
       <td><span class="chip-est ${est}">${ESTADO_ASIG[est]}</span></td>
     </tr>`;
   };
+  const sub = act
+    ? `Proceso activo · ${escapeHtml(emailDe(act.user_id) || '—')} · ${Math.max(0, (act.puntos_base || 0) - pendientesDe(s.id))}/${act.puntos_base} gestionados`
+    : `Sin proceso · ${asignablesDe(s.id)} punto${asignablesDe(s.id) === 1 ? '' : 's'} disponible${asignablesDe(s.id) === 1 ? '' : 's'}`;
 
   let cuerpo;
   if (assignMode === 'reset') {
     const permiteReset = reasig.visitados > 0 || !!act;
-    const detalle = [
-      reasig.visitados
-        ? `${reasig.visitados} visitado${reasig.visitados === 1 ? '' : 's'} volverá${reasig.visitados === 1 ? '' : 'n'} a pendiente`
-        : 'Sin visitados por reiniciar',
-      act ? 'el proceso activo queda cerrado y el territorio libre' : 'no hay proceso que liberar',
-    ].join(' · ');
     cuerpo = `
-      <p class="assign-hint">Reinicia los <b>visitado</b> a <b>pendiente</b> y libera el proceso activo, si hay, en un solo paso. Los <b>erróneo</b> y <b>no pasar</b> se mantienen.</p>
-      <p class="assign-hint"><b>${detalle}.</b></p>
-      <div class="asig-actions">
-        <button id="asigResetConfirm" class="danger-text"${permiteReset ? '' : ' disabled'}>Reiniciar</button>
-        <button id="asigResetCancel">Cancelar</button>
+      <div class="as-reset">
+        <h4><span class="ms ms-sm">warning</span>Reinicio del territorio</h4>
+        <ul>
+          <li>Visitados (${reasig.visitados}) volverán a <b>pendiente</b></li>
+          <li>Erróneos y no pasar (${reasig.erroneos}/${reasig.noPasar}) se conservan intactos</li>
+          <li>Se cierra el proceso activo, si hay, y el territorio queda libre</li>
+        </ul>
+      </div>
+      <div class="as-cta">
+        <button id="asigResetConfirm" class="as-reset-btn"${permiteReset ? '' : ' disabled'}><span class="ms ms-sm">restart_alt</span>Ejecutar reinicio de puntos</button>
       </div>`;
   } else if (assignMode === 'asignar') {
     const opts = '<option value="">— elegir usuario —</option>' +
@@ -1930,38 +1936,50 @@ function renderAssign() {
           ${act.puntos_base ? `<small>Avance: ${Math.max(0, act.puntos_base - pendientesDe(s.id))} de ${act.puntos_base} pendientes gestionados</small>` : ''}
         </div>
         <div class="asig-actions">
-          <button id="asigCompletar" class="primary" title="Cerrar el proceso como completado">Completar</button>
+          <button id="asigCompletar" class="as-ok" title="Cerrar el proceso como completado">Completar</button>
           <button id="asigDevolver" class="danger-text" title="Cerrar el proceso y liberar el territorio">Devolver</button>
         </div>
       </div>` : `
-      <div class="asig-nueva">
+      <div class="as-form">
         <p class="assign-count">${asignablesDe(s.id)} puntos pendientes de gestión</p>
         <select id="asigUserSel">${opts}</select>
-        <button id="asigAsignar" class="primary"${asignablesDe(s.id) ? '' : ' disabled'}>Asignar</button>
       </div>
-      ${reasig.visitados ? `<p class="assign-hint">Al asignar se reiniciarán ${reasig.visitados} punto${reasig.visitados === 1 ? '' : 's'} visitado${reasig.visitados === 1 ? '' : 's'} a pendiente${reasig.erroneos || reasig.noPasar ? `; se mantienen ${reasig.erroneos} erróneo${reasig.erroneos === 1 ? '' : 's'} y ${reasig.noPasar} no pasar` : ''}.</p>` : ''}
+      <div class="as-nota"><span class="ms ms-sm">info</span><span>Al asignar se abrirá un nuevo proceso de trabajo${reasig.visitados ? ` y se reiniciarán ${reasig.visitados} visitado${reasig.visitados === 1 ? '' : 's'} a pendiente${reasig.erroneos || reasig.noPasar ? ` (se mantienen ${reasig.erroneos} erróneo${reasig.erroneos === 1 ? '' : 's'} y ${reasig.noPasar} no pasar)` : ''}` : ' sin tocar los estados actuales'}.</span></div>
       ${asignablesDe(s.id) ? '' : '<p class="assign-warn">Este territorio no tiene puntos pendientes de gestión: no puede asignarse.</p>'}`;
     cuerpo += `
-      <p class="assign-hint">Cada fila es un proceso de trabajo sobre el territorio: al devolverlo el proceso se cierra y el territorio queda libre para un nuevo proceso.</p>
-      <table>
-        <thead><tr><th>Usuario</th><th>Asignado</th><th>Devuelto</th><th>Estado</th></tr></thead>
-        <tbody>${hist.length ? hist.map(fila).join('') : '<tr><td colspan="4">Sin procesos registrados</td></tr>'}</tbody>
-      </table>`;
+      <div class="as-cta">
+        <button id="asigAsignar" class="as-ok"${asignablesDe(s.id) ? '' : ' disabled'}><span class="ms ms-sm">check</span>Asignar territorio</button>
+        <button id="asigHistBtn" class="as-ghost"><span class="ms ms-sm">history</span>Ver historial</button>
+      </div>
+      <div class="as-hist"${histAbierto ? '' : ' hidden'}>
+        <p class="assign-hint">Cada fila es un proceso de trabajo sobre el territorio: al devolverlo el proceso se cierra y el territorio queda libre para un nuevo proceso.</p>
+        <table>
+          <thead><tr><th>Usuario</th><th>Asignado</th><th>Devuelto</th><th>Estado</th></tr></thead>
+          <tbody>${hist.length ? hist.map(fila).join('') : '<tr><td colspan="4">Sin procesos registrados</td></tr>'}</tbody>
+        </table>
+      </div>`;
   } else {
     cuerpo = `<p class="assign-hint">${act
       ? `Proceso activo: <b>${escapeHtml(emailDe(act.user_id) || '—')}</b>`
       : `Sin proceso activo · ${asignablesDe(s.id)} punto(s) disponible${asignablesDe(s.id) === 1 ? '' : 's'}`}</p>`;
   }
 
+  const ultima = hist.length && !act ? hist[0] : null;
   card.innerHTML = `
     <div class="asig-head">
-      <b>Gestión de asignación</b>
-      <div class="as-toggles">
-        <button id="asigToggleAsignar" class="as-toggle${assignMode === 'asignar' ? ' active' : ''}" aria-pressed="${assignMode === 'asignar'}">Asignar</button>
-        <button id="asigToggleReset" class="as-toggle${assignMode === 'reset' ? ' active' : ''}" aria-pressed="${assignMode === 'reset'}">Reset</button>
+      <div class="asig-tit">
+        <b>Gestión de asignación</b>
+        <small>${sub}</small>
+      </div>
+      <div class="as-tabs">
+        <button id="asigToggleAsignar" class="as-tab${assignMode === 'asignar' ? ' active' : ''}" aria-pressed="${assignMode === 'asignar'}">Asignar</button>
+        <button id="asigToggleReset" class="as-tab is-reset${assignMode === 'reset' ? ' active' : ''}" aria-pressed="${assignMode === 'reset'}">Reset</button>
       </div>
     </div>
-    <div class="as-box assign-panel">${cuerpo}</div>`;
+    <div class="as-box assign-panel">${cuerpo}</div>
+    <div class="as-foot">Última asignación: ${act
+      ? `${fmtFecha(act.assigned_at)} a ${escapeHtml(emailDe(act.user_id) || '—')}`
+      : ultima ? `${fmtFecha(ultima.assigned_at)} a ${escapeHtml(emailDe(ultima.user_id) || '—')}` : 'sin procesos registrados'}</div>`;
 
   document.getElementById('asigToggleAsignar').addEventListener('click', () => {
     assignMode = assignMode === 'asignar' ? null : 'asignar';
@@ -1971,10 +1989,10 @@ function renderAssign() {
     assignMode = assignMode === 'reset' ? null : 'reset';
     renderAssign();
   });
+  const histBtn = document.getElementById('asigHistBtn');
+  if (histBtn) histBtn.addEventListener('click', () => { histAbierto = !histAbierto; renderAssign(); });
   const resetOk = document.getElementById('asigResetConfirm');
   if (resetOk) resetOk.addEventListener('click', () => resetTerritorioPuntos(s));
-  const resetNo = document.getElementById('asigResetCancel');
-  if (resetNo) resetNo.addEventListener('click', () => { assignMode = null; renderAssign(); });
   const asignar = document.getElementById('asigAsignar');
   if (asignar) asignar.addEventListener('click', () => {
     const uid = document.getElementById('asigUserSel').value;
@@ -2998,6 +3016,32 @@ function puntoRequiereActividad(p) {
   return null;
 }
 
+// Caches de datos del centro de actividad: el re-render completo (con filtro,
+// tabs o refresco) reutiliza lo que ya está cargado sin re-consultar.
+let actVerifCache = [];
+let actNuevosCache = [];
+let actSolsCache = [];
+let actMsgsCache = [];
+let actIngresosTab = 'todos';   // todos | creados | sugeridas
+let actFiltroTxt = '';
+
+// Filtro global de texto del centro de actividad (punto, usuario o detalle)
+function actPasaFiltro(txt) {
+  const q = actFiltroTxt.trim().toLowerCase();
+  return !q || String(txt || '').toLowerCase().includes(q);
+}
+function textoDePunto(p) {
+  const tarea = actTareas[p.id];
+  return [
+    p.nombre, p.direccion, p.notas,
+    tarea ? emailDeUsuario(tarea.user_id) : emailDeUsuario(p.user_id),
+  ].filter(Boolean).join(' | ');
+}
+function textoDeSol(s) {
+  return [s.nombre, s.direccion, s.notas, emailDeUsuario(s.user_id)].filter(Boolean).join(' | ');
+}
+function textoDeMsg(m) { return [m.titulo, m.detalle, m.actor].filter(Boolean).join(' | '); }
+
 async function loadActividad() {
   if (!isAdmin) return;
   if (!actUsuarios.length) {
@@ -3019,13 +3063,11 @@ async function loadActividad() {
     .order('created_at', { ascending: false })
     .limit(100);
   if (errM) toast('No se pudo cargar la actividad: ' + errM.message, true);
-  renderMensajes(msgs || []);
-  actualizarBadge(msgs || []);
+  actMsgsCache = msgs || [];
+  actualizarBadge(actMsgsCache);
 
-  renderActividadTabla(
-    allPoints.filter((p) => puntoRequiereActividad(p) === 'nuevo'),
-    allPoints.filter((p) => puntoRequiereActividad(p) === 'verificar')
-  );
+  actNuevosCache = allPoints.filter((p) => puntoRequiereActividad(p) === 'nuevo');
+  actVerifCache = allPoints.filter((p) => puntoRequiereActividad(p) === 'verificar');
 
   // Solicitudes de puntos nuevos enviadas desde el móvil
   const { data: sols, error: errS } = await db
@@ -3034,30 +3076,231 @@ async function loadActividad() {
     .eq('estado', 'pendiente')
     .order('created_at', { ascending: false });
   if (errS) toast('No se pudieron cargar las solicitudes: ' + errS.message, true);
-  renderSolicitudes(sols || []);
+  actSolsCache = sols || [];
+
+  pintarActividad();
 }
 
-function renderSolicitudes(sols) {
-  const box = document.getElementById('actSolicitudes');
+// Pintado completo con caché + filtro global (sin re-consultar la base)
+function pintarActividad() {
+  renderVerificar();
+  renderIngresos();
+  renderMensajes();
+}
+
+// ---------------------------------------------------------------
+// Card «Por verificar»: estados erroneo/no_pasar sin confirmar de ambos
+// canales (móvil-estado y móvil-nuevo). Cada fila: quote del motivo,
+// chip del estado, asignación de tarea de verificación y doble chequeo.
+// ---------------------------------------------------------------
+function renderVerificar() {
+  const box = document.getElementById('actVerificarBox');
   if (!box) return;
-  const fila = (s) => `<tr data-sol="${s.id}">
-      <td><b>${escapeHtml(s.nombre || 'Sin nombre')}</b>
-        <small>${escapeHtml(s.direccion || `${Number(s.lat).toFixed(5)}, ${Number(s.lng).toFixed(5)}`)}</small>
-        ${s.notas ? `<small>Notas: ${escapeHtml(s.notas)}</small>` : ''}
-        <small>Enviada por ${escapeHtml(emailDeUsuario(s.user_id))}</small>
-      </td>
-      <td class="act-acc">
-        <button type="button" class="secondary" data-sol-ok="${s.id}">Confirmar</button>
-        <button type="button" class="ghost" data-sol-no="${s.id}">Rechazar</button>
-        <a class="ghost icon" href="https://www.google.com/maps?q=${Number(s.lat)},${Number(s.lng)}"
-           target="_blank" rel="noopener" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">map</span></a>
-      </td>
-    </tr>`;
+  const opcionesUsuarios = actUsuarios
+    .map((u) => `<option value="${u.id}">${escapeHtml(u.email)}</option>`)
+    .join('');
+  const verificar = actVerifCache.filter((p) => actPasaFiltro(textoDePunto(p)));
+
+  const fila = (p) => {
+    const tarea = actTareas[p.id];
+    const conTarea = !!tarea;
+    const asignar = conTarea
+      ? `<span class="act-asig"><span class="ms ms-sm">person</span>Tarea: ${escapeHtml(emailDeUsuario(tarea.user_id))}</span>
+         <button type="button" class="af-acc af-ghost" data-cancelar="${tarea.id}" title="Libera el punto para otra persona">Cancelar tarea</button>`
+      : `<select class="act-user" aria-label="Asignar verificación"><option value="">Asignar a…</option>${opcionesUsuarios}</select>
+         <button type="button" class="af-acc af-ghost" data-asignar="${p.id}">Asignar</button>`;
+    return `<div class="act-fila" data-punto="${p.id}">
+      <div class="af-main">
+        <b>${escapeHtml(p.nombre || 'Sin nombre')}</b>
+        <small class="af-addr">${escapeHtml(p.direccion || '—')}</small>
+        <span class="estado-tag ${estadoClass(p.estado)}">${estadoLabel(p.estado)}</span>
+        ${p.notas ? `<div class="af-quote"><span class="ms ms-sm">format_quote</span><p>${escapeHtml(p.notas)}</p></div>` : ''}
+        ${conTarea ? '' : '<small class="af-warn"><span class="ms ms-sm">group</span>O ya confirmas / rechazas tú, o asignas la verificación al encargado del punto.</small>'}
+      </div>
+      <div class="af-acc-wrap">
+        ${asignar}
+        <button type="button" class="af-acc af-ok" data-resolver="${p.id}" data-res="confirmado">Confirmar</button>
+        <button type="button" class="af-acc af-no" data-resolver="${p.id}" data-res="rechazado">Rechazar</button>
+        <button type="button" class="af-acc icon" data-vermapa="${p.id}" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">map</span></button>
+      </div>
+    </div>`;
+  };
+
   box.innerHTML = `
-    <h3 class="act-h">Solicitudes de puntos nuevos <span class="act-count">${sols.length}</span></h3>
-    ${sols.length
-      ? `<table class="act-tabla"><thead><tr><th>Punto (solicitante)</th><th class="act-th-acc">Acciones</th></tr></thead><tbody>${sols.map(fila).join('')}</tbody></table>`
-      : '<div class="empty">No hay solicitudes de puntos pendientes</div>'}`;
+    <div class="act-sect-head">
+      <h3 class="act-h is-rose"><span class="ms ms-sm">how_to_reg</span>Por verificar</h3>
+      <span class="act-count rose">${verificar.length}</span>
+    </div>
+    <div class="af-note">Puntos guardados como <b>erróneo</b> o <b>no pasar</b> en el móvil, esperando tu doble chequeo (${verificacionResumen()}).</div>
+    ${verificar.length
+      ? `<div class="af-list">${verificar.map(fila).join('')}</div>`
+      : '<div class="empty">Nada pendiente de verificación</div>'}`;
+
+  box.querySelectorAll('[data-resolver]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const { error } = await db.rpc('resolver_verificacion', {
+      p_punto: b.dataset.resolver,
+      p_resultado: b.dataset.res,
+    });
+    if (error) { toast(error.message, true); b.disabled = false; return; }
+    toast(b.dataset.res === 'confirmado' ? 'Estado confirmado' : 'Rechazado: el punto volvió a pendiente');
+    await loadPoints();
+    loadActividad();
+  }));
+
+  box.querySelectorAll('[data-asignar]').forEach((b) => b.addEventListener('click', async () => {
+    const sel = b.closest('.af-acc-wrap').querySelector('.act-user');
+    if (!sel || !sel.value) return toast('Elige un usuario primero', true);
+    b.disabled = true;
+    const { error } = await db.from('tareas_verificacion').insert({
+      punto_id: b.dataset.asignar,
+      user_id: sel.value,
+      asignado_por: currentUser.id,
+    });
+    if (error) { toast(error.message, true); b.disabled = false; return; }
+    toast('Tarea de verificación asignada');
+    loadActividad();
+  }));
+
+  box.querySelectorAll('[data-cancelar]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const { error } = await db.from('tareas_verificacion').delete().eq('id', b.dataset.cancelar);
+    if (error) { toast(error.message, true); b.disabled = false; return; }
+    toast('Tarea cancelada');
+    loadActividad();
+  }));
+
+  box.querySelectorAll('[data-vermapa]').forEach((b) => b.addEventListener('click', () => {
+    setView('territorios');
+    focusPoint(b.dataset.vermapa);
+  }));
+}
+
+function verificacionResumen() {
+  const n = actVerifCache.length;
+  if (!n) return 'nada pendiente';
+  let conTarea = 0;
+  actVerifCache.forEach((p) => { if (actTareas[p.id]) conTarea += 1; });
+  return conTarea
+    ? `${n} puntos · ${conTarea} con tarea en marcha`
+    : `${n} puntos · ninguno con persona asignada`;
+}
+
+// ---------------------------------------------------------------
+// Card «Nuevos puntos y solicitudes»: los dos cauces de ingreso en una
+// bandeja con filtro (todo / creado en móvil / sugerencia móvil).
+// ---------------------------------------------------------------
+function renderIngresos() {
+  const box = document.getElementById('actIngresosBox');
+  if (!box) return;
+  const nuevos = actNuevosCache.filter((p) => actPasaFiltro(textoDePunto(p)));
+  const sols = actSolsCache.filter((s) => actPasaFiltro(textoDeSol(s)));
+  const total = nuevos.length + sols.length;
+  const nCreados = nuevos.length;
+  const nSugs = sols.length;
+
+  const filaPunto = (p) => `<div class="act-fila" data-punto="${p.id}">
+      <div class="af-main">
+        <b>${escapeHtml(p.nombre || 'Sin nombre')}</b>
+        <small class="af-addr">${escapeHtml(p.direccion || '—')}</small>
+        <span class="act-tag azul">Creado en móvil</span>
+        <div class="act-rej" hidden>
+          <small>El punto se borra (lógico) y queda fuera de todas las listas.</small>
+          <div class="act-rej-acc">
+            <button type="button" class="af-acc af-ghost" data-aceptar-rej-cancel>Cancelar</button>
+            <button type="button" class="af-acc af-no" data-aceptar-rej-ok="${p.id}">Confirmar borrado</button>
+          </div>
+        </div>
+      </div>
+      <div class="af-acc-wrap" style="display:flex">
+        <button type="button" class="af-acc af-ok" data-aceptar="${p.id}">Aceptar</button>
+        <button type="button" class="af-acc af-no" data-aceptar-rej-open="${p.id}">Rechazar</button>
+        <button type="button" class="af-acc icon" data-vermapa="${p.id}" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">map</span></button>
+      </div>
+    </div>`;
+
+  const filaSol = (s) => `<div class="act-fila" data-sol="${s.id}">
+      <div class="af-main">
+        <b>${escapeHtml(s.nombre || 'Sin nombre')}</b>
+        <small class="af-addr">${escapeHtml(s.direccion || `${Number(s.lat).toFixed(5)}, ${Number(s.lng).toFixed(5)}`)}</small>
+        <span class="act-tag">Sugerencia</span>
+        ${s.notas ? `<div class="af-quote"><span class="ms ms-sm">format_quote</span><p>${escapeHtml(s.notas)}</p></div>` : ''}
+        <small class="af-addr">Enviada por ${escapeHtml(emailDeUsuario(s.user_id))} · ${fmtRel(s.created_at)}</small>
+        <div class="act-rej" hidden>
+          <small>Motivo visible para quien envió la sugerencia:</small>
+          <select class="act-motivo"><option value="" selected>Elegir motivo…</option>
+            <option value="Ya existía en la base">Ya existía en la base</option>
+            <option value="Fuera de la zona de trabajo">Fuera de la zona de trabajo</option>
+            <option value="Datos incompletos o confusos">Datos incompletos o confusos</option>
+            <option value="No es un punto que sirva">No es un punto que sirva</option>
+            <option value="Otro motivo (ver notas)">Otro motivo (ver notas)</option>
+          </select>
+          <div class="act-rej-acc">
+            <button type="button" class="af-acc af-ghost" data-sol-rej-cancel>Cancelar</button>
+            <button type="button" class="af-acc af-no" data-sol-rej-ok="${s.id}">Confirmar rechazo</button>
+          </div>
+        </div>
+      </div>
+      <div class="af-acc-wrap" style="display:flex">
+        <button type="button" class="af-acc af-ok" data-sol-ok="${s.id}">Aceptar</button>
+        <button type="button" class="af-acc af-no" data-sol-rej-open="${s.id}">Rechazar</button>
+        <a class="af-acc icon" href="https://www.google.com/maps?q=${Number(s.lat)},${Number(s.lng)}"
+           target="_blank" rel="noopener" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">map</span></a>
+      </div>
+    </div>`;
+
+  box.innerHTML = `
+    <div class="act-sect-head">
+      <h3 class="act-h is-azul"><span class="ms ms-sm">inbox</span>Nuevos puntos y solicitudes</h3>
+      <span class="act-count azul">${total}</span>
+    </div>
+    <div class="ing-tabs">
+      <button type="button" data-ing-tab="todos" class="${actIngresosTab === 'todos' ? 'active' : ''}">Todos <i>${total}</i></button>
+      <button type="button" data-ing-tab="creados" class="${actIngresosTab === 'creados' ? 'active' : ''}">Creados en móvil <i>${nCreados}</i></button>
+      <button type="button" data-ing-tab="sugeridas" class="${actIngresosTab === 'sugeridas' ? 'active' : ''}">Sugerencias <i>${nSugs}</i></button>
+    </div>
+    ${total
+      ? `<div class="af-list">${(actIngresosTab === 'creados' ? nuevos.map(filaPunto)
+          : actIngresosTab === 'sugeridas' ? sols.map(filaSol)
+          : [...nuevos.map(filaPunto), ...sols.map(filaSol)]).join('')}</div>`
+      : '<div class="empty">Nada por aceptar ni sugerencias pendientes</div>'}`;
+
+  box.querySelectorAll('[data-ing-tab]').forEach((b) => b.addEventListener('click', () => {
+    actIngresosTab = b.dataset.ingTab;
+    renderIngresos();
+  }));
+
+  // Mostrar confirmación inline de rechazo (sin confirm()/prompt() nativo)
+  box.querySelectorAll('[data-aceptar-rej-open]').forEach((b) => b.addEventListener('click', () => {
+    const filaEl = b.closest('.act-fila');
+    const rej = filaEl && filaEl.querySelector('.act-rej');
+    if (rej) rej.hidden = false;
+    const acc = filaEl && filaEl.querySelector('.af-acc-wrap');
+    if (acc) acc.style.display = 'none';
+  }));
+  box.querySelectorAll('[data-aceptar-rej-cancel]').forEach((b) => {
+    const filaEl = b.closest('.act-fila');
+    if (!filaEl) return;
+    filaEl.querySelector('.act-rej').hidden = true;
+    filaEl.querySelector('.af-acc-wrap').style.display = 'flex';
+  });
+  box.querySelectorAll('[data-aceptar-rej-ok]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const { error } = await db.rpc('eliminar_punto', { p_id: b.dataset.aceptarRejOk });
+    if (error) { toast(error.message, true); b.disabled = false; return; }
+    toast('Punto nuevo borrado');
+    await loadPoints();
+    loadActividad();
+  }));
+
+  box.querySelectorAll('[data-aceptar]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const { error } = await db.rpc('aceptar_punto', { p_punto: b.dataset.aceptar });
+    if (error) { toast(error.message, true); b.disabled = false; return; }
+    toast('Punto aceptado');
+    await loadPoints();
+    loadActividad();
+  }));
 
   box.querySelectorAll('[data-sol-ok]').forEach((b) => b.addEventListener('click', async () => {
     b.disabled = true;
@@ -3068,13 +3311,33 @@ function renderSolicitudes(sols) {
     loadActividad();
   }));
 
-  box.querySelectorAll('[data-sol-no]').forEach((b) => b.addEventListener('click', async () => {
+  box.querySelectorAll('[data-sol-rej-open]').forEach((b) => b.addEventListener('click', () => {
+    const filaEl = b.closest('.act-fila');
+    const rej = filaEl && filaEl.querySelector('.act-rej');
+    if (rej) rej.hidden = false;
+    const acc = filaEl && filaEl.querySelector('.af-acc-wrap');
+    if (acc) acc.style.display = 'none';
+  }));
+  box.querySelectorAll('[data-sol-rej-cancel]').forEach((b) => {
+    const filaEl = b.closest('.act-fila');
+    if (!filaEl) return;
+    filaEl.querySelector('.act-rej').hidden = true;
+    filaEl.querySelector('.af-acc-wrap').style.display = 'flex';
+  });
+  box.querySelectorAll('[data-sol-rej-ok]').forEach((b) => b.addEventListener('click', async () => {
+    const filaEl = b.closest('.act-fila');
+    const motivo = filaEl.querySelector('.act-motivo').value;
+    if (!motivo) return toast('Elige un motivo para rechazar', true);
     b.disabled = true;
-    const motivo = prompt('Motivo del rechazo (opcional):') ?? '';
-    const { error } = await db.rpc('rechazar_solicitud', { p_solicitud: b.dataset.solNo, p_motivo: motivo });
+    const { error } = await db.rpc('rechazar_solicitud', { p_solicitud: b.dataset.solRejOk, p_motivo: motivo });
     if (error) { toast(error.message, true); b.disabled = false; return; }
     toast('Solicitud rechazada');
     loadActividad();
+  }));
+
+  box.querySelectorAll('[data-vermapa]').forEach((b) => b.addEventListener('click', () => {
+    setView('territorios');
+    focusPoint(b.dataset.vermapa);
   }));
 }
 
@@ -3113,9 +3376,10 @@ function actualizarBadge(msgs) {
   badge.textContent = n > 99 ? '99+' : String(n);
 }
 
-function renderMensajes(msgs) {
+function renderMensajes() {
   const box = document.getElementById('actMensajes');
   if (!box) return;
+  const msgs = actMsgsCache.filter((m) => actPasaFiltro(textoDeMsg(m)));
   const fila = (m) => `<div class="msg${m.leido ? '' : ' unread'}" data-msg="${m.id}">
       <span class="ms msg-ic" aria-hidden="true">${MSG_ICONS[m.tipo] || 'info'}</span>
       <div class="msg-body">
@@ -3147,100 +3411,42 @@ function renderMensajes(msgs) {
   }));
 }
 
-function renderActividadTabla(nuevos, verificar) {
-  const box = document.getElementById('actTabla');
-  if (!box) return;
-  const opcionesUsuarios = actUsuarios
-    .map((u) => `<option value="${u.id}">${escapeHtml(u.email)}</option>`)
-    .join('');
+document.getElementById('actRefreshBtn').addEventListener('click', () => loadActividad());
 
-  const filaVerificar = (p) => {
-    const tarea = actTareas[p.id];
-    const asignacion = tarea
-      ? `<span class="who">Tarea: ${escapeHtml(emailDeUsuario(tarea.user_id))}</span>
-         <button type="button" class="ghost" data-cancelar="${tarea.id}">Cancelar tarea</button>`
-      : `<select class="act-user" aria-label="Asignar verificación"><option value="">Asignar a…</option>${opcionesUsuarios}</select>
-         <button type="button" class="ghost" data-asignar="${p.id}">Asignar</button>`;
-    return `<tr data-punto="${p.id}">
-      <td><b>${escapeHtml(p.nombre || 'Sin nombre')}</b><small>${escapeHtml(p.direccion || '—')}</small></td>
-      <td><span class="estado-tag ${estadoClass(p.estado)}">${estadoLabel(p.estado)}</span></td>
-      <td class="act-acc">${asignacion}
-        <button type="button" class="secondary" data-resolver="${p.id}" data-res="confirmado">Confirmar</button>
-        <button type="button" class="ghost" data-resolver="${p.id}" data-res="rechazado">Rechazar</button>
-        <button type="button" class="ghost icon" data-vermapa="${p.id}" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">map</span></button>
-      </td>
-    </tr>`;
-  };
-
-  const filaNuevo = (p) => `<tr data-punto="${p.id}">
-      <td><b>${escapeHtml(p.nombre || 'Sin nombre')}</b><small>${escapeHtml(p.direccion || '—')}</small></td>
-      <td><span class="estado-tag ${estadoClass(p.estado || 'pendiente')}">${estadoLabel(p.estado || 'pendiente')}</span></td>
-      <td class="act-acc">
-        <button type="button" class="secondary" data-aceptar="${p.id}">Aceptar</button>
-        <button type="button" class="ghost icon" data-vermapa="${p.id}" title="Ver en el mapa" aria-label="Ver en el mapa"><span class="ms ms-sm">map</span></button>
-      </td>
-    </tr>`;
-
-  box.innerHTML = `
-    <h3 class="act-h">Por verificar <span class="act-count">${verificar.length}</span></h3>
-    ${verificar.length
-      ? `<table class="act-tabla"><thead><tr><th>Punto</th><th>Estado (usuario)</th><th class="act-th-acc">Doble chequeo</th></tr></thead><tbody>${verificar.map(filaVerificar).join('')}</tbody></table>`
-      : '<div class="empty">Nada pendiente de verificación</div>'}
-    <h3 class="act-h">Puntos nuevos <span class="act-count">${nuevos.length}</span></h3>
-    ${nuevos.length
-      ? `<table class="act-tabla"><thead><tr><th>Punto</th><th>Estado</th><th class="act-th-acc">Acciones</th></tr></thead><tbody>${nuevos.map(filaNuevo).join('')}</tbody></table>`
-      : '<div class="empty">No hay puntos nuevos por aceptar</div>'}`;
-
-  box.querySelectorAll('[data-aceptar]').forEach((b) => b.addEventListener('click', async () => {
-    b.disabled = true;
-    const { error } = await db.rpc('aceptar_punto', { p_punto: b.dataset.aceptar });
-    if (error) { toast(error.message, true); b.disabled = false; return; }
-    toast('Punto aceptado');
-    await loadPoints();
-    loadActividad();
-  }));
-
-  box.querySelectorAll('[data-resolver]').forEach((b) => b.addEventListener('click', async () => {
-    b.disabled = true;
-    const { error } = await db.rpc('resolver_verificacion', {
-      p_punto: b.dataset.resolver,
-      p_resultado: b.dataset.res,
-    });
-    if (error) { toast(error.message, true); b.disabled = false; return; }
-    toast(b.dataset.res === 'confirmado' ? 'Estado confirmado' : 'Rechazado: el punto volvió a pendiente');
-    await loadPoints();
-    loadActividad();
-  }));
-
-  box.querySelectorAll('[data-asignar]').forEach((b) => b.addEventListener('click', async () => {
-    const sel = b.closest('td').querySelector('.act-user');
-    if (!sel || !sel.value) return toast('Elige un usuario primero', true);
-    b.disabled = true;
-    const { error } = await db.from('tareas_verificacion').insert({
-      punto_id: b.dataset.asignar,
-      user_id: sel.value,
-      asignado_por: currentUser.id,
-    });
-    if (error) { toast(error.message, true); b.disabled = false; return; }
-    toast('Tarea de verificación asignada');
-    loadActividad();
-  }));
-
-  box.querySelectorAll('[data-cancelar]').forEach((b) => b.addEventListener('click', async () => {
-    b.disabled = true;
-    const { error } = await db.from('tareas_verificacion').delete().eq('id', b.dataset.cancelar);
-    if (error) { toast(error.message, true); b.disabled = false; return; }
-    toast('Tarea cancelada');
-    loadActividad();
-  }));
-
-  box.querySelectorAll('[data-vermapa]').forEach((b) => b.addEventListener('click', () => {
-    setView('territorios');
-    focusPoint(b.dataset.vermapa);
-  }));
+// Filtro global de texto (punto, usuario o detalle): re-pinta las tres cards
+// con el caché ya cargado, sin volver a consultar la base
+const actFiltroIn = document.getElementById('actFiltro');
+if (actFiltroIn) {
+  actFiltroIn.addEventListener('input', () => {
+    actFiltroTxt = actFiltroIn.value;
+    pintarActividad();
+  });
+  actFiltroIn.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      actFiltroIn.value = '';
+      actFiltroTxt = '';
+      pintarActividad();
+    }
+  });
 }
 
-document.getElementById('actRefreshBtn').addEventListener('click', () => loadActividad());
+// Popover inline de confirmación del vaciado (nada de confirm() nativo)
+const actPurgePop = document.getElementById('actPurgePop');
+document.getElementById('actVaciarBtn').addEventListener('click', () => {
+  if (actPurgePop) actPurgePop.hidden = !actPurgePop.hidden;
+});
+document.getElementById('actPurgeCancel')?.addEventListener('click', () => {
+  if (actPurgePop) actPurgePop.hidden = true;
+});
+// Confirma el vaciado: PostgREST exige WHERE en todo DELETE, filtro
+// siempre-verdadero (ningún id es el uuid cero) para vaciar la tabla completa
+document.getElementById('actPurgeOk')?.addEventListener('click', async () => {
+  const { error } = await db.from('mensajes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  if (error) return toast(error.message, true);
+  if (actPurgePop) actPurgePop.hidden = true;
+  toast('Actividad vaciada');
+  loadActividad();
+});
 
 // "Marcar todo leído" y "Vaciar actividad" (solo admin: la RLS lo exige)
 document.getElementById('actLeerTodoBtn')?.addEventListener('click', async () => {

@@ -49,7 +49,7 @@ Todo el estado vive en variables de módulo (`let` en el top level):
 | Alcance/selection | `puntosScope` (region·comuna·territorio), `territorioSelectedId`, `territorioHoverId` |
 | Dibujo | `drawActive`, `drawVerts`, `drawColor`, `drawSnap`, `snapRingsCache`, `pendingTerritorio` |
 | Referencia | `refMode`, `refRadius`, `refResultsIds` |
-| UI | `currentView` (territorios · historial · usuarios), `assignMode` (toggle Asignar/Reset de la card de gestión), `histTab`, `estadoFiltro`, `lastEstadoUndo` |
+| UI | `currentView` (territorios · historial · usuarios), `assignMode` (toggle Asignar/Reset de la card de gestión), `histAbierto` (historial desplegable de esa card), `histTab`, `estadoFiltro`, `lastEstadoUndo` |
 | Config | `comunasActivas`, `configError` |
 
 No hay store ni framework: la actualización es **imperativa + render manual**.
@@ -81,6 +81,35 @@ los **procesos de trabajo** del territorio: filas de `territorios_asignaciones`
 (usuario, fecha de asignación, fecha de cierre, estado En proceso/Devuelto/Completado).
 `asignaciones` guarda el historial completo por territorio; `asigActiva()` devuelve
 el proceso en curso.
+
+La **card de gestión** (bajo la ficha en la columna A, según el prototipo
+«vista admin») tiene cabecera con estado + tabs segmentados [Asignar|Reset]:
+*Asignar* muestra el proceso activo (Completar/Devolver) o el alta (usuario +
+nota de reinicio) con el historial desplegable detrás de **Ver historial**
+(`histAbierto`) y el pie «Última asignación»; *Reset* muestra la caja roja del
+reinicio atómico (`reiniciar_territorio`, migración 021).
+
+## Actividad (Centro de Actividad y Coordinación)
+
+Solo admin: barra con badge, filtro global de texto (`actFiltroTxt` — re-pinta
+las tres cards sin reconsultar), refresco, «Marcar todo leído» y «Vaciar
+actividad» con popover de confirmación inline. Las cards (cachés
+`actVerifCache` / `actNuevosCache` / `actSolsCache` / `actMsgsCache`,
+repintadas por `pintarActividad()`):
+
+- **Por verificar** (`renderVerificar`)
+  doble chequeo de estados `erroneo`/`no_pasar` sin confirmar (`puntoRequiereActividad`
+  → `'verificar'`): confirmar/rechazar vía `resolver_verificacion`,
+  asignar y cancelar tareas de verificación (`tareas_verificacion`), quote del
+  motivo guardado en el punto.
+- **Nuevos puntos y solicitudes** (`renderIngresos`) con chips
+  Todos/Creados en móvil/Sugerencias (`actIngresosTab`): los nuevos se
+  aceptan (`aceptar_punto`) o se rechazan con confirmación inline que repite
+  el borrado lógico de `eliminar_punto`; las solicitudes se confirman
+  (`confirmar_solicitud`) o se rechazan con motivo de lista desplegable inline
+  (`rechazar_solicitud`).
+- **Feed de actividad** (`renderMensajes`) — tabla `mensajes`: marcar leído,
+  borrar; el badge de la navegación cuenta los no leídos (`actualizarBadge`).
 
 ## Flujo de arranque
 

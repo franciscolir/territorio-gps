@@ -2958,6 +2958,11 @@ document.getElementById('railDer').addEventListener('click', () => {
   else colBAbierta = true;
   pintarPanel();
 });
+// Cierre directo desde la cabecera de cada columna (prototipo vista admin):
+// la A se pliega con chevron_left, la B se cierra con ✕. Reabrir sigue a
+// cargo del riel de flechas (estados [◄►]/[◄]/[►]).
+document.getElementById('closeColA').addEventListener('click', () => { colAAbierta = false; pintarPanel(); });
+document.getElementById('closeColB').addEventListener('click', () => { colBAbierta = false; pintarPanel(); });
 
 // Default al abrir: columna A visible, columna B cerrada
 function applyInitialSidebarState() {
